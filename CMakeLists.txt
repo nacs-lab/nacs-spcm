@@ -18,19 +18,21 @@ set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS)
 
 find_package(Sleef REQUIRED)
 find_package(SPCM REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(DEPS REQUIRED nacs-utils>=9.0)
 
 add_definitions(-Wall -Wextra -g -pthread -fvisibility=hidden -Wconversion
-  -fno-math-errno -Wno-sign-conversion -Wno-psabi -D_FILE_OFFSET_BITS=64)
+  -fno-math-errno -Wno-sign-conversion -Wno-psabi -D_FILE_OFFSET_BITS=64 ${DEPS_CFLAGS})
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # We have GCC specific warning options that makes Clang unhappy.
   # Adding this unconditionally cause GCC to issue a warning if there are other warnings
   # so only add this conditionally for clang.
   add_definitions(-Wno-unknown-warning-option)
 endif()
-include_directories(${SLEEF_INCLUDE_DIR} ${SPCM_INCLUDE_DIR})
+include_directories(${SLEEF_INCLUDE_DIR} ${SPCM_INCLUDE_DIR} ${DEPS_INCLUDE_DIRS})
 
 set(LINKER_FLAGS "-Wl,--as-needed -Wl,--no-undefined -Wl,--gc-sections -pthread -fno-math-errno")
-set(LINKER_FLAGS "${LINKER_FLAGS} -Wl,-Bsymbolic")
+set(LINKER_FLAGS "${LINKER_FLAGS} -Wl,-Bsymbolic  ${DEPS_LDFLAGS_OTHER}")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++14")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LINKER_FLAGS}")
