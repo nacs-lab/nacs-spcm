@@ -162,6 +162,41 @@ public:
     {
         return get_param_8x2(SPC_EXTPCBVERSION);
     }
+    uint32_t pxi_hwslotno()
+    {
+        uint32_t res;
+        if (get_param(SPC_PXIHWSLOTNO, &res)) {
+            clear_error();
+            return -1;
+        }
+        return res;
+    }
+    std::pair<uint16_t,uint16_t> product_date()
+    {
+        return get_param_16x2(SPC_PCIDATE);
+    }
+    std::pair<uint16_t,uint16_t> calib_date()
+    {
+        return get_param_16x2(SPC_CALIBDATE);
+    }
+    uint32_t serial_no()
+    {
+        uint32_t res;
+        get_param(SPC_PCISERIALNO, &res);
+        return res;
+    }
+    uint64_t max_sample_rate()
+    {
+        uint64_t res;
+        get_param(SPC_PCISAMPLERATE, &res);
+        return res;
+    }
+    uint64_t mem_size()
+    {
+        uint64_t res;
+        get_param(SPC_PCIMEMSIZE, &res);
+        return res;
+    }
 
 private:
     std::pair<uint16_t,uint16_t> get_param_16x2(int32_t name)
