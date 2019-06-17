@@ -95,6 +95,42 @@ public:
         spcm_dwGetErrorInfo_i32(m_hdl, nullptr, nullptr, nullptr);
     }
 
+    template<typename T>
+    uint32_t set_param(int32_t name, T value)
+    {
+        if (sizeof(T) >= 8) {
+            return spcm_dwSetParam_i64(m_hdl, name, (int64)value);
+        }
+        else {
+            return spcm_dwSetParam_i32(m_hdl, name, (int32)value);
+        }
+    }
+    template<typename T>
+    uint32_t get_param(int32_t name, T *p)
+    {
+        if (sizeof(T) >= 8) {
+            int64 buff;
+            auto err = spcm_dwGetParam_i64(m_hdl, name, &buff);
+            *p = T(buff);
+            return err;
+        }
+        else {
+            int32 buff;
+            auto err = spcm_dwGetParam_i32(m_hdl, name, &buff);
+            *p = T(buff);
+            return err;
+        }
+    }
+    uint32_t def_transfer(uint32_t type, uint32_t dir, uint32_t notify_size, void *buff,
+                          uint64_t offset, uint64_t size) // Size in byte
+    {
+        return spcm_dwDefTransfer_i64(m_hdl, type, dir, notify_size, buff, offset, size);
+    }
+    uint32_t invalidate_buf(uint32_t type)
+    {
+        return spcm_dwInvalidateBuf(m_hdl, type);
+    }
+
 private:
     drv_handle m_hdl;
 };
