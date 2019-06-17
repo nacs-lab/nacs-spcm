@@ -131,7 +131,51 @@ public:
         return spcm_dwInvalidateBuf(m_hdl, type);
     }
 
+    // Register wrappers
+    int32_t card_type()
+    {
+        int32_t res;
+        get_param(SPC_PCITYP, &res);
+        return res;
+    }
+    std::pair<uint16_t,uint16_t> pci_version()
+    {
+        return get_param_16x2(SPC_PCIVERSION);
+    }
+    std::pair<uint8_t,uint8_t> basepcb_version()
+    {
+        return get_param_8x2(SPC_BASEPCBVERSION);
+    }
+    std::pair<uint16_t,uint16_t> pcimodule_version()
+    {
+        return get_param_16x2(SPC_PCIMODULEVERSION);
+    }
+    std::pair<uint8_t,uint8_t> modulepcb_version()
+    {
+        return get_param_8x2(SPC_MODULEPCBVERSION);
+    }
+    std::pair<uint16_t,uint16_t> pciext_version()
+    {
+        return get_param_16x2(SPC_PCIEXTVERSION);
+    }
+    std::pair<uint8_t,uint8_t> extpcb_version()
+    {
+        return get_param_8x2(SPC_EXTPCBVERSION);
+    }
+
 private:
+    std::pair<uint16_t,uint16_t> get_param_16x2(int32_t name)
+    {
+        uint32_t res;
+        get_param(name, &res);
+        return {uint16_t(res), uint16_t(res >> 16)};
+    }
+    std::pair<uint8_t,uint8_t> get_param_8x2(int32_t name)
+    {
+        uint32_t res;
+        get_param(name, &res);
+        return {uint8_t(res), uint8_t(res >> 8)};
+    }
     drv_handle m_hdl;
 };
 
