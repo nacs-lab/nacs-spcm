@@ -55,11 +55,14 @@ struct NACS_EXPORT(spcm) Error : std::runtime_error {
 
 class Spcm {
 public:
-    Spcm(const char *name)
+    Spcm(const char *name, bool _reset=true)
         : m_hdl(spcm_hOpen(name))
     {
         if (!m_hdl) {
             throw_error();
+        }
+        if (_reset) {
+            reset();
         }
     }
     drv_handle handle()
@@ -196,6 +199,22 @@ public:
         uint64_t res;
         get_param(SPC_PCIMEMSIZE, &res);
         return res;
+    }
+    uint32_t features()
+    {
+        uint32_t res;
+        get_param(SPC_PCIFEATURES, &res);
+        return res;
+    }
+    uint32_t ext_features()
+    {
+        uint32_t res;
+        get_param(SPC_PCIEXTFEATURES, &res);
+        return res;
+    }
+    void reset()
+    {
+        set_param(SPC_M2CMD, M2CMD_CARD_RESET);
     }
 
 private:
