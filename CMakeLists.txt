@@ -44,3 +44,4 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -ggdb3 -O0")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_subdirectory(nacs-spcm)
+add_subdirectory(test)
