@@ -52,6 +52,8 @@ int main(int argc, char **argv)
     Log::log("Serial no: %d\n", hdl.serial_no());
     Log::log("Max sample rate: %" PRId64 "\n", hdl.max_sample_rate());
     Log::log("Memory size: %" PRId64 "\n", hdl.mem_size());
+    Log::log("Features: %x\n", hdl.features());
+    Log::log("Ext features: %x\n", hdl.ext_features());
 
     try {
         hdl.check_error();
