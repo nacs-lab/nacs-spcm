@@ -216,6 +216,53 @@ public:
     {
         set_param(SPC_M2CMD, M2CMD_CARD_RESET);
     }
+    void ch_enable(int32_t chns)
+    {
+        set_param(SPC_CHENABLE, chns);
+        check_error();
+    }
+    int32_t ch_enable()
+    {
+        int32_t chns;
+        get_param(SPC_CHENABLE, &chns);
+        return chns;
+    }
+    int32_t ch_count()
+    {
+        int32_t nchn;
+        get_param(SPC_CHCOUNT, &nchn);
+        return nchn;
+    }
+    void enable_out(unsigned chn, bool enable)
+    {
+        if (chn >= 4)
+            throw_error("enable_out: channel out of bound", ERR_REG, 0, 0);
+        set_param(int32_t(SPC_ENABLEOUT0 + 100 * chn), enable);
+    }
+    bool out_enabled(unsigned chn)
+    {
+        if (chn >= 4)
+            throw_error("enable_out: channel out of bound", ERR_REG, 0, 0);
+        int32_t enable;
+        get_param(int32_t(SPC_ENABLEOUT0 + 100 * chn), &enable);
+        return enable != 0;
+    }
+    uint32_t amp(unsigned chn)
+    {
+        if (chn >= 4)
+            throw_error("enable_out: channel out of bound", ERR_REG, 0, 0);
+        int32_t amp;
+        get_param(int32_t(SPC_AMP0 + 100 * chn), &amp);
+        return amp;
+    }
+    void set_amp(unsigned chn, uint32_t amp)
+    {
+        if (chn >= 4)
+            throw_error("enable_out: channel out of bound", ERR_REG, 0, 0);
+        if (!set_param(int32_t(SPC_AMP0 + 100 * chn), amp)) {
+            check_error();
+        }
+    }
 
 private:
     std::pair<uint16_t,uint16_t> get_param_16x2(int32_t name)
