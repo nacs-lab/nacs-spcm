@@ -212,9 +212,21 @@ public:
         get_param(SPC_PCIEXTFEATURES, &res);
         return res;
     }
+    void cmd(int32_t cmd)
+    {
+        set_param(SPC_M2CMD, cmd);
+    }
     void reset()
     {
-        set_param(SPC_M2CMD, M2CMD_CARD_RESET);
+        cmd(M2CMD_CARD_RESET);
+    }
+    void write_setup()
+    {
+        cmd(M2CMD_CARD_WRITESETUP);
+    }
+    void force_trigger()
+    {
+        cmd(M2CMD_CARD_FORCETRIGGER);
     }
     void ch_enable(int32_t chns)
     {
