@@ -3,9 +3,11 @@
 set(nacs_spcm_HDRS
   spcm.h)
 set(nacs_spcm_SRCS
-  spcm.cpp)
+  spcm.cpp
+  data_stream.cpp)
 set(nacs_spcm_LINKS ${SLEEF_LIBRARIES} ${SPCM_LIBRARIES} ${DEPS_LIBRARIES})
-
+set_source_files_properties(data_stream.cpp
+  PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")
 add_definitions("-\"DNACS_EXPORT_LIB_spcm()=\"")
 
 add_library(nacs-spcm SHARED
