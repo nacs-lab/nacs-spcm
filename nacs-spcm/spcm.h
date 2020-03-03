@@ -276,6 +276,60 @@ public:
         }
     }
 
+    uint32_t x0_availmodes()
+    {
+        uint32_t res;
+        get_param(SPCM_X0_AVAILMODES, &res);
+        return res;
+    }
+    uint32_t x1_availmodes()
+    {
+        uint32_t res;
+        get_param(SPCM_X1_AVAILMODES, &res);
+        return res;
+    }
+    uint32_t x2_availmodes()
+    {
+        uint32_t res;
+        get_param(SPCM_X2_AVAILMODES, &res);
+        return res;
+    }
+
+    uint32_t x0_mode()
+    {
+        uint32_t res;
+        get_param(SPCM_X0_MODE, &res);
+        return res;
+    }
+    uint32_t x1_mode()
+    {
+        uint32_t res;
+        get_param(SPCM_X1_MODE, &res);
+        return res;
+    }
+    uint32_t x2_mode()
+    {
+        uint32_t res;
+        get_param(SPCM_X2_MODE, &res);
+        return res;
+    }
+
+    void x0_mode(uint32_t mode)
+    {
+        set_param(SPCM_X0_MODE, mode);
+        check_error();
+    }
+    void x1_mode(uint32_t mode)
+    {
+        set_param(SPCM_X1_MODE, mode);
+        check_error();
+    }
+    void x2_mode(uint32_t mode)
+    {
+        set_param(SPCM_X2_MODE, mode);
+        check_error();
+    }
+
 private:
     std::pair<uint16_t,uint16_t> get_param_16x2(int32_t name)
     {

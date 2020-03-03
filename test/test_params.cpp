@@ -55,6 +55,10 @@ int main(int argc, char **argv)
     Log::log("Features: %x\n", hdl.features());
     Log::log("Ext features: %x\n", hdl.ext_features());
 
+    Log::log("X0 available modes: %x, X0 mode: %x\n", hdl.x0_availmodes(), hdl.x0_mode());
+    Log::log("X1 available modes: %x, X1 mode: %x\n", hdl.x1_availmodes(), hdl.x1_mode());
+    Log::log("X2 available modes: %x, X2 mode: %x\n", hdl.x2_availmodes(), hdl.x2_mode());
+
     try {
         hdl.check_error();
     }
