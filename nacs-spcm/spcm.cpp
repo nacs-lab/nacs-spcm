@@ -135,7 +135,7 @@ NACS_EXPORT() void Spcm::dump(std::ostream &stm) noexcept
     stm << "Enabled channel count: " << ch_count() << std::endl;
     for (int i = 0; i < nchn; i++) {
         bool enabled = enable_mask & (1 << i);
-        stm << "Channel [" << i << "]: " << (enabled ? "enabled" : "disabled")
+        stm << "  Channel [" << i << "]: " << (enabled ? "enabled" : "disabled")
             << ", output " <<  (out_enabled(i) ? "enabled" : "disabled")
             << ", amp: " << amp(i) << std::endl;
     }
