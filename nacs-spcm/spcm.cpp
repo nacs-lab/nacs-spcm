@@ -43,26 +43,34 @@ NACS_EXPORT() void Spcm::throw_error(const char *msg, uint32_t code,
 NACS_EXPORT() void Spcm::dump(std::ostream &stm) noexcept
 {
     int typ = card_type();
-    stm << "Card type: " << typ << std::endl;
     int nchn = 4;
+    const char *card_name = nullptr;
     switch (typ) {
-    case TYP_M4I6620_X8:
-    case TYP_M4I6630_X8:
-    case TYP_M4X6620_X4:
-    case TYP_M4X6630_X4:
-        nchn = 1;
-        break;
-    case TYP_M4I6621_X8:
-    case TYP_M4I6631_X8:
-    case TYP_M4X6621_X4:
-    case TYP_M4X6631_X4:
-        nchn = 2;
-        break;
-    case TYP_M4I6622_X8:
-    case TYP_M4X6622_X4:
+#define def_case(TYP, name, chn)                \
+    case TYP:                                   \
+        card_name = name;                       \
+        nchn = chn;                             \
+        break
+        def_case(TYP_M4I6620_X8, "M4i.6620-x8", 1);
+        def_case(TYP_M4I6630_X8, "M4i.6630-x8", 1);
+        def_case(TYP_M4X6620_X4, "M4x.6620-x4", 1);
+        def_case(TYP_M4X6630_X4, "M4x.6630-x4", 1);
+        def_case(TYP_M4I6621_X8, "M4i.6621-x8", 2);
+        def_case(TYP_M4I6631_X8, "M4i.6631-x8", 2);
+        def_case(TYP_M4X6621_X4, "M4x.6621-x4", 2);
+        def_case(TYP_M4X6631_X4, "M4x.6631-x4", 2);
+        def_case(TYP_M4I6622_X8, "M4i.6622-x8", 4);
+        def_case(TYP_M4X6622_X4, "M4x.6622-x4", 4);
+#undef def_case
     default:
         nchn = 4;
         break;
+    }
+    if (card_name) {
+        stm << "Card type: " << card_name << std::endl;
+    }
+    else {
+        stm << "Card type: 0x" << std::hex << typ << std::dec << std::endl;
     }
     std::pair<int,int> ver;
     ver = pci_version();
@@ -96,7 +104,7 @@ NACS_EXPORT() void Spcm::dump(std::ostream &stm) noexcept
     stm << "Ext features: 0x" << std::hex << ext_features() << std::dec << std::endl;
 
     auto enable_mask = ch_enable();
-    stm << "Channel enabled mask: " << std::hex << enable_mask << std::dec << std::endl;
+    stm << "Channel enabled mask: 0x" << std::hex << enable_mask << std::dec << std::endl;
     stm << "Enabled channel count: " << ch_count() << std::endl;
     for (int i = 0; i < nchn; i++) {
         bool enabled = enable_mask & (1 << i);
@@ -105,12 +113,12 @@ NACS_EXPORT() void Spcm::dump(std::ostream &stm) noexcept
             << ", amp: " << amp(i) << std::endl;
     }
 
-    stm << "X0 available modes: " << std::hex << x0_availmodes()
-        << ", X0 mode: " << x0_mode() << std::dec << std::endl;
-    stm << "X1 available modes: " << std::hex << x1_availmodes()
-        << ", X1 mode: " << x1_mode() << std::dec << std::endl;
-    stm << "X2 available modes: " << std::hex << x2_availmodes()
-        << ", X2 mode: " << x2_mode() << std::dec << std::endl;
+    stm << "X0 available modes: 0x" << std::hex << x0_availmodes()
+        << ", X0 mode: 0x" << x0_mode() << std::dec << std::endl;
+    stm << "X1 available modes: 0x" << std::hex << x1_availmodes()
+        << ", X1 mode: 0x" << x1_mode() << std::dec << std::endl;
+    stm << "X2 available modes: 0x" << std::hex << x2_availmodes()
+        << ", X2 mode: 0x" << x2_mode() << std::dec << std::endl;
 
     try {
         check_error();
