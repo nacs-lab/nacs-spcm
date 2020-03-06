@@ -166,9 +166,9 @@ public:
     {
         return get_param_8x2(SPC_EXTPCBVERSION);
     }
-    uint32_t pxi_hwslotno()
+    int32_t pxi_hwslotno()
     {
-        uint32_t res;
+        int32_t res;
         if (get_param(SPC_PXIHWSLOTNO, &res)) {
             clear_error();
             return -1;
