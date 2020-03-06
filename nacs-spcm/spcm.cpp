@@ -101,6 +101,9 @@ NACS_EXPORT() void Spcm::dump(std::ostream &stm) noexcept
     ver = fw_ctrl_golden_version();
     stm << "  Main control FPGA golden version: " << ver.first
         << ", type: " << ver.second << std::endl;
+    ver = fw_ctrl_active_version();
+    stm << "  Main control FPGA active version: " << ver.first
+        << ", type: " << ver.second << std::endl;
     ver = fw_clock_version();
     stm << "  Clock distribution version: " << ver.first
         << ", type: " << ver.second << std::endl;

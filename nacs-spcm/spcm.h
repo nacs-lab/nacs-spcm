@@ -184,6 +184,11 @@ public:
     {
         return get_param_16x2(SPCM_FW_CTRL_GOLDEN);
     }
+    std::pair<uint16_t,uint16_t> fw_ctrl_active_version()
+    {
+        auto ver = get_param_16x2(SPCM_FW_CTRL_ACTIVE).second;
+        return {uint16_t(ver & 0xfff), uint16_t(ver >> 12)};
+    }
     std::pair<uint16_t,uint16_t> fw_clock_version()
     {
         return get_param_16x2(SPCM_FW_CLOCK);
