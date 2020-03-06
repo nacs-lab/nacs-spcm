@@ -59,7 +59,11 @@ NACS_EXPORT() void Spcm::dump(std::ostream &stm) noexcept
         << ", hardware: " << ver.second << std::endl;
     ver = extpcb_version();
     stm << "Ext PCB version: " << ver.first << "." << ver.second << std::endl;
-    stm << "PXI hardware slot no: " << pxi_hwslotno() << std::endl;
+    auto pxi_slotno = pxi_hwslotno();
+    if (pxi_slotno > 0)
+        stm << "PXI hardware slot no: " << pxi_slotno << std::endl;
+    else
+        stm << "PXI hardware slot no: N/A" << std::endl;
     auto date = product_date();
     stm << "Product date: " << date.first << " / week " << date.second << std::endl;
     date = calib_date();
