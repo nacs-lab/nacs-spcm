@@ -74,6 +74,18 @@ NACS_EXPORT() void Spcm::dump(std::ostream &stm) noexcept
     stm << "Features: 0x" << std::hex << features() << std::dec << std::endl;
     stm << "Ext features: 0x" << std::hex << ext_features() << std::dec << std::endl;
 
+    int nchn = ch_count();
+    stm << "Channel count: " << nchn << std::endl;
+    stm << "Channel enabled mask: " << std::hex << ch_enable() << std::dec << std::endl;
+    for (int i = 0; i < nchn; i++) {
+        if (i > 4) {
+            stm << "Invalid channel count (> 4)" << std::endl;
+            break;
+        }
+        stm << "Channel [" << i << "]: output " <<  (out_enabled(i) ? "enabled" : "disabled")
+            << ", amp: " << amp(i) << std::endl;
+    }
+
     stm << "X0 available modes: " << std::hex << x0_availmodes()
         << ", X0 mode: " << x0_mode() << std::dec << std::endl;
     stm << "X1 available modes: " << std::hex << x1_availmodes()
