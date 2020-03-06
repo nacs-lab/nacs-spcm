@@ -23,6 +23,7 @@
 
 #include <spcm/spcm.h>
 
+#include <ostream>
 #include <stdexcept>
 #include <string>
 
@@ -329,6 +330,7 @@ public:
         set_param(SPCM_X2_MODE, mode);
         check_error();
     }
+    void dump(std::ostream &stm) noexcept;
 
 private:
     std::pair<uint16_t,uint16_t> get_param_16x2(int32_t name)
