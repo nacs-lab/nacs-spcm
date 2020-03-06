@@ -93,6 +93,33 @@ NACS_EXPORT() void Spcm::dump(std::ostream &stm) noexcept
         stm << "PXI hardware slot no: " << pxi_slotno << std::endl;
     else
         stm << "PXI hardware slot no: N/A" << std::endl;
+
+    stm << "Firmware versions:" << std::endl;
+    ver = fw_ctrl_version();
+    stm << "  Main control FPGA version: " << ver.first
+        << ", type: " << ver.second << std::endl;
+    ver = fw_ctrl_golden_version();
+    stm << "  Main control FPGA golden version: " << ver.first
+        << ", type: " << ver.second << std::endl;
+    ver = fw_clock_version();
+    stm << "  Clock distribution version: " << ver.first
+        << ", type: " << ver.second << std::endl;
+    ver = fw_config_version();
+    stm << "  Configuration controller version: " << ver.first
+        << ", type: " << ver.second << std::endl;
+    ver = fw_modulea_version();
+    stm << "  Frontend module A version: " << ver.first
+        << ", type: " << ver.second << std::endl;
+    ver = fw_moduleb_version();
+    stm << "  Frontend module B version: " << ver.first
+        << ", type: " << ver.second << std::endl;
+    ver = fw_modextra_version();
+    stm << "  Extension module version: " << ver.first
+        << ", type: " << ver.second << std::endl;
+    ver = fw_power_version();
+    stm << "  Power controller version: " << ver.first
+        << ", type: " << ver.second << std::endl;
+
     auto date = product_date();
     stm << "Product date: " << date.first << " / week " << date.second << std::endl;
     date = calib_date();

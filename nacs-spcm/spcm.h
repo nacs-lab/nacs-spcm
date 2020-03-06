@@ -175,6 +175,40 @@ public:
         }
         return res;
     }
+
+    std::pair<uint16_t,uint16_t> fw_ctrl_version()
+    {
+        return get_param_16x2(SPCM_FW_CTRL);
+    }
+    std::pair<uint16_t,uint16_t> fw_ctrl_golden_version()
+    {
+        return get_param_16x2(SPCM_FW_CTRL_GOLDEN);
+    }
+    std::pair<uint16_t,uint16_t> fw_clock_version()
+    {
+        return get_param_16x2(SPCM_FW_CLOCK);
+    }
+    std::pair<uint16_t,uint16_t> fw_config_version()
+    {
+        return get_param_16x2(SPCM_FW_CONFIG);
+    }
+    std::pair<uint16_t,uint16_t> fw_modulea_version()
+    {
+        return get_param_16x2(SPCM_FW_MODULEA);
+    }
+    std::pair<uint16_t,uint16_t> fw_moduleb_version()
+    {
+        return get_param_16x2(SPCM_FW_MODULEB);
+    }
+    std::pair<uint16_t,uint16_t> fw_modextra_version()
+    {
+        return get_param_16x2(SPCM_FW_MODEXTRA);
+    }
+    std::pair<uint16_t,uint16_t> fw_power_version()
+    {
+        return get_param_16x2(SPCM_FW_POWER);
+    }
+
     std::pair<uint16_t,uint16_t> product_date()
     {
         return get_param_16x2(SPC_PCIDATE);
