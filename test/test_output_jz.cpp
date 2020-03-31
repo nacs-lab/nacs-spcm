@@ -35,15 +35,6 @@ using namespace NaCs;
 using namespace NaCs::Spcm;
 
 
-constexpr long long int sample_rate = 625ll * 1000000ll;
-constexpr int cycle = 1024 / 32;
-
-void gen_data(int16_t* ptr, uint64 mem_size) {    
-    for(uint64 i = 0; i < mem_size; i++) {
-        ptr[i] = (int16_t) i;
-    }
-}
-
 
 int main() {
     
@@ -70,39 +61,39 @@ int main() {
 
     uint64 buff_size_s = 67108864/4;
     uint32 notify_size_s = 4096*32;
+    std::cout << "buff_size_b: " << buff_size_s * 2 << "notify_size_b: " << notify_size_s * 2 << "\n";
     
     hdl.set_param(SPC_SAMPLERATE, 50000000);
     
     int16_t * buff_ptr = new int16_t[buff_size_s];
-    gen_data((int16_t*)buff_ptr, buff_size_s);
 
     hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 2*notify_size_s,
                      (void*)buff_ptr, 0, 2*buff_size_s);
     hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, 2*buff_size_s);
+    
+    uint64_t user_len_b;
+    uint64_t user_pos_b;
+    hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &user_len_b);
+    hdl.get_param(SPC_DATA_AVAIL_USER_POS, &user_pos_b);
+    std::cout << "START \n avail_user_len: " << user_len_b << "; avail_user_pos: " << user_pos_b << ";\n";
 
-    
-    int64 user_len_b;
-    int64 user_pos_b;
-        hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &user_len_b);
-        hdl.get_param(SPC_DATA_AVAIL_USER_POS, &user_pos_b);            
-        std::cout << "START \n avail_user_len: " << user_len_b << "; avail_user_pos: " << user_pos_b << ";\n";
-    
-    
-    //hdl.set_param(SPC_TIMEOUT, 1000);
-    
+    int16_t phase_cnt = 0;
+    auto gen_data = [&] {
+        for(uint64_t i = user_pos_b / 2; i < (user_pos_b+user_len_b) / 2; i++) {
+            buff_ptr[i] = (int16_t) phase_cnt;
+            phase_cnt++;
+        }
+    };
+
+    gen_data();    
     hdl.cmd(M2CMD_DATA_STARTDMA | M2CMD_DATA_WAITDMA);
     hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);
     hdl.cmd(M2CMD_CARD_START | M2CMD_CARD_ENABLETRIGGER);
     hdl.force_trigger();
     hdl.check_error();
-    
-//    uint32_t status;
-//    hdl.get_param(SPC_M2STATUS, &status);
-//    Log::log("Status: 0x%x\n", status);
-    
+        
     int cnt = 0;
-    std::cout << "buff_size_b: " << buff_size_s * 2 << "notify_size_b: " << notify_size_s * 2 << "\n";
-    while (cnt < 500) {
+    while (cnt < 1000) {
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &user_len_b);
         hdl.get_param(SPC_DATA_AVAIL_USER_POS, &user_pos_b);            
         std::cout << "avail_user_len: " << user_len_b << "; avail_user_pos: " << user_pos_b << ";\n";
@@ -111,7 +102,7 @@ int main() {
                 user_len_b = 2*buff_size_s - user_pos_b;
                 std::cout << "hello\n";
             }
-            gen_data(buff_ptr + user_pos_b/2, user_len_b/2);
+            gen_data();
             hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, user_len_b);
             hdl.cmd(M2CMD_DATA_WAITDMA);
             hdl.check_error();
