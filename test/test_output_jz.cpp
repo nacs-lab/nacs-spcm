@@ -80,7 +80,11 @@ int main() {
     int16_t phase_cnt = 0;
     auto gen_data = [&] {
         for(uint64_t i = user_pos_b / 2; i < (user_pos_b+user_len_b) / 2; i++) {
-            buff_ptr[i] = (int16_t) phase_cnt;
+            uint64_t n = i & (buff_size_s-1);
+            if(phase_cnt > 0)
+                buff_ptr[n] = (int16_t) phase_cnt;
+            else
+                buff_ptr[n] = 0;
             phase_cnt++;
         }
     };
@@ -98,10 +102,11 @@ int main() {
         hdl.get_param(SPC_DATA_AVAIL_USER_POS, &user_pos_b);            
         std::cout << "avail_user_len: " << user_len_b << "; avail_user_pos: " << user_pos_b << ";\n";
         if (user_len_b >= 2*notify_size_s) {
+            /*user_len_b = (user_pos_b + user_len_b) & (2*buff_size_s-1);
             if (user_pos_b + user_len_b >= 2*buff_size_s){
                 user_len_b = 2*buff_size_s - user_pos_b;
                 std::cout << "hello\n";
-            }
+                }*/
             gen_data();
             hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, user_len_b);
             hdl.cmd(M2CMD_DATA_WAITDMA);
