@@ -21,5 +21,12 @@ set_source_files_properties(test_output.cpp
 #set_source_files_properties(test_output_jz.cpp
 #  PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")
 
+add_executable(test-output_kw test_output_kw.cpp)
+target_link_libraries(test-output_kw nacs-utils nacs-spcm)
+set_source_files_properties(test_output_kw.cpp
+  PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")
+
+add_executable(HelloWorld test_file.cpp)
+
 add_executable(test-params test_params.cpp)
 target_link_libraries(test-params nacs-spcm)

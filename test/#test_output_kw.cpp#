@@ -101,10 +101,27 @@ __m512i calc_sins(float phase, float freq, float amp)
 __attribute__((target("avx512f,avx512bw"), flatten))
 __m512i calc_sins2(float phase, float freq, float amp)
 {
+    // __m512 v1 = _mm512_set1_ps(0.0f);
+    // __m512 v2 = _mm512_set1_ps(0.0f);
     auto v1 = xsinpif_pi(phase + tidxs * freq);
     auto v2 = xsinpif_pi(phase + (tidxs + 1) * freq);
     return _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1 * amp), (__m512i)mask0,
                                      _mm512_cvttps_epi32(v2 * amp));
+}
+
+__attribute__((target("avx512f,avx512bw"), flatten))
+__m512i calc_sins2(std::vector<float> phase, std::vector<float> freq, std::vector<float> amp)
+{
+    __m512 v1 = _mm512_set1_ps(0.0f);
+    __m512 v2 = _mm512_set1_ps(0.0f);
+    size_t size = phase.size(); //should be the same as freq.size() and amp.size()
+    for(int i = 0; i < size; ++i)
+    {
+        v1 += xsinpif_pi(phase[i] + tidxs * freq[i]) * amp[i];
+        v2 += xsinpif_pi(phase[i] + (tidxs + 1) * freq[i]) * amp[i];
+    }
+    return _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,
+                                     _mm512_cvttps_epi32(v2));
 }
 
 constexpr uint64_t buff_nele =  4 / 2 * 1024ll * 1024ll * 1024ll;
@@ -171,6 +188,138 @@ private:
     const uint64_t m_freq_cnt;
     std::thread worker;
 };
+struct FloatStream : DataPipe<int16_t> {
+    FloatStream(float amp, double freq)
+        : FloatStream((int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW),
+                 amp * 6.7465185e9f, uint64_t(round(freq * 10)))
+    {
+    }
+
+private:
+    FloatStream(int16_t *base, float amp, uint64_t freq_cnt)
+        : DataPipe(base, buff_nele, 4096 * 512 * 32),
+          m_base(base),
+          m_amp(amp),
+          m_freq_cnt(freq_cnt),
+          worker()
+    {
+        worker = std::thread(&FloatStream::generate, this);
+    }
+
+    NACS_NOINLINE __attribute__((target("avx512f,avx512bw"), flatten)) void generate()
+    {
+        const uint64_t max_phase = uint64_t(625e6 * 10);
+        // const double amp_scale = 2.0588742e9f / 2^31;
+        const double freq_scale = 0.1 / (625e6 / 32);
+        const double phase_scale = 2 / double(max_phase);
+
+        // // const uint64_t freq_cnt = 1390000000ull / 10; // In unit of 0.1Hz
+        // const uint64_t freq_cnt = uint64_t(1.953125e8);
+        // // const uint64_t freq_cnt = 1562500000ull; // In unit of 0.1Hz
+        int64_t phase_cnt = 0;
+        while (true) {
+            size_t sz;
+            auto ptr = get_write_ptr(&sz);
+            // We operate on 64 byte a time
+            if (sz < 64 / 2) {
+                CPU::pause();
+                sync_writer();
+                continue;
+            }
+            sz &= ~(size_t)(64 / 2 - 1);
+            size_t write_sz = 0;
+            for (; write_sz < sz; write_sz += 64 / 2) {
+                auto data = calc_sins2(float(double(phase_cnt) * phase_scale),
+                                       float(double(m_freq_cnt) * freq_scale), m_amp);
+                _mm512_store_si512(&ptr[write_sz], data);
+                phase_cnt += m_freq_cnt * (64 / 2);
+                if (phase_cnt > 0) {
+                    phase_cnt -= max_phase * 4;
+                    while (unlikely(phase_cnt > 0)) {
+                        phase_cnt -= max_phase * 4;
+                    }
+                }
+            }
+            wrote_size(write_sz);
+            CPU::wake();
+        }
+    }
+
+    int16_t *const m_base;
+    const float m_amp;
+    const uint64_t m_freq_cnt;
+    std::thread worker;
+};
+struct MultiStream : DataPipe<int16_t> {
+    MultiStream(std::vector<float> amp, std::vector<double> freq)
+        : MultiStream((int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW),
+                      amp, freq)
+    {
+    }
+
+private:
+    MultiStream(int16_t *base, std::vector<float> amp, std::vector<double> freq)
+        : DataPipe(base, buff_nele, 4096 * 512 * 32),
+          m_base(base),
+          worker()
+    {
+        std::transform(amp.begin(), amp.end(), amp.begin(), [](float f){return f * 6.7465185e9f;});
+        std::vector<uint64_t> freq_cnt(freq.size(),0);
+        std::transform(freq.begin(),freq.end(), freq_cnt.begin(), [](double u){return uint64_t(round(u * 10));});
+        m_amp = amp;
+        m_freq_cnt = freq_cnt;
+        worker = std::thread(&MultiStream::generate, this);
+    }
+
+    NACS_NOINLINE __attribute__((target("avx512f,avx512bw"), flatten)) void generate()
+    {
+        const uint64_t max_phase = uint64_t(625e6 * 10);
+        // const double amp_scale = 2.0588742e9f / 2^31;
+        const double freq_scale = 0.1 / (625e6 / 32);
+        const double phase_scale = 2 / double(max_phase);
+
+        // // const uint64_t freq_cnt = 1390000000ull / 10; // In unit of 0.1Hz
+        // const uint64_t freq_cnt = uint64_t(1.953125e8);
+        // // const uint64_t freq_cnt = 1562500000ull; // In unit of 0.1Hz
+        std::vector<int64_t> phase_cnt(m_amp.size(),0);
+        std::vector<float> m_freq_cntf(m_freq_cnt.size(),0);
+        std::transform(m_freq_cnt.begin(), m_freq_cnt.end(), m_freq_cntf.begin(),[freq_scale](uint64_t u){return float(double(u) * freq_scale);});
+        std::vector<float> phase_cntf(m_amp.size(),0);
+        while (true) {
+            size_t sz;
+            auto ptr = get_write_ptr(&sz);
+            // We operate on 64 byte a time
+            if (sz < 64 / 2) {
+                CPU::pause();
+                sync_writer();
+                continue;
+            }
+            sz &= ~(size_t)(64 / 2 - 1);
+            size_t write_sz = 0;
+            for (; write_sz < sz; write_sz += 64 / 2) {
+                std::transform(phase_cnt.begin(), phase_cnt.end(), phase_cntf.begin(), [phase_scale](int64_t phase){return float(double(phase) * phase_scale);});
+                auto data = calc_sins2(phase_cntf, m_freq_cntf, m_amp);
+                _mm512_store_si512(&ptr[write_sz], data);
+                for(int i = 0; i < m_freq_cnt.size(); ++i){
+                    phase_cnt[i] += m_freq_cnt[i] * (64 / 2);
+                    if (phase_cnt[i] > 0) {
+                        phase_cnt[i] -= max_phase * 4;
+                        while (unlikely(phase_cnt[i] > 0)) {
+                            phase_cnt[i] -= max_phase * 4;
+                        }
+                    }
+                }
+            }
+            wrote_size(write_sz);
+            CPU::wake();
+        }
+    }
+
+    int16_t *const m_base;
+    std::vector<float> m_amp;
+    std::vector<uint64_t> m_freq_cnt;
+    std::thread worker;
+};
 
 int main()
 {
@@ -205,7 +354,6 @@ int main()
     hdl.set_param(SPC_SAMPLERATE, rate);
     hdl.get_param(SPC_SAMPLERATE, &rate);
     printf("Sampling rate set to %.1lf MHz\n", (double)rate / MEGA(1));
-
     hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);
     hdl.set_param(SPC_TRIG_ANDMASK, 0);
     hdl.set_param(SPC_TRIG_CH_ORMASK0, 0);
@@ -219,7 +367,10 @@ int main()
     hdl.set_param(SPC_AMP0, 2500); // Amp
     hdl.set_param(SPC_FILTER0, 0);
 
-    Stream stream(0.9f, 1.39);
+    //Stream stream(0.5f, 500e3);
+    std::vector<float> amps = {0.3f,0.2f,0.1f,0.5f};
+    std::vector<double> freqs = {500e3,501e3,502e3,500.001e3};
+    MultiStream stream(amps, freqs);
 
     size_t buff_sz;
     auto buff_ptr = stream.get_read_buff(&buff_sz);
