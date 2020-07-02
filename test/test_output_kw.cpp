@@ -124,6 +124,14 @@ __m512i calc_sins2(std::vector<float> phase, std::vector<float> freq, std::vecto
                                      _mm512_cvttps_epi32(v2));
 }
 
+__attribute__((target("avx512f,avx512bw"), flatten))
+void calc_sins2(float phase, float freq, float amp, __m512 *v1, __m512 *v2)
+{
+    // __m512 v1 = _mm512_set1_ps(0.0f);
+    // __m512 v2 = _mm512_set1_ps(0.0f);
+    *v1 = xsinpif_pi(phase + tidxs * freq);
+    *v2 = xsinpif_pi(phase + (tidxs + 1) * freq);
+}
 constexpr uint64_t buff_nele =  4 / 2 * 1024ll * 1024ll * 1024ll;
 
 struct Stream : DataPipe<int16_t> {
@@ -188,22 +196,27 @@ private:
     const uint64_t m_freq_cnt;
     std::thread worker;
 };
-struct Stream : DataPipe<int16_t> {
-    Stream(float amp, double freq)
-        : Stream((int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW),
-                 amp * 6.7465185e9f, uint64_t(round(freq * 10)))
+struct FloatStream {
+    FloatStream(float amp, double freq)
+        : FloatStream((int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW),
+                      (int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW),
+                      amp * 6.7465185e9f, uint64_t(round(freq * 10)))
     {
     }
 
 private:
-    Stream(int16_t *base, float amp, uint64_t freq_cnt)
-        : DataPipe(base, buff_nele, 4096 * 512 * 32),
-          m_base(base),
+    FloatStream(int16_t *base, int16_t *base2, float amp, uint64_t freq_cnt)
+        : m_base(base),
+          m_base2(base2),
           m_amp(amp),
           m_freq_cnt(freq_cnt),
+          dp1(base, buff_nele, 4096 * 512 * 32),
+          dp2(base2, buff_nele, 4096 * 512 * 32),
           worker()
     {
-        worker = std::thread(&Stream::generate, this);
+        //dp1 = DataPipe<int16_t>::DataPipe(base, buff_nele, 4096 * 512 * 32);
+        //dp2 = DataPipe<int16_t>::DataPipe(base2, buff_nele, 4096 * 512 * 32);
+        worker = std::thread(&FloatStream::generate, this);
     }
 
     NACS_NOINLINE __attribute__((target("avx512f,avx512bw"), flatten)) void generate()
@@ -218,20 +231,26 @@ private:
         // // const uint64_t freq_cnt = 1562500000ull; // In unit of 0.1Hz
         int64_t phase_cnt = 0;
         while (true) {
-            size_t sz;
-            auto ptr = get_write_ptr(&sz);
+            size_t sz, sz2, min_sz;
+            auto ptr1 = dp1.get_write_ptr(&sz);
+            auto ptr2 = dp2.get_write_ptr(&sz2);
             // We operate on 64 byte a time
-            if (sz < 64 / 2) {
+            if (sz < 64 / 2 || sz2 < 64/2) {
                 CPU::pause();
-                sync_writer();
+                dp1.sync_writer();
+                dp2.sync_writer();
                 continue;
             }
             sz &= ~(size_t)(64 / 2 - 1);
+            sz2 &= ~(size_t)(64 / 2 - 1);
+            min_sz = std::min(sz, sz2);
             size_t write_sz = 0;
-            for (; write_sz < sz; write_sz += 64 / 2) {
-                auto data = calc_sins2(float(double(phase_cnt) * phase_scale),
-                                       float(double(m_freq_cnt) * freq_scale), m_amp);
-                _mm512_store_si512(&ptr[write_sz], data);
+            for (; write_sz < min_sz; write_sz += 64 / 2) {
+                __m512 v1, v2;
+                calc_sins2(float(double(phase_cnt) * phase_scale),
+                           float(double(m_freq_cnt) * freq_scale), m_amp, &v1, &v2);
+                _mm512_store_ps(&ptr1[write_sz], v1);
+                _mm512_store_ps(&ptr2[write_sz], v2);
                 phase_cnt += m_freq_cnt * (64 / 2);
                 if (phase_cnt > 0) {
                     phase_cnt -= max_phase * 4;
@@ -240,17 +259,108 @@ private:
                     }
                 }
             }
-            wrote_size(write_sz);
+            dp1.wrote_size(write_sz);
+            dp2.wrote_size(write_sz);
             CPU::wake();
         }
     }
-
+    inline void get_read_ptr(size_t *sz1, size_t *sz2, auto *ptr1, auto *ptr2){
+        ptr1 = dp1.get_read_ptr(sz1);
+        ptr2 = dp2.get_read_ptr(sz2);
+    }
+    inline void read_size(size_t sz1, size_t sz2){
+        dp1.read_size(sz1);
+        dp2.read_size(sz2);
+    }
     int16_t *const m_base;
+    int16_t *const m_base2;
     const float m_amp;
     const uint64_t m_freq_cnt;
+    DataPipe<int16_t> dp1;
+    DataPipe<int16_t> dp2;
     std::thread worker;
 };
+struct MultiThreadStream : DataPipe<int16_t> {
+    MultiThreadStream(std::vector<float> amp, std::vector<double> freq)
+        : MultiThreadStream((int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW),
+                      amp, freq)
+    {
+    }
 
+private:
+    MultiThreadStream(int16_t *base, std::vector<float> amp, std::vector<double> freq)
+        : DataPipe(base, buff_nele, 4096 * 512 * 32),
+          m_base(base),
+          Streams(),
+          worker()
+    {
+        for(int i = 0; i < amp.size(), ++i){
+            FloatStream f(amp[i],freq[i]);
+            Streams.push_back(&f);
+        }
+        worker = std::thread(&MultiThreadStream::generate, this);
+    }
+
+    NACS_NOINLINE __attribute__((target("avx512f,avx512bw"), flatten)) void generate()
+    {
+        while (true) {
+            size_t sz;
+            size_t stream_sz = Streams.size();
+            auto ptr = get_write_ptr(&sz);
+            // We operate on 64 byte a time
+            if (sz < 64 / 2) {
+                CPU::pause();
+                sync_writer();
+                continue;
+            }
+            sz &= ~(size_t)(64 / 2 - 1); // now, we make sure the data gen is ready
+            int j = 0;
+            size_t float_stream_sz1;
+            size_t float_stream_sz2;
+            std::vector<__m512*> ptrs1;
+            std::vector<__m512*> ptrs2;
+            while (j < stream_sz){
+                __m512* this_ptr1;
+                __m512* this_ptr2;
+                (*Streams[j]).get_read_ptr(&float_stream_sz,&float_stream_sz2,this_ptr1,this_ptr2);
+                float_stream_sz = std::min(float_stream_sz, float_stream_sz2);
+                if (~(float_stream_sz < sz)){
+                    ptrs1.push_back(this_ptr);
+                    ptrs2.push_back(this_ptr2);
+                    j += 1;
+                }
+            }
+            size_t write_sz = 0;
+            for (; write_sz < sz; write_sz += 64 / 2) {
+                __m512 v1 = _mm512_set1_ps(0.0f);
+                __m512 v2 = _mm512_set1_ps(0.0f);
+                for(int i = 0; i < stream_sz; ++i)
+                {
+                    __m512 this_v1 = *ptrs1[i];
+                    __m512 this_v2 = *ptrs2[i];
+                    v1 += this_v1;
+                    v2 += this_v2;
+                    ptrs1[i] += 64 / 2;
+                    ptrs2[i] += 64 / 2;
+                }
+                __m512i data = _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,
+                                     _mm512_cvttps_epi32(v2));
+                _mm512_store_si512(&ptr[write_sz], data);
+                }
+            }
+            wrote_size(write_sz);
+            for(int i = 0; i < stream_sz; ++i){
+                (*Streams[i]).read_size(write_sz, write_sz);
+            }
+            CPU::wake();
+        }
+
+    int16_t *const m_base;
+    std::vector<FloatStream*> Streams;
+    std::vector<float> m_amp;
+    std::vector<uint64_t> m_freq_cnt;
+    std::thread worker;
+};
 struct MultiStream : DataPipe<int16_t> {
     MultiStream(std::vector<float> amp, std::vector<double> freq)
         : MultiStream((int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW),
@@ -355,7 +465,6 @@ int main()
     hdl.set_param(SPC_SAMPLERATE, rate);
     hdl.get_param(SPC_SAMPLERATE, &rate);
     printf("Sampling rate set to %.1lf MHz\n", (double)rate / MEGA(1));
-
     hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);
     hdl.set_param(SPC_TRIG_ANDMASK, 0);
     hdl.set_param(SPC_TRIG_CH_ORMASK0, 0);
