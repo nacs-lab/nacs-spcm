@@ -261,14 +261,14 @@ private:
         while (true) {
             //Log::log("1");
             size_t sz, sz2, min_sz;
-            spinlock.lock();
+            // spinlock.lock();
             auto ptr1 = dp1.get_write_ptr(&sz);
             auto ptr2 = dp2.get_write_ptr(&sz2);
-            spinlock.unlock();
+            // spinlock.unlock();
             //Log::log("%d ", sz2);
             // We operate on 64 byte a time
             if ((sz < 64 / 2) || (sz2 < 64 / 2)) {
-                CPU::pause();
+                //CPU::pause();
                 {
                     std::lock_guard<SpinLock> guard(spinlock);
                     dp1.sync_writer();
@@ -303,7 +303,7 @@ private:
                 dp1.wrote_size(write_sz);
                 dp2.wrote_size(write_sz);
             }
-            CPU::wake();
+            //CPU::wake();
         }
         //}
         //catch(...){
@@ -355,12 +355,12 @@ private:
             //Log::log("1 ");
             size_t sz;
             size_t stream_sz = Streams.size();
-            spinlock.lock();
+            //spinlock.lock();
             auto ptr = get_write_ptr(&sz);
-            spinlock.unlock();
+            //spinlock.unlock();
             // We operate on 64 byte a time
             if (sz < 64 / 2) {
-                CPU::pause();
+                //CPU::pause();
                 {
                     std::lock_guard<SpinLock> guard(spinlock);
                     sync_writer();
@@ -440,7 +440,7 @@ private:
                 (*Streams[i]).read_size(write_sz, write_sz);
                 //Log::log("%d %d %d ", y, write_sz, x);
             }
-            CPU::wake();
+            //CPU::wake();
         }
         //}
         //catch(...)
@@ -579,9 +579,9 @@ int main()
     SpinLock *spinlock = stream.getLock();
 
     size_t buff_sz;
-    (*spinlock).lock();
+    //(*spinlock).lock();
     auto buff_ptr = stream.get_read_buff(&buff_sz);
-    (*spinlock).unlock();
+    //(*spinlock).unlock();
     hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 4096 * 32,
                      (void*)buff_ptr, 0, 2 * buff_sz);
     // bool last_p_set = false;
