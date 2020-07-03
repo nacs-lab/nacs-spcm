@@ -37,7 +37,13 @@
 #include <thread>
 #include <vector>
 
+#include <exception>
+#include <stdexcept>
+#include <iostream>
+
 using namespace NaCs;
+
+static std::exception_ptr teptr = nullptr;
 
 constexpr long long int sample_rate = 625ll * 1000000ll;
 constexpr int cycle = 1024 / 32;
@@ -129,8 +135,8 @@ void calc_sins2(float phase, float freq, float amp, __m512 *v1, __m512 *v2)
 {
     // __m512 v1 = _mm512_set1_ps(0.0f);
     // __m512 v2 = _mm512_set1_ps(0.0f);
-    *v1 = xsinpif_pi(phase + tidxs * freq);
-    *v2 = xsinpif_pi(phase + (tidxs + 1) * freq);
+    *v1 = xsinpif_pi(phase + tidxs * freq) * amp;
+    *v2 = xsinpif_pi(phase + (tidxs + 1) * freq) * amp;
 }
 constexpr uint64_t buff_nele =  4 / 2 * 1024ll * 1024ll * 1024ll;
 
@@ -164,6 +170,7 @@ private:
         // // const uint64_t freq_cnt = 1562500000ull; // In unit of 0.1Hz
         int64_t phase_cnt = 0;
         while (true) {
+            // Log::log("1 ");
             size_t sz;
             auto ptr = get_write_ptr(&sz);
             // We operate on 64 byte a time
@@ -203,7 +210,22 @@ struct FloatStream {
                       amp * 6.7465185e9f, uint64_t(round(freq * 10)))
     {
     }
-
+    inline const int16_t *get_read_ptr1(size_t *sz1){
+        return dp1.get_read_ptr(sz1);
+    }
+    inline const int16_t *get_read_ptr2(size_t *sz2){
+        return dp2.get_read_ptr(sz2);
+    }
+    inline void read_size(size_t sz1, size_t sz2){
+        dp1.read_size(sz1);
+        dp2.read_size(sz2);
+    }
+    inline void sync_reader1(){
+        dp1.sync_reader();
+    }
+    inline void sync_reader2(){
+        dp2.sync_reader();
+    }
 private:
     FloatStream(int16_t *base, int16_t *base2, float amp, uint64_t freq_cnt)
         : m_base(base),
@@ -221,6 +243,7 @@ private:
 
     NACS_NOINLINE __attribute__((target("avx512f,avx512bw"), flatten)) void generate()
     {
+        //try{
         const uint64_t max_phase = uint64_t(625e6 * 10);
         // const double amp_scale = 2.0588742e9f / 2^31;
         const double freq_scale = 0.1 / (625e6 / 32);
@@ -231,16 +254,19 @@ private:
         // // const uint64_t freq_cnt = 1562500000ull; // In unit of 0.1Hz
         int64_t phase_cnt = 0;
         while (true) {
+            //Log::log("1");
             size_t sz, sz2, min_sz;
             auto ptr1 = dp1.get_write_ptr(&sz);
             auto ptr2 = dp2.get_write_ptr(&sz2);
+            //Log::log("%d ", sz2);
             // We operate on 64 byte a time
-            if (sz < 64 / 2 || sz2 < 64/2) {
+            if ((sz < 64 / 2) || (sz2 < 64 / 2)) {
                 CPU::pause();
                 dp1.sync_writer();
                 dp2.sync_writer();
                 continue;
             }
+            //Log::log("%d ", sz);
             sz &= ~(size_t)(64 / 2 - 1);
             sz2 &= ~(size_t)(64 / 2 - 1);
             min_sz = std::min(sz, sz2);
@@ -263,14 +289,11 @@ private:
             dp2.wrote_size(write_sz);
             CPU::wake();
         }
-    }
-    inline void get_read_ptr(size_t *sz1, size_t *sz2, auto *ptr1, auto *ptr2){
-        ptr1 = dp1.get_read_ptr(sz1);
-        ptr2 = dp2.get_read_ptr(sz2);
-    }
-    inline void read_size(size_t sz1, size_t sz2){
-        dp1.read_size(sz1);
-        dp2.read_size(sz2);
+        //}
+        //catch(...){
+        //Log::log("here");
+        //  teptr = std::current_exception();
+        //}
     }
     int16_t *const m_base;
     int16_t *const m_base2;
@@ -286,24 +309,29 @@ struct MultiThreadStream : DataPipe<int16_t> {
                       amp, freq)
     {
     }
+    ~MultiThreadStream(){
+        std::vector<FloatStream*>().swap(Streams); // free up memory
+    }
 
 private:
     MultiThreadStream(int16_t *base, std::vector<float> amp, std::vector<double> freq)
         : DataPipe(base, buff_nele, 4096 * 512 * 32),
           m_base(base),
-          Streams(),
           worker()
     {
-        for(int i = 0; i < amp.size(), ++i){
-            FloatStream f(amp[i],freq[i]);
-            Streams.push_back(&f);
+        for(int i = 0; i < amp.size(); ++i){
+            FloatStream *fsptr;
+            fsptr = new FloatStream(amp[i],freq[i]);
+            Streams.push_back(fsptr);
         }
         worker = std::thread(&MultiThreadStream::generate, this);
     }
 
     NACS_NOINLINE __attribute__((target("avx512f,avx512bw"), flatten)) void generate()
     {
-        while (true) {
+        //try{
+        while (true){
+            //Log::log("1 ");
             size_t sz;
             size_t stream_sz = Streams.size();
             auto ptr = get_write_ptr(&sz);
@@ -313,21 +341,31 @@ private:
                 sync_writer();
                 continue;
             }
+            // Log::log("%d ",sz);
             sz &= ~(size_t)(64 / 2 - 1); // now, we make sure the data gen is ready
             int j = 0;
+            size_t float_stream_sz;
             size_t float_stream_sz1;
             size_t float_stream_sz2;
-            std::vector<__m512*> ptrs1;
-            std::vector<__m512*> ptrs2;
+            std::vector<const int16_t*> ptrs1;
+            std::vector<const int16_t*> ptrs2;
             while (j < stream_sz){
-                __m512* this_ptr1;
-                __m512* this_ptr2;
-                (*Streams[j]).get_read_ptr(&float_stream_sz,&float_stream_sz2,this_ptr1,this_ptr2);
-                float_stream_sz = std::min(float_stream_sz, float_stream_sz2);
-                if (~(float_stream_sz < sz)){
-                    ptrs1.push_back(this_ptr);
+                const int16_t* this_ptr1;
+                const int16_t* this_ptr2;
+                this_ptr1 = (*Streams[j]).get_read_ptr1(&float_stream_sz1);
+                this_ptr2 = (*Streams[j]).get_read_ptr2(&float_stream_sz2);
+                float_stream_sz = std::min(float_stream_sz1, float_stream_sz2);
+                if (!(float_stream_sz < sz)){
+                    ptrs1.push_back(this_ptr1);
                     ptrs2.push_back(this_ptr2);
                     j += 1;
+                    //Log::log("%d",j);
+                } else {
+                    CPU::pause();
+                    for(int k = 0; k < stream_sz; ++k){
+                    (*Streams[k]).sync_reader1();
+                    (*Streams[k]).sync_reader2();
+                    }
                 }
             }
             size_t write_sz = 0;
@@ -336,8 +374,8 @@ private:
                 __m512 v2 = _mm512_set1_ps(0.0f);
                 for(int i = 0; i < stream_sz; ++i)
                 {
-                    __m512 this_v1 = *ptrs1[i];
-                    __m512 this_v2 = *ptrs2[i];
+                    __m512 this_v1 = *(__m512*)ptrs1[i];
+                    __m512 this_v2 = *(__m512*)ptrs2[i];
                     v1 += this_v1;
                     v2 += this_v2;
                     ptrs1[i] += 64 / 2;
@@ -346,15 +384,25 @@ private:
                 __m512i data = _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,
                                      _mm512_cvttps_epi32(v2));
                 _mm512_store_si512(&ptr[write_sz], data);
-                }
+                //Log::log("1");
             }
             wrote_size(write_sz);
             for(int i = 0; i < stream_sz; ++i){
+                size_t y;
+                (*Streams[i]).get_read_ptr1(&y);
                 (*Streams[i]).read_size(write_sz, write_sz);
+                size_t x;
+                (*Streams[i]).get_read_ptr1(&x);
+                //Log::log("%d %d %d ", y, write_sz, x);
             }
             CPU::wake();
         }
-
+        //}
+        //catch(...)
+        //{
+        //    teptr = std::current_exception();
+        //}
+    }
     int16_t *const m_base;
     std::vector<FloatStream*> Streams;
     std::vector<float> m_amp;
@@ -479,9 +527,9 @@ int main()
     hdl.set_param(SPC_FILTER0, 0);
 
     //Stream stream(0.5f, 500e3);
-    std::vector<float> amps = {0.3f,0.2f,0.1f,0.5f};
-    std::vector<double> freqs = {500e3,501e3,502e3,500.001e3};
-    MultiStream stream(amps, freqs);
+    std::vector<float> amps = {0.3f,0.03f}; //,0.1f,0.02f};
+    std::vector<double> freqs = {500e3, 500.001e3}; //,499.995e3,500.002e3};
+    MultiThreadStream stream(amps, freqs);
 
     size_t buff_sz;
     auto buff_ptr = stream.get_read_buff(&buff_sz);
@@ -492,7 +540,15 @@ int main()
     auto send_data = [&] {
         size_t sz;
         const int16_t *ptr;
-        while (true) {
+        while (true){
+            //if (teptr) {
+            //try{
+            //    std::rethrow_exception(teptr);
+            //}
+            //catch(const std::exception &ex)
+            //{
+            //    std::cerr << "Thread exited with exception: " << ex.what() << "\n";
+            //}}
             ptr = stream.get_read_ptr(&sz);
             if (sz < 4096 / 2) {
                 CPU::pause();
@@ -502,7 +558,7 @@ int main()
             break;
         }
         (void)ptr;
-
+        //Log::log("%d ", sz);
         sz = sz & ~(size_t)2047;
         // read out the available bytes that are free again
         uint64_t count = 0;
@@ -548,6 +604,7 @@ int main()
         CPU::wake();
     };
     send_data();
+    Log::log("Done with Initial Data send \n");
     hdl.cmd(M2CMD_DATA_STARTDMA | M2CMD_DATA_WAITDMA);
     hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);
     hdl.cmd(M2CMD_CARD_START | M2CMD_CARD_ENABLETRIGGER);
@@ -556,7 +613,8 @@ int main()
     uint32_t status;
     hdl.get_param(SPC_M2STATUS, &status);
     Log::log("Status: 0x%x\n", status);
-    while (true)
+    while (true){
         send_data();
+    }
     return 0;
 }
