@@ -20,7 +20,24 @@
 
 #include <atomic>
 #include <thread>
-#include <mutex>
+
+void bar(int *a){
+    *a = 42;
+}
+void foo(int *a){
+    bar(a);
+}
+
+struct subthread {
+    const int a;
+    std::thread worker;
+    subthread(int c) : a(c), worker() {
+        worker = std::thread(&subthread::printa, this);
+    }
+    void printa(){
+        std::cout << a << std::endl;
+    }
+};
 
 
 int main()
@@ -66,5 +83,5 @@ int main()
         int a = i;
         std::cout << a << std::endl;
     }
-//    subthread test(5);
+    subthread test(5);
 }
