@@ -40,6 +40,7 @@
 #include <exception>
 #include <stdexcept>
 #include <iostream>
+#include <mutex>
 
 using namespace NaCs;
 
@@ -226,6 +227,9 @@ struct FloatStream {
     inline void sync_reader2(){
         dp2.sync_reader();
     }
+    inline SpinLock *getLock(){
+        return &spinlock;
+    }
 private:
     FloatStream(int16_t *base, int16_t *base2, float amp, uint64_t freq_cnt)
         : m_base(base),
@@ -234,6 +238,7 @@ private:
           m_freq_cnt(freq_cnt),
           dp1(base, buff_nele, 4096 * 512 * 32),
           dp2(base2, buff_nele, 4096 * 512 * 32),
+          spinlock(),
           worker()
     {
         //dp1 = DataPipe<int16_t>::DataPipe(base, buff_nele, 4096 * 512 * 32);
@@ -256,14 +261,19 @@ private:
         while (true) {
             //Log::log("1");
             size_t sz, sz2, min_sz;
+            spinlock.lock();
             auto ptr1 = dp1.get_write_ptr(&sz);
             auto ptr2 = dp2.get_write_ptr(&sz2);
+            spinlock.unlock();
             //Log::log("%d ", sz2);
             // We operate on 64 byte a time
             if ((sz < 64 / 2) || (sz2 < 64 / 2)) {
                 CPU::pause();
-                dp1.sync_writer();
-                dp2.sync_writer();
+                {
+                    std::lock_guard<SpinLock> guard(spinlock);
+                    dp1.sync_writer();
+                    dp2.sync_writer();
+                }
                 continue;
             }
             //Log::log("%d ", sz);
@@ -275,8 +285,11 @@ private:
                 __m512 v1, v2;
                 calc_sins2(float(double(phase_cnt) * phase_scale),
                            float(double(m_freq_cnt) * freq_scale), m_amp, &v1, &v2);
-                _mm512_store_ps(&ptr1[write_sz], v1);
-                _mm512_store_ps(&ptr2[write_sz], v2);
+                {
+                    std::lock_guard<SpinLock> guard(spinlock);
+                    _mm512_store_ps(&ptr1[write_sz], v1);
+                    _mm512_store_ps(&ptr2[write_sz], v2);
+                }
                 phase_cnt += m_freq_cnt * (64 / 2);
                 if (phase_cnt > 0) {
                     phase_cnt -= max_phase * 4;
@@ -285,8 +298,11 @@ private:
                     }
                 }
             }
-            dp1.wrote_size(write_sz);
-            dp2.wrote_size(write_sz);
+            {
+                std::lock_guard<SpinLock> guard(spinlock);
+                dp1.wrote_size(write_sz);
+                dp2.wrote_size(write_sz);
+            }
             CPU::wake();
         }
         //}
@@ -301,6 +317,7 @@ private:
     const uint64_t m_freq_cnt;
     DataPipe<int16_t> dp1;
     DataPipe<int16_t> dp2;
+    SpinLock spinlock;
     std::thread worker;
 };
 struct MultiThreadStream : DataPipe<int16_t> {
@@ -312,11 +329,15 @@ struct MultiThreadStream : DataPipe<int16_t> {
     ~MultiThreadStream(){
         std::vector<FloatStream*>().swap(Streams); // free up memory
     }
+    inline SpinLock *getLock(){
+        return &spinlock;
+    }
 
 private:
     MultiThreadStream(int16_t *base, std::vector<float> amp, std::vector<double> freq)
         : DataPipe(base, buff_nele, 4096 * 512 * 32),
           m_base(base),
+          spinlock(),
           worker()
     {
         for(int i = 0; i < amp.size(); ++i){
@@ -334,11 +355,16 @@ private:
             //Log::log("1 ");
             size_t sz;
             size_t stream_sz = Streams.size();
+            spinlock.lock();
             auto ptr = get_write_ptr(&sz);
+            spinlock.unlock();
             // We operate on 64 byte a time
             if (sz < 64 / 2) {
                 CPU::pause();
-                sync_writer();
+                {
+                    std::lock_guard<SpinLock> guard(spinlock);
+                    sync_writer();
+                }
                 continue;
             }
             // Log::log("%d ",sz);
@@ -352,19 +378,28 @@ private:
             while (j < stream_sz){
                 const int16_t* this_ptr1;
                 const int16_t* this_ptr2;
-                this_ptr1 = (*Streams[j]).get_read_ptr1(&float_stream_sz1);
-                this_ptr2 = (*Streams[j]).get_read_ptr2(&float_stream_sz2);
+                SpinLock* f_spinlock = (*Streams[j]).getLock();
+                {
+                    std::lock_guard<SpinLock> guard(*f_spinlock);
+                    this_ptr1 = (*Streams[j]).get_read_ptr1(&float_stream_sz1);
+                    this_ptr2 = (*Streams[j]).get_read_ptr2(&float_stream_sz2);
+                }
                 float_stream_sz = std::min(float_stream_sz1, float_stream_sz2);
                 if (!(float_stream_sz < sz)){
-                    ptrs1.push_back(this_ptr1);
-                    ptrs2.push_back(this_ptr2);
+                    {
+                        std::lock_guard<SpinLock> guard(*f_spinlock);
+                        ptrs1.push_back(this_ptr1);
+                        ptrs2.push_back(this_ptr2);
+                    }
                     j += 1;
                     //Log::log("%d",j);
                 } else {
                     CPU::pause();
                     for(int k = 0; k < stream_sz; ++k){
-                    (*Streams[k]).sync_reader1();
-                    (*Streams[k]).sync_reader2();
+                        SpinLock* f_spinlock2 = (*Streams[k]).getLock();
+                        std::lock_guard<SpinLock> guard(*f_spinlock2);
+                        (*Streams[k]).sync_reader1();
+                        (*Streams[k]).sync_reader2();
                     }
                 }
             }
@@ -374,8 +409,14 @@ private:
                 __m512 v2 = _mm512_set1_ps(0.0f);
                 for(int i = 0; i < stream_sz; ++i)
                 {
-                    __m512 this_v1 = *(__m512*)ptrs1[i];
-                    __m512 this_v2 = *(__m512*)ptrs2[i];
+                    __m512 this_v1;
+                    __m512 this_v2;
+                    {
+                        SpinLock* f_spinlock = (*Streams[i]).getLock();
+                        std::lock_guard<SpinLock> guard(*f_spinlock);
+                        this_v1 = *(__m512*)ptrs1[i];
+                        this_v2 = *(__m512*)ptrs2[i];
+                    }
                     v1 += this_v1;
                     v2 += this_v2;
                     ptrs1[i] += 64 / 2;
@@ -383,16 +424,20 @@ private:
                 }
                 __m512i data = _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,
                                      _mm512_cvttps_epi32(v2));
-                _mm512_store_si512(&ptr[write_sz], data);
+                {
+                    std::lock_guard<SpinLock> guard(spinlock);
+                    _mm512_store_si512(&ptr[write_sz], data);
+                }
                 //Log::log("1");
             }
-            wrote_size(write_sz);
+            {
+                std::lock_guard<SpinLock> guard(spinlock);
+                wrote_size(write_sz);
+            }
             for(int i = 0; i < stream_sz; ++i){
-                size_t y;
-                (*Streams[i]).get_read_ptr1(&y);
+                SpinLock* f_spinlock = (*Streams[i]).getLock();
+                std::lock_guard<SpinLock> guard(*f_spinlock);
                 (*Streams[i]).read_size(write_sz, write_sz);
-                size_t x;
-                (*Streams[i]).get_read_ptr1(&x);
                 //Log::log("%d %d %d ", y, write_sz, x);
             }
             CPU::wake();
@@ -407,6 +452,7 @@ private:
     std::vector<FloatStream*> Streams;
     std::vector<float> m_amp;
     std::vector<uint64_t> m_freq_cnt;
+    SpinLock spinlock;
     std::thread worker;
 };
 struct MultiStream : DataPipe<int16_t> {
@@ -527,12 +573,15 @@ int main()
     hdl.set_param(SPC_FILTER0, 0);
 
     //Stream stream(0.5f, 500e3);
-    std::vector<float> amps = {0.3f,0.03f}; //,0.1f,0.02f};
-    std::vector<double> freqs = {500e3, 500.001e3}; //,499.995e3,500.002e3};
+    std::vector<float> amps = {0.3f}; //,0.03f}; //,0.1f,0.02f};
+    std::vector<double> freqs = {500e3}; //, 500.001e3}; //,499.995e3,500.002e3};
     MultiThreadStream stream(amps, freqs);
+    SpinLock *spinlock = stream.getLock();
 
     size_t buff_sz;
+    (*spinlock).lock();
     auto buff_ptr = stream.get_read_buff(&buff_sz);
+    (*spinlock).unlock();
     hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 4096 * 32,
                      (void*)buff_ptr, 0, 2 * buff_sz);
     // bool last_p_set = false;
@@ -549,10 +598,16 @@ int main()
             //{
             //    std::cerr << "Thread exited with exception: " << ex.what() << "\n";
             //}}
-            ptr = stream.get_read_ptr(&sz);
+            {
+                std::lock_guard<SpinLock> guard(*spinlock);
+                ptr = stream.get_read_ptr(&sz);
+            }
             if (sz < 4096 / 2) {
                 CPU::pause();
-                stream.sync_reader();
+                {
+                    std::lock_guard<SpinLock> guard(*spinlock);
+                    stream.sync_reader();
+                }
                 continue;
             }
             break;
@@ -600,7 +655,10 @@ int main()
         // }
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
         hdl.check_error();
-        stream.read_size(count / 2);
+        {
+            std::lock_guard<SpinLock> guard(*spinlock);
+            stream.read_size(count / 2);
+        }
         CPU::wake();
     };
     send_data();
