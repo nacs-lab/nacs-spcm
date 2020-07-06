@@ -21,25 +21,6 @@
 #include <atomic>
 #include <thread>
 
-void bar(int *a){
-    *a = 42;
-}
-void foo(int *a){
-    bar(a);
-}
-
-struct subthread {
-    const int a;
-    std::thread worker;
-    subthread(int c) : a(c), worker() {
-        worker = std::thread(&subthread::printa, this);
-    }
-    void printa(){
-        std::cout << a << std::endl;
-    }
-};
-
-
 int main()
 {
     //std::cout << "Hello World!" << std::endl;
@@ -79,9 +60,7 @@ int main()
     std::cout << a << std::endl;
     std::cout << test2 << std::endl;
     std::cout << test2 + 1 << std::endl;
-    for(int i = 0; i < 5;++i){
-        int a = i;
-        std::cout << a << std::endl;
-    }
-    subthread test(5);
+    size_t sz = 33;
+    std::cout << sz/2 << std::endl;
+    std::cout << std::thread::hardware_concurrency() << std::endl;
 }
