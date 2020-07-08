@@ -63,4 +63,5 @@ int main()
     size_t sz = 33;
     std::cout << sz/2 << std::endl;
     std::cout << std::thread::hardware_concurrency() << std::endl;
+    std::cout << ceil(sz/2) << std::endl;
 }
