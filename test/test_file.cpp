@@ -64,4 +64,14 @@ int main()
     std::cout << sz/2 << std::endl;
     std::cout << std::thread::hardware_concurrency() << std::endl;
     std::cout << ceil(sz/2) << std::endl;
+    int c = 3;
+    int d = 4;
+    std::vector<const int*> intptr;
+    intptr.push_back(&c);
+    intptr.push_back(&d);
+    const int **ptrptr = intptr.data();
+    std::cout << **ptrptr << std::endl;
+    std::cout << (*ptrptr)[1] << std::endl;
+    *ptrptr ++;
+    std::cout << *ptrptr << std::endl;
 }

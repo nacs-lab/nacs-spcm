@@ -712,13 +712,14 @@ int main()
     std::vector<float> amps = {0.3f, 0.03f, 0.1f, 0.02f, 0.2f, 0.1f, 0.1f, 0.2f, 0.15f};
     std::vector<double> freqs = {500e3, 500.001e3, 499.995e3, 500.002e3, 495e3, 497e3, 499e3, 505e3, 502e3};
     //MultiThreadStream stream(amps.data(), freqs.data(), amps.size());
-    //MultiStream stream(amps.data(), freqs.data(), amps.size());
-    MultiThreadMultiStream stream(amps.data(), freqs.data(), 3, 3);
+    MultiStream stream(amps.data(), freqs.data(), 8);
+    //MultiThreadMultiStream stream(amps.data(), freqs.data(), 3, 3);
     
     size_t buff_sz;
     auto buff_ptr = stream.get_read_buff(&buff_sz);
     hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 4096 * 32,
                      (void*)buff_ptr, 0, 2 * buff_sz);
+    // printf("Buff Size: %i\n",buff_sz);
     // bool last_p_set = false;
     // int16_t last_p = 0;
     auto send_data = [&] {
