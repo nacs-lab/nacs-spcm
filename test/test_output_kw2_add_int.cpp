@@ -686,6 +686,25 @@ void write_to_buffer(const int16_t **fsptrs, size_t nthreads, int16_t* write_buf
     }
 }
 
+__attribute__((target("avx512f,avx512bw"), flatten))
+void write_to_buffer_int(const int16_t **msptrs, size_t nthreads, int16_t* write_buf,
+                     size_t* curr_pos, uint64_t bytes_to_write) {
+    size_t write_pos = 0;
+    for (; write_pos < (bytes_to_write / 2); write_pos += 64/2){ //bytes_to_write/2 is number of int16_t pointer positions to advance
+            // check for overflow
+        *curr_pos += 64 / 2; // move 64 bytes or one __m512i object that has been stored.
+        if (*curr_pos >= buff_nele){
+            *curr_pos = 0;
+        }
+        int16_t* curr_ptr = write_buf + *curr_pos;
+        __m512i data = _mm512_set1_epi16(0);
+        for (int i = 0; i < nthreads; ++i){
+            data = _mm512_add_epi16(data, *(__m512i*)msptrs[i]);
+            msptrs[i] += 32;
+        }
+        _mm512_store_si512(curr_ptr, data);
+    }
+}
 
 int main()
 {
@@ -735,9 +754,9 @@ int main()
     
     std::vector<float> amps = {0.3f, 0.03f, 0.1f, 0.02f, 0.2f, 0.1f, 0.1f, 0.2f, 0.15f};
     std::vector<double> freqs = {500e3, 500.001e3, 499.995e3, 500.002e3, 495e3, 497e3, 499e3, 505e3, 502e3};
-    std::vector<MultiFloatStream*> Streams;
-    int nchn = 4;
-    int n_per_thread = 4;
+    std::vector<MultiStream*> Streams;
+    int nchn = 6;
+    int n_per_thread = 1;
     for (int i = 0; i < nchn; i += n_per_thread){
         int this_n;
         if ((i + n_per_thread) > nchn) {
@@ -745,8 +764,8 @@ int main()
         } else {
             this_n = n_per_thread;
         }
-        MultiFloatStream *fsptr;
-        fsptr = new MultiFloatStream(amps.data() + i, freqs.data() + i, (size_t) this_n);
+        MultiStream *fsptr;
+        fsptr = new MultiStream(amps.data() + i, freqs.data() + i, (size_t) this_n);
         Streams.push_back(fsptr);
     }
 
@@ -776,7 +795,7 @@ int main()
             const int16_t* this_fsptr;
             size_t this_sz;
             this_fsptr = (*Streams[j]).get_read_ptr(&this_sz);
-            if (this_sz >= 4096){ //4096 *2 = 8 kbytes, which will write to 4kbytes which is a notifysize (2 __m512 objects for each point)
+            if (this_sz >= 4096 / 2){ 
                 if (min_sz > this_sz){
                     min_sz = this_sz;
                 }
@@ -788,14 +807,13 @@ int main()
             }
         }
         //Log::log("%d ", sz);
-        min_sz = min_sz & ~(size_t)4095; // half the number of bytes to read
-        size_t sz = min_sz / 2; // half the number of bytes to write
+        min_sz = min_sz & ~(size_t)2047; // half the number of bytes to read
         // read out the available bytes that are free again
         uint64_t count = 0;
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &count);
         hdl.check_error();
         // printf("count=%zu\n", count);
-        count = std::min(count, uint64_t(sz * 2)); // min_sz * 2 to actually get number of bytes cause of int16_t pointers
+        count = std::min(count, uint64_t(min_sz * 2)); // min_sz * 2 to actually get number of bytes cause of int16_t pointers
         if (!count)
             return;
         if (count & 1)
@@ -850,13 +868,13 @@ int main()
         //                           _mm512_cvttps_epi32(v2));
         //  _mm512_store_si512(curr_ptr, data);
         //}
-        write_to_buffer(fsptrs.data(), nthreads, buff_ptr, &curr_pos, count);
+        write_to_buffer_int(fsptrs.data(), nthreads, buff_ptr, &curr_pos, count);
         // tell card data is ready
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
         hdl.check_error();
         // tell datagen that data has been read
         for (int i = 0; i < nthreads; ++i){
-            (*Streams[i]).read_size(2 * count / 2); // count/2 is number of pointers to advance, but we read twice the amount of data.
+            (*Streams[i]).read_size(count / 2); // count/2 is number of pointers to advance, but we read twice the amount of data.
         }
         fsptrs.clear();
         CPU::wake();

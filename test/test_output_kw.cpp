@@ -712,7 +712,7 @@ int main()
     std::vector<float> amps = {0.3f, 0.03f, 0.1f, 0.02f, 0.2f, 0.1f, 0.1f, 0.2f, 0.15f};
     std::vector<double> freqs = {500e3, 500.001e3, 499.995e3, 500.002e3, 495e3, 497e3, 499e3, 505e3, 502e3};
     //MultiThreadStream stream(amps.data(), freqs.data(), amps.size());
-    MultiStream stream(amps.data(), freqs.data(), 8);
+    MultiStream stream(amps.data(), freqs.data(), 1);
     //MultiThreadMultiStream stream(amps.data(), freqs.data(), 3, 3);
     
     size_t buff_sz;
@@ -747,10 +747,16 @@ int main()
         sz = sz & ~(size_t)2047;
         // read out the available bytes that are free again
         uint64_t count = 0;
+        uint64_t fillsize = 0;
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &count);
+        hdl.get_param(SPC_FILLSIZEPROMILLE, &fillsize);
+        //printf("Fill: %i\n",  fillsize);
         hdl.check_error();
+        printf("Size available %zu\n", count);
+        printf("Size to read %zu\n", uint64_t(2 * sz));
         // printf("count=%zu\n", count);
         count = std::min(count, uint64_t(sz * 2));
+        //printf("min(Size available, size to read): %zu\n", count);
         if (!count)
             return;
         if (count & 1)
@@ -783,6 +789,7 @@ int main()
         //     }
         //     last_p = v;
         // }
+        printf("Count: %zu\n", count);
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
         hdl.check_error();
         stream.read_size(count / 2);
