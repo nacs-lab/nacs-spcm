@@ -827,7 +827,7 @@ int main()
     //MultiThreadStream stream(amps.data(), freqs.data(), amps.size());
     //MultiStream stream(amps.data(), freqs.data(), 1);
     //MultiThreadMultiStream stream(amps.data(), freqs.data(), 3, 3);
-    MultiThreadMultiStreamInt stream(amps.data(), freqs.data(),9, 2);
+    MultiThreadMultiStreamInt stream(amps.data(), freqs.data(),6, 6);
     
     size_t buff_sz;
     auto buff_ptr = stream.get_read_buff(&buff_sz);

@@ -752,11 +752,17 @@ int main()
     hdl.set_param(SPC_AMP0, 2500); // Amp
     hdl.set_param(SPC_FILTER0, 0);
     
-    std::vector<float> amps = {0.3f, 0.03f, 0.1f, 0.02f, 0.2f, 0.1f, 0.1f, 0.2f, 0.15f};
-    std::vector<double> freqs = {500e3, 500.001e3, 499.995e3, 500.002e3, 495e3, 497e3, 499e3, 505e3, 502e3};
+    std::vector<float> amps = {0.3f, 0.03f, 0.1f, 0.02f, 0.2f, 0.1f, 0.1f, 0.2f, 0.15f,
+                               0.01f, 0.02f, 0.001f,0.005f, 0.006f, 0.01f, 0.001f, 0.002f, 0.02f,
+                               0.001f, 0.001f, 0.002f, 0.0005f, 0.0005f, 0.001f, 0.002f, 0.001f, 0.002f,
+                               0.002f, 0.0001f, 0.0002f, 0.001f, 0.01f, 0.003f, 0.001f, 0.0005f, 0.002f};
+    std::vector<double> freqs = {500e3, 500.001e3, 499.995e3, 500.002e3, 495e3, 497e3, 499e3, 505e3, 502e3,
+                                 498e3, 499.001e3, 500.5e3, 499.5e3, 498.5e3, 490e3, 494e3, 497.005e3,500.6e3,
+                                 498.6e3, 499.1e3, 501.1e3, 501.2e3, 506e3, 508e3, 510.1e3, 500.2e3, 498.5e3,
+                                 491.1e3, 509.5e3, 505.1e3, 501.5e3, 500.003e3, 502.5e3, 507.5e3, 498.85e3, 495.75e3};
     std::vector<MultiStream*> Streams;
-    int nchn = 6;
-    int n_per_thread = 1;
+    int nchn = 30;
+    int n_per_thread = 5;
     for (int i = 0; i < nchn; i += n_per_thread){
         int this_n;
         if ((i + n_per_thread) > nchn) {
