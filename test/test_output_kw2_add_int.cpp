@@ -702,7 +702,7 @@ void write_to_buffer_int(const int16_t **msptrs, size_t nthreads, int16_t* write
             data = _mm512_add_epi16(data, *(__m512i*)msptrs[i]);
             msptrs[i] += 32;
         }
-        _mm512_store_si512(curr_ptr, data);
+        _mm512_stream_si512((__m512i*)curr_ptr, data);
     }
 }
 
@@ -761,8 +761,8 @@ int main()
                                  498.6e3, 499.1e3, 501.1e3, 501.2e3, 506e3, 508e3, 510.1e3, 500.2e3, 498.5e3,
                                  491.1e3, 509.5e3, 505.1e3, 501.5e3, 500.003e3, 502.5e3, 507.5e3, 498.85e3, 495.75e3};
     std::vector<MultiStream*> Streams;
-    int nchn = 30;
-    int n_per_thread = 5;
+    int nchn = 7;
+    int n_per_thread = 7;
     for (int i = 0; i < nchn; i += n_per_thread){
         int this_n;
         if ((i + n_per_thread) > nchn) {
@@ -819,6 +819,7 @@ int main()
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &count);
         hdl.check_error();
         // printf("count=%zu\n", count);
+        uint64_t avail = count;
         count = std::min(count, uint64_t(min_sz * 2)); // min_sz * 2 to actually get number of bytes cause of int16_t pointers
         if (!count)
             return;
@@ -876,8 +877,19 @@ int main()
         //}
         write_to_buffer_int(fsptrs.data(), nthreads, buff_ptr, &curr_pos, count);
         // tell card data is ready
+        Log::log("avail: %lu ", avail);
+        Log::log("count: %lu ", count);
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
-        hdl.check_error();
+        try{
+            hdl.check_error();
+        }
+        catch (std::exception& test)
+        {
+            Log::log("avail: %lu ", avail);
+            Log::log("count: %lu ", count);
+            Log::log(test.what());
+            throw test;
+        }
         // tell datagen that data has been read
         for (int i = 0; i < nthreads; ++i){
             (*Streams[i]).read_size(count / 2); // count/2 is number of pointers to advance, but we read twice the amount of data.

@@ -15,6 +15,7 @@
 
 #include <iostream>
 #include <chrono>
+#include <random>
 
 using namespace NaCs;
 
@@ -78,7 +79,7 @@ struct BenchmarkPipe : DataPipe<__m512>{
     }
 private:
     BenchmarkPipe(__m512* base, long long int ntrials, long long int buff_sz, long long int chunk_sz) :
-        DataPipe(base, buff_sz, chunk_sz), // default chunk size of 4kB of data, but chunk_sz allowed
+        DataPipe(base, buff_sz, (chunk_sz >= 4 * 1024 / 64) ? chunk_sz : 4096/64), // default chunk size of 4kB of data, but chunk_sz allowed
         m_base(base),
         m_ntrials(ntrials),
         m_buff_sz(buff_sz),
@@ -90,10 +91,14 @@ private:
     NACS_NOINLINE __attribute__((target("avx512f,avx512bw"), flatten)) void generate()
     {
         long long int j = 0;
-        __m512 val = _mm512_set1_ps(to_storef);
+        std::default_random_engine generator;
+        std::uniform_real_distribution<float> distribution(0.0,1.0);
         Timer timer;
         timer.restart();
         while(j < m_ntrials){
+            //std::this_thread::sleep_for(std::chrono::nanoseconds(10));
+            float this_val = distribution(generator);
+            __m512 val = _mm512_set1_ps(this_val);
             size_t sz;
             auto ptr = get_write_ptr(&sz);
             //std::cout << sz;
@@ -125,32 +130,54 @@ private:
     std::thread worker;
 };
 NACS_NOINLINE __attribute__((target("avx512f,avx512bw"), flatten))
-void test_throughput(long long int ntrials, long long int buff_sz, long long int chunk_sz){
-    BenchmarkPipe bp(ntrials, buff_sz, chunk_sz);
+void test_throughput(long long int ntrials, long long int buff_sz, long long int chunk_sz, int n_threads){
+    std::vector<BenchmarkPipe*> bpvec;
+    for (int i = 0; i < n_threads; ++i){
+        BenchmarkPipe *bpptr;
+        bpptr = new BenchmarkPipe(ntrials, buff_sz, chunk_sz);
+        bpvec.push_back(bpptr);
+    }
     long long int j = 0;
     volatile __m512 data;
     volatile __m512 tot;
     tot = _mm512_set1_ps(0.0f);
+    chunk_sz = (chunk_sz >= 4096 / 64) ? chunk_sz : 4096/64;
     Timer timer;
     timer.restart();
     while (j < ntrials){
-        size_t sz;
-        const __m512 *ptr;
-        while (true){
-            ptr = bp.get_read_ptr(&sz);
-            if (sz < chunk_sz) { // read chunk sz
+        // std::this_thread::sleep_for(std::chrono::nanoseconds(10));
+        size_t this_sz;
+        //size_t min_sz = 48 * 1024ll * 1024ll * 1024ll;
+        const __m512 *this_ptr;
+        int k = 0;
+        std::vector<const __m512*> bpptrs;
+        while (k < n_threads){
+            //std::cout << " k:" << k << std::endl;
+            //std::cout << "size: " << bpvec.size() << std::endl;
+            this_ptr = (*bpvec[k]).get_read_ptr(&this_sz);
+            if (this_sz < chunk_sz) { // read chunk sz
                 CPU::pause();
-                bp.sync_reader();
+                (*bpvec[k]).sync_reader();
                 continue;
+            } else {
+                //if (min_sz > this_sz){
+                //    min_sz = this_sz;
+                //}
+                bpptrs.push_back(this_ptr);
+                k += 1;
             }
-            break;
         }
         size_t read_sz = 0;
-        for(; read_sz < sz; read_sz += 1){
-            data = ptr[read_sz];
-            tot += data;
+        for(; read_sz < chunk_sz; read_sz += 1){
+            for (int k = 0; k < n_threads; ++k){
+                data = *bpptrs[k];
+                tot += data;
+                bpptrs[k] += 1;
+            }
         }
-        bp.read_size(read_sz);
+        for (int m = 0; m <n_threads; ++m){
+            (*bpvec[m]).read_size(read_sz);
+        }
         CPU::wake();
         j = j + (long long int)read_sz;
     }
@@ -162,14 +189,16 @@ void test_throughput(long long int ntrials, long long int buff_sz, long long int
               << ", Avg per trial " << double(res) / double(ntrials) << " ns " << std::endl;
     std::cout << *(int16_t*)totptr << std::endl;
     coutLock.unlock();
-    bp.join();
+    for (int k = 0; k < n_threads; ++k){
+        (*bpvec[k]).join();
+    }
 }
 
 int main (){
     // all bytes in units of 64 bytes, the size of a __m512i object
     int n_buffer_fills = 128;
     std::cout << "All sizes in units of 64 bytes" << std::endl;
-    if (true) {
+    if (false) {
         std::cout << "TEST STREAMSTORE PERFORMANCE" << std::endl;
         std::cout << "Number of Buffer fills: " << n_buffer_fills << std::endl;
         benchmark_store(n_buffer_fills * 128/64, 128/64);
@@ -184,11 +213,12 @@ int main (){
         benchmark_store(n_buffer_fills * 1024ll * 1024ll * 1024ll / 64, 1024ll * 1024ll * 1024ll / 64);
         benchmark_stream_store(n_buffer_fills * 1024ll * 1024ll * 1024ll / 64, 1024ll * 1024ll * 1024ll / 64);
     }
-
+    int nthreads = 3;
     std::cout << "TEST READER-WRITER COMMUNICATION" << std::endl;
     std::cout << "Number of Buffer fills: " << n_buffer_fills << std::endl;
-    test_throughput(n_buffer_fills * 128/64, 128/64, 1);
-    test_throughput(n_buffer_fills * 1024/64, 1024/64, 1024/64/4);
-    test_throughput(n_buffer_fills * 1024 * 1024 / 64, 1024 * 1024/64, 1024 *1024/64/4);
-    test_throughput(n_buffer_fills * 1024ll * 1024ll * 1024ll/64, 1024ll * 1024ll * 1024ll/64, 1024ll * 1024ll * 1024ll/64/4);
+    // test_throughput(n_buffer_fills * 128/64, 128/64, 1, nthreads);
+    //test_throughput(n_buffer_fills * 1024/64, 1024/64, 1, nthreads);
+    test_throughput(n_buffer_fills * 1024 * 1024 / 64, 1024 * 1024/64, 1024 * 1024/64/2, nthreads);
+    test_throughput(n_buffer_fills * 1024ll * 1024ll * 1024ll/64, 1024ll * 1024ll * 1024ll/64,1, nthreads);
+    test_throughput(n_buffer_fills * 4*  1024ll * 1024ll * 1024ll/64, 4 * 1024ll * 1024ll * 1024ll/64,1024ll * 1024ll * 1024ll / 64, nthreads);
 }
