@@ -89,12 +89,16 @@ NACS_EXPORT() const char *Cmd::name() const
     switch(op()){
     case CmdType::AmpSet:
         return "ampSet";
-    case CmdType::AmpRamp:
-        return "ampRamp";
+    case CmdType::AmpFn:
+        return "ampFn";
+    case CmdType::AmpVecFn:
+        return "ampVecFn";
     case CmdType::FreqSet:
         return "freqSet";
-    case CmdType::FreqRamp:
-        return "freqRamp";
+    case CmdType::FreqFn:
+        return "freqFn";
+    case CmdType::FreqVecFn:
+        return "freqVecFn";
     case CmdType::Phase:
         return "phase";
     case CmdType::ModChn:
@@ -121,12 +125,14 @@ NACS_EXPORT() std::ostream &operator<<(std::ostream &stm, const Cmd &cmd)
     stm << cmd.name() << "(t =" << cmd.t;
     if (cmd.op() == CmdType::Meta &&
         (cmd.chn == (uint32_t)CmdMeta::TriggerEnd || cmd.chn == (uint32_t)CmdMeta::TriggerStart))
-        stm << ", id=" << cmd.i;
+        stm << ", id=" << cmd.final_val;
     if (cmd.op() == CmdType::ModChn && cmd.chn != Cmd::add_chn)
         stm << ", chn=" << cmd.chn;
-    if (cmd.op() == CmdType::FreqSet || cmd.op() == CmdType::FreqRamp ||
-        cmd.op() == CmdType::AmpSet || cmd.op() == CmdType::AmpRamp || cmd.op() == CmdType::Phase)
-        stm << ", chn=" << cmd.chn << ", val=" << cmd.i;
+    if (cmd.op() == CmdType::FreqSet || cmd.op() == CmdType::AmpSet || cmd.op() == CmdType::Phase)
+        stm << ", chn=" << cmd.chn << ", val=" << cmd.final_val;
+    if (cmd.op() == CmdType::AmpFn || cmd.op() == CmdType::FreqFn ||
+        cmd.op() == CmdType::AmpVecFn || cmd.op() == CmdType::FreqVecFn)
+        stm << ", chn=" << cmd.chn << ", final_val=" << cmd.final_val << ", len=" << cmd.len;
     stm << ")";
     return stm;
 }
@@ -142,6 +148,8 @@ NACS_EXPORT() std::ostream &operator<<(std::ostream &stm, const std::vector<Cmd>
         stm << cmd << std::endl;
     return stm;
 }
+
+int32_t 
 
 NACS_INLINE void StreamBase::clear_underflow()
 {
@@ -235,28 +243,22 @@ StreamBase::consume_old_cmds(State *states)
                 m_slow_mode.stsore(false,std::memory_order_relaxed);
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerEnd) {
-                m_end_trigger_pending = cmd->i;
+                m_end_trigger_pending = cmd->final_val;
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerStart) {
-                if (!check_start(cmd->t, cmd->i)) {
+                if (!check_start(cmd->t, cmd->final_val)) {
                     return nullptr;
                 }
             }
             break;
         case CmdType::AmpSet:
-            states[cmd->chn].amp = cmd->i; // set amplitude of state
-            break;
-        case CmdType::AmpRamp:
-            states[cmd->chn].amp += cmd->i;
+            states[cmd->chn].amp = cmd->final_val; // set amplitude of state
             break;
         case CmdType::FreqSet:
-            states[cmd->chn].freq = cmd->i;
-            break;
-        case CmdType::FreqRamp:
-            states[cmd->chn].freq += cmd->i;
+            states[cmd->chn].freq = cmd->final_val;
             break;
         case CmdType::Phase:
-            states[cmd->chn].phase = cmd->i; // possibly a scale factor needed. COME BACK
+            states[cmd->chn].phase = cmd->final_val; // possibly a scale factor needed. COME BACK
             break;
         case CmdType::ModChn:
             if (cmd->chn == Cmd::add_chn) {

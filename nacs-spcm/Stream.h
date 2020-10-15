@@ -24,8 +24,10 @@ enum class CmdType : uint8_t
     Meta, // Meta command types are in CmdMeta
     AmpSet,
     AmpFn,
+    AmpVecFn,
     FreqSet,
     FreqFn,
+    FreqVecFn,
     ModChn, // add or delete channels
     Phase,
     _MAX = Phase // keeps track of how many CmdType options there are
@@ -48,7 +50,7 @@ enum class CmdMeta : uint32_t
 struct Cmd
 {
 private:
-    static constexpr int op_bits = 3; // number of bits needed to describe the operation
+    static constexpr int op_bits = 4; // number of bits needed to describe the operation
     static constexpr int chn_bits = 32 - op_bits; // number of bits to determine the chn number
     static_assert((int)CmdType::MAX < (1 << op_bits), ""); // ensure op_bits are enough to describe the number of commands. << is the left shift operator.
 public:
@@ -57,7 +59,7 @@ public:
     uint8_t _op:op_bits; // op should only contain op_bits amount of information.
     uint32_t chn:chn_bits;
     int32_t final_val; // final value at end of command.
-    uint32_t len = 0; // length of pulse
+    float len = 0; // length of pulse
     void(*fnptr)(void) = nullptr; // function pointer
     CmdType op() const
     {
@@ -100,11 +102,19 @@ public:
     {
         return Cmd{t, (uint8_t)CmdType::ModChn, chn, 0};
     }
-    static Cmd getAmpFn(uint32_t t, uint32_t chn, int32_t final_val, uint32_t len, void(*fnptr)(void))
+    static Cmd getAmpFn(uint32_t t, uint32_t chn, int32_t final_val, float len, void(*fnptr)(void))
     {
         return Cmd{t, (uint8_t)CmdType::AmpFn, chn, final_val, len, fnptr};
     }
-    static Cmd getFreqFn(uint32_t t, uint32_t chn, int32_t final_val, uint32_t len, void(*fnptr)(void))
+    static Cmd getFreqFn(uint32_t t, uint32_t chn, int32_t final_val, float len, void(*fnptr)(void))
+    {
+        return Cmd{t, (uint8_t)CmdType::FreqFn, chn, final_val, len, fnptr};
+    }
+    static Cmd getAmpVecFn(uint32_t t, uint32_t chn, int32_t final_val, float len, void(*fnptr)(void))
+    {
+        return Cmd{t, (uint8_t)CmdType::AmpFn, chn, final_val, len, fnptr};
+    }
+    static Cmd getFreqVecFn(uint32_t t, uint32_t chn, int32_t final_val, float len, void(*fnptr)(void))
     {
         return Cmd{t, (uint8_t)CmdType::FreqFn, chn, final_val, len, fnptr};
     }
@@ -131,6 +141,8 @@ public:
                 return other.chn == chn && final_val == other.final_val;
         case CmdType::AmpFn:
         case CmdType::FreqFn:
+        case CmdType::AmpVecFn:
+        case CmdType::FreqVecFn:
             if ((other.final_val == final_val) && (other.len == len))
                 return other.fnptr == fnptr;
         default:
@@ -143,6 +155,23 @@ static_assert(sizeof(Cmd) == 20, "");
 
 std::ostream &operator<<(std::ostream &stm, const Cmd &cmd);
 std::ostream &operator<<(std::ostream &stm, const std::vector<Cmd> &cmds); //printing functions
+
+struct activeCmd {
+// structure to keep track of commands that span longer times
+    Cmd* m_cmd;
+    std::vector<int32_t> vals; // precalculated values
+    activeCmd(Cmd* cmd) : m_cmd(cmd) {
+        if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn) {
+// only precalculate and store if it's vector input. If not calculate in real time.
+            std::vector<uint32_t> ts;
+            ts.reserve((static_cast<size_t> cmd->len) + 1); // this should truncate.
+            for (uint32_t i = 0; i < (cmd->len + 1); i++)
+                ts.push_back(i);
+            vals = ((std::vector<int32_t>(*)(std::vector<uint32_t>))(cmd->fnptr))(ts);
+        }
+    }
+    int32_t eval(uint32_t t);
+};
 
 class StreamBase
 {
@@ -290,6 +319,7 @@ private:
 
     DataPipe<Cmd> m_commands;
     DataPipe<int16_t> m_output;
+    std::vector<activeCmd*> active_cmds;
     std::atomic<uint32_t> m_end_triggered{0};
     std::atomic<int64_t> m_time_offset{0};
     // Read by all threads most of the time and
