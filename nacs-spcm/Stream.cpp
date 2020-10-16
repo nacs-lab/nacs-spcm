@@ -83,6 +83,11 @@ void compute_single_chn(__m512 &v1, __m512 &v2, float phase, float freq,
     v2 += xsinpif_pi(phase_v2) * amp_v2;
 }
 
+void test_compute_single_chn(int& out, int& out2, float val, float dval) {
+    out1 += val;
+    out2 = out2 + val + dval;
+}
+
 NACS_EXPORT() const char *Cmd::name() const
 {
     // gives the name of the Cmd
@@ -149,7 +154,30 @@ NACS_EXPORT() std::ostream &operator<<(std::ostream &stm, const std::vector<Cmd>
     return stm;
 }
 
-int32_t 
+std::pair<int32_t, int32_t> activeCmd::eval(uint32_t t) {
+    // t is time from beginning of pulse
+    int32_t val, dval;
+    if (m_cmd->op() == CmdType::AmpVecFn || m_cmd->op() == CmdType::FreqVecFn) {
+        // assume all values are precalculated
+        val = vals[t];
+        dval = vals[t + 1] - vals[t];
+    }
+    else if (m_cmd->op() == CmdType::AmpFn || m_cmd->op() == CmdType::FreqFn) {
+        // check if t and t + 1 is evaluated
+        while (vals.size() < (t + 2)) {
+            int32_t thisval;
+            thisval = ((int32_t(*)(uint32_t))(m_cmd->fnptr))((uint32_t) vals.size());
+            vals.push_back(thisval);
+        }
+        val = vals[t];
+        dval = vals[t + 1] - vals[t];
+    }
+    else {
+        val = 0;
+        dval = 0; // default behavior
+    }
+    return std::make_pair(val, dval);
+}
 
 NACS_INLINE void StreamBase::clear_underflow()
 {
@@ -257,6 +285,33 @@ StreamBase::consume_old_cmds(State *states)
         case CmdType::FreqSet:
             states[cmd->chn].freq = cmd->final_val;
             break;
+        case CmdType::AmpFn:
+        case CmdType::AmpVecFn:
+            // cmd pointer only increments. Should be safe to initialize an active command here
+            if (cmd->t + len > m_cur_t) {
+                // command still active
+                active_cmds.emplace_back(cmd);
+                std::pair<int32_t, int32_t> these_vals;
+                these_vals = active_cmds.back().eval(m_cur_t - cmd->t);
+                states[cmd->chn].amp = these_vals.first() + these_vals.second();
+            }
+            else {
+                states[cmd->chn].amp = cmd->final_val; // otherwise set to final value.
+            }
+            break;
+        case CmdType::FreqFn:
+        case CmdType::FreqVecFn:
+            if (cmd->t + len > m_cur_t) {
+                // command still active
+                active_cmds.emplace_back(cmd);
+                std::pair<int32_t, int32_t> these_vals;
+                these_vals = active_cmds.back().eval(m_cur_t - cmd->t);
+                states[cmd->chn].freq = these_vals.first() + these_vals.second();
+            }
+            else {
+                states[cmd->chn].freq = cmd->final_val; // otherwise set to final value.
+            }
+            break;
         case CmdType::Phase:
             states[cmd->chn].phase = cmd->final_val; // possibly a scale factor needed. COME BACK
             break;
@@ -276,7 +331,7 @@ StreamBase::consume_old_cmds(State *states)
     return nullptr;
 }
 
-NACS_INLINE void StreamBase::step(int16_t *out, State *states)
+NACS_INLINE void StreamBase::step(int *out, State *states)
 {
     // Key function
     const Cmd *cmd;
@@ -352,9 +407,120 @@ cmd_out:
         m_end_trigger_pending = 0;
         set_end_trigger(out);
     }
-    // calculate actual output. 
+    // calculate actual output.
+    // For testing purposes. At the moment keep the output simple.
+    int out1amp, out2amp, out1freq, out2freq;
+    uint32_t _nchns = m_chns;
+    for (uint32_t i = 0; i < _nchns; i++){
+        // iterate through the number of channels
+        auto &state = states[i];
+        auto phase = state.phase;
+        auto amp = state.amp;
+        auto freq = state.freq;
+        int32_t df = 0;
+        int32_t damp = 0;
+        // check active commands
+        auto it = active_cmds.begin();
+        while(it != active_cmds.end()) {
+            Cmd* this_cmd = (*it).m_cmd;
+            if (this_cmd->chn == i) {
+                if (this_cmd->op() == CmdType::AmpFn || this_cmd->op() == CmdType::AmpVecFn) {
+                    if (this_cmd->t + len > m_cur_t) {
+                        std::pair<int32_t, int32_t> these_vals;
+                        these_vals = this_cmd.eval(m_cur_t - this_cmd->t);
+                        amp = these_vals.first();
+                        damp = these_vals.second();
+                    }
+                    else {
+                        amp = this_cmd->final_val;
+                        it = active_cmds.erase(it); // no longer active
+                        continue;
+                    }
+                }
+                else if (this_cmd->op() == CmdType::FreqFn || this_cmd->op() == CmdType::FreqVecFn) {
+                    if (this_cmd->t + len > m_cur_t) {
+                        std::pair<int32_t, int32_t> these_vals;
+                        these_vals = this_cmd.eval(m_cur_t - this_cmd->t);
+                        freq = these_vals.first();
+                        df = these_vals.second();
+                    }
+                    else {
+                        freq = this_cmd->final_val;
+                        it = active_cmds.erase(it); // no longer active
+                        continue;
+                    }
+                }
+            }
+            ++it;
+        }
+        // now deal with current command
+        if (!cmd || cmd->chn != i) {
+            test_compute_single_chn(out1amp, out2amp, amp, damp);
+            test_compute_single_chn(out1freq, out2freq, freq, df);
+        }
+        else {
+            do {
+                if (cmd->op() == CmdType::FreqSet){
+                    freq = cmd->final_val;
+                }
+                else if (cmd->op() == CmdType::FreqFn || cmd->op() == CmdType::FreqVecFn) {
+                    // first time seeing function command
+                    if (cmd->t + len > m_cur_t) {
+                        // command still active
+                        active_cmds.emplace_back(cmd);
+                        std::pair<int32_t, int32_t> these_vals;
+                        these_vals = active_cmds.back().eval(m_cur_t - cmd->t);
+                        freq = these_vals.first();
+                        df = these_vals.second();
+                    }
+                    else {
+                        freq = cmd->final_val; // otherwise set to final value.
+                    }
+                }
+                else if (likely(cmd->op() == CmdType::AmpFn || cmd->op() == CmdType::AmpVecFn)) {
+                    // first time seeing function command
+                    if (cmd->t + len > m_cur_t) {
+                        // command still active
+                        active_cmds.emplace_back(cmd);
+                        std::pair<int32_t, int32_t> these_vals;
+                        these_vals = active_cmds.back().eval(m_cur_t - cmd->t);
+                        amp = these_vals.first();
+                        damp = these_vals.second();
+                    }
+                    else {
+                        amp = cmd->final_val; // otherwise set to final value.
+                    }
+                }
+                else if (unlikely(cmd->op() == CmdType::Phase)) {
+                    phase = cmd->final_val; // may need to be changed
+                }
+                else {
+                    //encountered a non phase,amp,freq command
+                    break;
+                }
+                cmd_next(); // increment cmd counter
+                cmd = get_cmd_curt(); // get command only if it's current
+            } while (cmd && cmd->chn == i);
+            test_compute_single_chn(out1amp, out2amp, amp, damp);
+            test_compute_single_chn(out1freq, out2freq, freq, df);
+        }
+        // deal with phase wraparound
+        if (phase > max_phase || phase < -max_phase)
+            phase = phase % max_phase;
+        state.phase = phase;
+    } // channel iteration
+    // after done iterating channels
+    m_cur_t++; // increment time
+    *out = out1amp;
+    *(out + 1) = out2amp;
+    *(out + 2) = out1freq;
+    *(out + 3) = out2freq;
 }
 
-
+NACS_EXPORT() void StreamBase::generate_page(State *states)
+{
+    
+}
 
 }
+

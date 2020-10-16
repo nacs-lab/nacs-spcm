@@ -13,6 +13,9 @@
 #include <vector>
 #include <condition_variable>
 
+#include <chrono>
+
+
 using namespace NaCs;
 
 namespace Spcm {
@@ -170,7 +173,7 @@ struct activeCmd {
             vals = ((std::vector<int32_t>(*)(std::vector<uint32_t>))(cmd->fnptr))(ts);
         }
     }
-    int32_t eval(uint32_t t);
+    std::pair<int32_t,int32_t> eval(uint32_t t);
 };
 
 class StreamBase
@@ -336,6 +339,8 @@ struct Stream : StreamBase {
            std::atomic<uint64_t> &underflow, bool start=true)
         : StreamBase(step_t, cmd_underflow, underflow)
     {
+        m_commands = DataPipe((Cmd*)mapAnonPage(20 * 1024ll, Prot::RW), 1024, 1024);
+        m_output = DataPipe((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll);
         if (start) {
             start_worker();
         }
@@ -361,8 +366,16 @@ struct Stream : StreamBase {
 private:
     void thread_fun()
     {
-        while (likely(!m_stop.load(std::memory_order_relaxed))) {
+        /*while (likely(!m_stop.load(std::memory_order_relaxed))) {
             generate_page(m_states);
+            }*/
+        int[4] outputs = {0, 0, 0, 0};
+        while(m_cur_t < 20) {
+            std::cout << "m_cur_t=" << m_cur_t << std::endl;
+            step(&outputs, m_states);
+            std::cout << "amp: ( " << outputs[0] << ", " << outputs[1] << ")" << std::endl;
+            std::cout << "freq: ( " << outputs[2] << ", " << outputs[3] << ")" << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
     }
     State m_states[max_chns]{}; // array of states
