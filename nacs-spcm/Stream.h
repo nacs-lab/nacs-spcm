@@ -4,6 +4,7 @@
 #define _NACS_SPCM_STREAM_H
 
 #include <nacs-utils/thread.h>
+#include <nacs-utils/mem.h>
 
 #include <complex>
 #include <atomic>
@@ -14,7 +15,7 @@
 #include <condition_variable>
 
 #include <chrono>
-
+#include <iostream>
 
 using namespace NaCs;
 
@@ -34,7 +35,7 @@ enum class CmdType : uint8_t
     ModChn, // add or delete channels
     Phase,
     _MAX = Phase // keeps track of how many CmdType options there are
-}
+};
 
 enum class CmdMeta : uint32_t
 {
@@ -42,7 +43,7 @@ enum class CmdMeta : uint32_t
     ResetAll,
     TriggerEnd,
     TriggerStart
-}
+};
 
 // Note freq, amp, and phase are already integers in the command struct
 // amp is normalized to (2^(31) -1) * pi = 6.7465185e9f
@@ -55,7 +56,7 @@ struct Cmd
 private:
     static constexpr int op_bits = 4; // number of bits needed to describe the operation
     static constexpr int chn_bits = 32 - op_bits; // number of bits to determine the chn number
-    static_assert((int)CmdType::MAX < (1 << op_bits), ""); // ensure op_bits are enough to describe the number of commands. << is the left shift operator.
+    static_assert((int)CmdType::_MAX < (1 << op_bits), ""); // ensure op_bits are enough to describe the number of commands. << is the left shift operator.
 public:
     static constexpr uint32_t add_chn = (uint32_t(1) << chn_bits) - 1; // code for adding a channel
     uint32_t t; // start time for command 
@@ -126,7 +127,7 @@ public:
     inline bool operator==(const Cmd &other) const
     {
         //Checks whether commands are the same or not.
-        if (other.t ! = t)
+        if (other.t != t)
             return false;
         if (other.op() != op())
             return false;
@@ -154,20 +155,20 @@ public:
     }
 };
 
-static_assert(sizeof(Cmd) == 20, "");
+static_assert(sizeof(Cmd) == 24, "");
 
 std::ostream &operator<<(std::ostream &stm, const Cmd &cmd);
 std::ostream &operator<<(std::ostream &stm, const std::vector<Cmd> &cmds); //printing functions
 
 struct activeCmd {
 // structure to keep track of commands that span longer times
-    Cmd* m_cmd;
+    const Cmd* m_cmd;
     std::vector<int32_t> vals; // precalculated values
-    activeCmd(Cmd* cmd) : m_cmd(cmd) {
+    activeCmd(const Cmd* cmd) : m_cmd(cmd) {
         if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn) {
 // only precalculate and store if it's vector input. If not calculate in real time.
             std::vector<uint32_t> ts;
-            ts.reserve((static_cast<size_t> cmd->len) + 1); // this should truncate.
+            ts.reserve((static_cast<size_t> (cmd->len)) + 1); // this should truncate.
             for (uint32_t i = 0; i < (cmd->len + 1); i++)
                 ts.push_back(i);
             vals = ((std::vector<int32_t>(*)(std::vector<uint32_t>))(cmd->fnptr))(ts);
@@ -181,7 +182,7 @@ class StreamBase
 public:
     inline const int16_t *get_output(size_t &sz)
     {
-        return m_output.get_read_ptr(sz); // call to obtain values for output 
+        return m_output.get_read_ptr(&sz); // call to obtain values for output 
     }
     inline void consume_output(size_t sz)
     {
@@ -246,6 +247,10 @@ public:
     {
         m_time_offset.store(offset, std::memory_order_relaxed);
     }
+    int64_t time_offset()
+    {
+        return m_time_offset.load(std::memory_order_relaxed);
+    }
     void set_start_trigger(uint32_t v, uint64_t t)
     {
         m_start_trigger_time.store(t, std::memory_order_relaxed);
@@ -271,7 +276,9 @@ protected:
     StreamBase(double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow) :
         m_step_t(step_t),
         m_cmd_underflow(cmd_underflow),
-        m_underflow(underflow)
+        m_underflow(underflow),
+        m_commands((Cmd*)mapAnonPage(24 * 1024ll, Prot::RW), 1024, 1024),
+        m_output((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll)
     {
     }
 private:
@@ -281,7 +288,7 @@ private:
         // returns false if no commands left
         if (m_cmd_wrote == m_cmd_max_write){
             m_cmd_wrote = 0;
-            m_cmd_write_ptr = m_commands.get_write_ptr(m_cmd_max_write);
+            m_cmd_write_ptr = m_commands.get_write_ptr(&m_cmd_max_write);
             if (!m_cmd_max_write) {
                 return false; // return false if no commands
             }
@@ -291,7 +298,7 @@ private:
     const Cmd *get_cmd_curt();
     const Cmd *get_cmd();
     void cmd_next();
-    void step(int16_t *out, State *states); // workhorse function to step to next time
+    void step(int *out, State *states); // workhorse function to step to next time
     const Cmd *consume_old_cmds(State * states);
     bool check_start(uint32_t t, uint32_t id);
     void clear_underflow();
@@ -309,14 +316,14 @@ private:
     uint64_t m_output_cnt = 0; // in unit of 8 samples. COME BACK TO THIS TOO.
     const double m_step_t;
     const Cmd *m_cmd_read_ptr = nullptr;
-    uint32_t m_cmd_read = 0;
-    uint32_t m_cmd_max_read = 0;
+    size_t m_cmd_read = 0;
+    size_t m_cmd_max_read = 0;
     std::atomic<uint64_t> &m_cmd_underflow;
-    std::atomic<uint64_t> &m_undeflow;
+    std::atomic<uint64_t> &m_underflow;
     // Members accessed by the command generation thread
     Cmd *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr; //location to write commands to
-    uint32_t m_cmd_wrote = 0;
-    uint32_t m_cmd_max_write = 0;
+    size_t m_cmd_wrote = 0;
+    size_t m_cmd_max_write = 0;
     uint32_t m_end_trigger_cnt{0};
     uint32_t m_start_trigger_cnt{0};
 
@@ -339,8 +346,6 @@ struct Stream : StreamBase {
            std::atomic<uint64_t> &underflow, bool start=true)
         : StreamBase(step_t, cmd_underflow, underflow)
     {
-        m_commands = DataPipe((Cmd*)mapAnonPage(20 * 1024ll, Prot::RW), 1024, 1024);
-        m_output = DataPipe((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll);
         if (start) {
             start_worker();
         }
@@ -369,7 +374,7 @@ private:
         /*while (likely(!m_stop.load(std::memory_order_relaxed))) {
             generate_page(m_states);
             }*/
-        int[4] outputs = {0, 0, 0, 0};
+        int outputs [4] = {0, 0, 0, 0};
         while(m_cur_t < 20) {
             std::cout << "m_cur_t=" << m_cur_t << std::endl;
             step(&outputs, m_states);
@@ -383,3 +388,5 @@ private:
 };
 
 }
+
+#endif

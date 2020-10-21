@@ -83,7 +83,7 @@ void compute_single_chn(__m512 &v1, __m512 &v2, float phase, float freq,
     v2 += xsinpif_pi(phase_v2) * amp_v2;
 }
 
-void test_compute_single_chn(int& out, int& out2, float val, float dval) {
+void test_compute_single_chn(int& out1, int& out2, int val, int dval) {
     out1 += val;
     out2 = out2 + val + dval;
 }
@@ -117,7 +117,7 @@ NACS_EXPORT() const char *Cmd::name() const
             return "reset_all";
         if (chn == (uint32_t)CmdMeta::TriggerEnd)
             return "trigger_end";
-        if (chn == (uint32_t)CmeMeta::TriggerStart)
+        if (chn == (uint32_t)CmdMeta::TriggerStart)
             return "trigger_start";
     default:
         return "(unknown)";
@@ -201,7 +201,7 @@ inline const Cmd *StreamBase::get_cmd()
     // returns command at m_cmd_read location. If it's hit max, reset to zero and get a new pointer
     if (m_cmd_read == m_cmd_max_read) {
         m_cmd_read = 0;
-        m_cmd_read_ptr = m_commands.get_read_ptr(m_cmd_max_read);
+        m_cmd_read_ptr = m_commands.get_read_ptr(&m_cmd_max_read);
         // check if m_cmd_max_read == 0
         if (!m_cmd_max_read) {
             return nullptr;
@@ -268,7 +268,7 @@ StreamBase::consume_old_cmds(State *states)
                 clear_underflow();
                 m_cur_t = 0;
                 m_chns = 0;
-                m_slow_mode.stsore(false,std::memory_order_relaxed);
+                m_slow_mode.store(false,std::memory_order_relaxed);
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerEnd) {
                 m_end_trigger_pending = cmd->final_val;
@@ -288,12 +288,12 @@ StreamBase::consume_old_cmds(State *states)
         case CmdType::AmpFn:
         case CmdType::AmpVecFn:
             // cmd pointer only increments. Should be safe to initialize an active command here
-            if (cmd->t + len > m_cur_t) {
+            if (cmd->t + cmd->len > m_cur_t) {
                 // command still active
-                active_cmds.emplace_back(cmd);
+                active_cmds.push_back(new activeCmd(cmd));
                 std::pair<int32_t, int32_t> these_vals;
-                these_vals = active_cmds.back().eval(m_cur_t - cmd->t);
-                states[cmd->chn].amp = these_vals.first() + these_vals.second();
+                these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
+                states[cmd->chn].amp = these_vals.first + these_vals.second;
             }
             else {
                 states[cmd->chn].amp = cmd->final_val; // otherwise set to final value.
@@ -301,12 +301,12 @@ StreamBase::consume_old_cmds(State *states)
             break;
         case CmdType::FreqFn:
         case CmdType::FreqVecFn:
-            if (cmd->t + len > m_cur_t) {
+            if (cmd->t + cmd->len > m_cur_t) {
                 // command still active
-                active_cmds.emplace_back(cmd);
+                active_cmds.push_back(new activeCmd(cmd));
                 std::pair<int32_t, int32_t> these_vals;
-                these_vals = active_cmds.back().eval(m_cur_t - cmd->t);
-                states[cmd->chn].freq = these_vals.first() + these_vals.second();
+                these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
+                states[cmd->chn].freq = these_vals.first + these_vals.second;
             }
             else {
                 states[cmd->chn].freq = cmd->final_val; // otherwise set to final value.
@@ -344,7 +344,7 @@ retry:
                 goto cmd_out; //if no command available, go to cmd_out
             }
         }
-        if (cmd_t > m_cur_t) {
+        if (cmd->t > m_cur_t) {
             cmd = nullptr; // don't deal with future commands
         }
         // deal with different types of commands
@@ -359,10 +359,10 @@ retry:
                 m_slow_mode.store(false, std::memory_order_relaxed);
             }
             else if (cmd->chn == (uint32_t)CmdMeta::TriggerEnd) {
-                m_end_trigger_pending = cmd->i;
+                m_end_trigger_pending = cmd->final_val;
             }
             else if (cmd->chn == (uint32_t)CmdMeta::TriggerStart) {
-                if (!check_start(cmd->t, cmd->i)){
+                if (!check_start(cmd->t, cmd->final_val)){
                     cmd = nullptr;
                     goto cmd_out;
                 }
@@ -398,14 +398,14 @@ cmd_out:
             m_end_triggered.store(m_end_trigger_waiting, std::memory_order_relaxed);
             m_end_trigger_waiting = m_end_trigger_pending;
             if (m_end_trigger_pending) {
-                set_end_trigger(out);
+                // set_end_trigger(out); TODO FIX THIS!
             }
         }
     }
     else if (unlikely(m_end_trigger_pending)) {
         m_end_trigger_waiting = m_end_trigger_pending;
         m_end_trigger_pending = 0;
-        set_end_trigger(out);
+        // set_end_trigger(out); TODO FIX THIS!
     }
     // calculate actual output.
     // For testing purposes. At the moment keep the output simple.
@@ -422,14 +422,14 @@ cmd_out:
         // check active commands
         auto it = active_cmds.begin();
         while(it != active_cmds.end()) {
-            Cmd* this_cmd = (*it).m_cmd;
+            const Cmd* this_cmd = (*it)->m_cmd;
             if (this_cmd->chn == i) {
                 if (this_cmd->op() == CmdType::AmpFn || this_cmd->op() == CmdType::AmpVecFn) {
-                    if (this_cmd->t + len > m_cur_t) {
+                    if (this_cmd->t + this_cmd->len > m_cur_t) {
                         std::pair<int32_t, int32_t> these_vals;
-                        these_vals = this_cmd.eval(m_cur_t - this_cmd->t);
-                        amp = these_vals.first();
-                        damp = these_vals.second();
+                        these_vals = (*it)->eval(m_cur_t - this_cmd->t);
+                        amp = these_vals.first;
+                        damp = these_vals.second;
                     }
                     else {
                         amp = this_cmd->final_val;
@@ -438,11 +438,11 @@ cmd_out:
                     }
                 }
                 else if (this_cmd->op() == CmdType::FreqFn || this_cmd->op() == CmdType::FreqVecFn) {
-                    if (this_cmd->t + len > m_cur_t) {
+                    if (this_cmd->t + this_cmd->len > m_cur_t) {
                         std::pair<int32_t, int32_t> these_vals;
-                        these_vals = this_cmd.eval(m_cur_t - this_cmd->t);
-                        freq = these_vals.first();
-                        df = these_vals.second();
+                        these_vals = (*it)->eval(m_cur_t - this_cmd->t);
+                        freq = these_vals.first;
+                        df = these_vals.second;
                     }
                     else {
                         freq = this_cmd->final_val;
@@ -465,13 +465,13 @@ cmd_out:
                 }
                 else if (cmd->op() == CmdType::FreqFn || cmd->op() == CmdType::FreqVecFn) {
                     // first time seeing function command
-                    if (cmd->t + len > m_cur_t) {
+                    if (cmd->t + cmd->len > m_cur_t) {
                         // command still active
-                        active_cmds.emplace_back(cmd);
+                        active_cmds.push_back(new activeCmd(cmd));
                         std::pair<int32_t, int32_t> these_vals;
-                        these_vals = active_cmds.back().eval(m_cur_t - cmd->t);
-                        freq = these_vals.first();
-                        df = these_vals.second();
+                        these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
+                        freq = these_vals.first;
+                        df = these_vals.second;
                     }
                     else {
                         freq = cmd->final_val; // otherwise set to final value.
@@ -479,13 +479,13 @@ cmd_out:
                 }
                 else if (likely(cmd->op() == CmdType::AmpFn || cmd->op() == CmdType::AmpVecFn)) {
                     // first time seeing function command
-                    if (cmd->t + len > m_cur_t) {
+                    if (cmd->t + cmd->len > m_cur_t) {
                         // command still active
-                        active_cmds.emplace_back(cmd);
+                        active_cmds.push_back(new activeCmd(cmd));
                         std::pair<int32_t, int32_t> these_vals;
-                        these_vals = active_cmds.back().eval(m_cur_t - cmd->t);
-                        amp = these_vals.first();
-                        damp = these_vals.second();
+                        these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
+                        amp = these_vals.first;
+                        damp = these_vals.second;
                     }
                     else {
                         amp = cmd->final_val; // otherwise set to final value.
