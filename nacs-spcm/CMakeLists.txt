@@ -8,7 +8,7 @@ set(nacs_spcm_SRCS
   data_stream.cpp
   Stream.cpp)
 set(nacs_spcm_LINKS ${SLEEF_LIBRARIES} ${SPCM_LIBRARIES} ${DEPS_LIBRARIES})
-set_source_files_properties(data_stream.cpp
+set_source_files_properties(data_stream.cpp stream.cpp
   PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")
 add_definitions("-\"DNACS_EXPORT_LIB_spcm()=\"")
 

@@ -213,6 +213,7 @@ public:
         while(!try_add_cmd(cmd)){
             CPU::pause();
         }
+        std::cout << "Command Added!" << std::endl;
     }
     inline void flush_cmd()
     {
@@ -264,6 +265,14 @@ public:
     {
         return m_end_trigger.load(std::memory_order_relaxed);
     }
+    uint32_t get_cur_t()
+    {
+        return m_cur_t;
+    }
+    uint32_t get_chns()
+    {
+        return m_chns;
+    }
 
 protected:
     struct State {
@@ -272,12 +281,14 @@ protected:
         int32_t freq;
         int32_t amp;
     };
-    void generate_page(State * states); //workhorse, takes a vector of states for the channels
+    void generate_page(State *states); //workhorse, takes a vector of states for the channels
+    void step(int *out, State *states); // workhorse function to step to next time
+    const Cmd *get_cmd();
     StreamBase(double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow) :
         m_step_t(step_t),
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
-        m_commands((Cmd*)mapAnonPage(24 * 1024ll, Prot::RW), 1024, 1024),
+        m_commands((Cmd*)mapAnonPage(24 * 1024ll, Prot::RW), 1024, 1),
         m_output((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll)
     {
     }
@@ -293,16 +304,16 @@ private:
                 return false; // return false if no commands
             }
         }
+        std::cout << "m_cmd_max_write:" << m_cmd_max_write << std::endl;
         return true;
     }
     const Cmd *get_cmd_curt();
-    const Cmd *get_cmd();
     void cmd_next();
-    void step(int *out, State *states); // workhorse function to step to next time
     const Cmd *consume_old_cmds(State * states);
     bool check_start(uint32_t t, uint32_t id);
     void clear_underflow();
 
+    
     constexpr static uint32_t output_block_sz = 512; // COME BACK TO THIS, WHEN THE UNITS ARE KNOWN
     // Members accessed by worker threads
 protected:
@@ -375,11 +386,14 @@ private:
             generate_page(m_states);
             }*/
         int outputs [4] = {0, 0, 0, 0};
-        while(m_cur_t < 20) {
-            std::cout << "m_cur_t=" << m_cur_t << std::endl;
-            step(&outputs, m_states);
+        while(get_cur_t() < 20) {
+            std::cout << "m_cur_t=" << get_cur_t() << std::endl;
+            step(&(outputs[0]), m_states);
+            //generate_page(m_states);
+            //get_cmd();
             std::cout << "amp: ( " << outputs[0] << ", " << outputs[1] << ")" << std::endl;
             std::cout << "freq: ( " << outputs[2] << ", " << outputs[3] << ")" << std::endl;
+            //std::cout << get_cmd() << std::endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
     }

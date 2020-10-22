@@ -189,6 +189,7 @@ inline const Cmd *StreamBase::get_cmd_curt()
 {
     // check get_cmd returns something valid and if so is t less than the current time
     if (auto cmd = get_cmd()){
+        //std::cout << *cmd << std::endl;
         if (cmd->t <= m_cur_t) {
             return cmd;
         }
@@ -207,6 +208,8 @@ inline const Cmd *StreamBase::get_cmd()
             return nullptr;
         }
     }
+    //std::cout << "pointer " << m_cmd_read_ptr << std::endl;
+    //std::cout << "m_cmd_read " << m_cmd_read << std::endl;
     return &m_cmd_read_ptr[m_cmd_read];
 }
 
@@ -252,6 +255,7 @@ StreamBase::consume_old_cmds(State *states)
     // consumes old commands (updates the states) and returns a pointer to a currently active command.
     // If only commmands in future or no commands, then return nullptr
     auto cmd = get_cmd();
+    std::cout << "consume_old_cmds called" << std::endl;
     if (cmd->t != 0)
         m_cmd_underflow.fetch_add(1, std::memory_order_relaxed);
     do {
@@ -331,7 +335,7 @@ StreamBase::consume_old_cmds(State *states)
     return nullptr;
 }
 
-NACS_INLINE void StreamBase::step(int *out, State *states)
+NACS_EXPORT() void StreamBase::step(int *out, State *states)
 {
     // Key function
     const Cmd *cmd;
@@ -410,7 +414,14 @@ cmd_out:
     // calculate actual output.
     // For testing purposes. At the moment keep the output simple.
     int out1amp, out2amp, out1freq, out2freq;
+    out1amp = out2amp = out1freq = out2freq = 0;
     uint32_t _nchns = m_chns;
+    if(!cmd){
+        std::cout << "This command is null" << std::endl;
+    }
+    else {
+        std::cout << (*cmd) << std::endl;
+    }
     for (uint32_t i = 0; i < _nchns; i++){
         // iterate through the number of channels
         auto &state = states[i];
@@ -430,9 +441,11 @@ cmd_out:
                         these_vals = (*it)->eval(m_cur_t - this_cmd->t);
                         amp = these_vals.first;
                         damp = these_vals.second;
+                        state.amp = amp + damp;
                     }
                     else {
                         amp = this_cmd->final_val;
+                        state.amp = amp;
                         it = active_cmds.erase(it); // no longer active
                         continue;
                     }
@@ -443,9 +456,11 @@ cmd_out:
                         these_vals = (*it)->eval(m_cur_t - this_cmd->t);
                         freq = these_vals.first;
                         df = these_vals.second;
+                        state.freq = freq + df;
                     }
                     else {
                         freq = this_cmd->final_val;
+                        state.freq = freq;
                         it = active_cmds.erase(it); // no longer active
                         continue;
                     }
@@ -477,6 +492,9 @@ cmd_out:
                         freq = cmd->final_val; // otherwise set to final value.
                     }
                 }
+                else if (cmd->op() == CmdType::AmpSet) {
+                    amp = cmd->final_val;
+                }
                 else if (likely(cmd->op() == CmdType::AmpFn || cmd->op() == CmdType::AmpVecFn)) {
                     // first time seeing function command
                     if (cmd->t + cmd->len > m_cur_t) {
@@ -503,6 +521,8 @@ cmd_out:
             } while (cmd && cmd->chn == i);
             test_compute_single_chn(out1amp, out2amp, amp, damp);
             test_compute_single_chn(out1freq, out2freq, freq, df);
+            state.amp = amp + damp;
+            state.freq = freq + df;
         }
         // deal with phase wraparound
         if (phase > max_phase || phase < -max_phase)
