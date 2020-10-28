@@ -102,6 +102,10 @@ public:
     {
         return Cmd{t, (uint8_t)CmdType::ModChn, add_chn, 0}; // largest possible chn_number interpretted as adding a channel
     }
+    static Cmd getAddChn(uint32_t t, uint32_t chn)
+    {
+        return Cmd{t, (uint8_t)CmdType::ModChn, add_chn, chn}; //overload NOT meant to be used in stream. Meant for usage with real chn ID not chn within a stream
+    }
     static Cmd getDelChn(uint32_t t, uint32_t chn)
     {
         return Cmd{t, (uint8_t)CmdType::ModChn, chn, 0};

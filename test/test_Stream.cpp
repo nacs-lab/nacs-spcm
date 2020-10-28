@@ -26,6 +26,7 @@ void DoThis()
     cmd_vector.push_back(Cmd::getAmpSet(10,0, 0));
     cmd_vector.push_back(Cmd::getAmpFn(12,0,7,3,(void(*)(void))&LinearRamp<1,2>));
     cmd_vector.push_back(Cmd::getFreqSet(18, 0, 5));
+    cmd_vector.push_back(Cmd::getDelChn(0,0));
     size_t sz = cmd_vector.size();
     while (sz > 0) {
         size_t new_sz;
