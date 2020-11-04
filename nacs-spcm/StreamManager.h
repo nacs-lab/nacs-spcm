@@ -72,13 +72,15 @@ public:
         return chn_map[getIdx[stream_info]];
     }
 
-    inline bool addChn(uint32_t chnid) {
-        // returns false if unsuccessfully added. If it already exists, it will return true.
+    inline uint32_t addChn(uint32_t chnid) {
+        // return stream idx to add to
         if (tot_chns >= (m_max_per_chn * stream_cnt)) {
-            return false;
+            return stream_cnt; // return number of streams if unsuccessful
         }
-        if (isChn(chnid)) {
-            return true;
+        uint32_t idx = getChn(chnid);
+        if (idx != chn_map.size())
+        {
+            return idx / m_max_per_chn;
         }
         else {
             // add a chn to stream with fewest channels
@@ -91,14 +93,14 @@ public:
             chn_counts[stream_idx] = chn_counts[idx] + 1;
             tot_chns++;
         }
-        return true;
+        return stream_idx;
     }
 
-    inline bool delChn(uint32_t chnid) {
-        // returns true if successfully deleted, false otherwise
+    inline std::pair<uint32_t,uint32_t> delChn(uint32_t chnid) {
+        // returns stream idx to delete from and position there
         uint32_t idx = getChn(chnid);
         if (idx == chn_map.size()){
-            return false; // entry doesnt exist
+            return std::make_pair<idx,UINT_MAX>; // entry doesnt exist
         }
         else {
             // implements what happens in stream. when a channel is deleted, the last channel gets moved to the deleted channel.
@@ -109,7 +111,7 @@ public:
             chn_map[idx] = chn_map[stream_last];
             chn_map[stream_last] = UINT_MAX;
             tot_chns--;
-            return true;
+            return stream_info;
         }
     }
 private:
@@ -120,7 +122,7 @@ private:
     uint32_t stream_cnt;
 }
 
-class StreamManager
+class StreamManagerBase
 {
     // This class is responsible for passing commands to the various streams and also conveying output.
 public:
@@ -167,7 +169,8 @@ public:
     }
     Cmd *get_cmd();
     inline size_t distribute_cmds(); // distributes all commands to streams
-    
+protected:
+    void generate_page();
 private:
     inline bool probe_cmd_input()
     {
@@ -186,11 +189,12 @@ private:
     template<typename T> inline void sort_cmd_chn(T begin, T end);
     // Cmd *get_cmd_curt();
     void cmd_next();
-    inline void send_cmd_to_all(Cmd &cmd);
-    inline void actual_distribute_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz);
-    inline void flush_cmds(Cmd *cmd, size_t sz);
+    void send_cmd_to_all(Cmd &cmd);
+    void actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz);
+    void send_cmds(Cmd *cmd, size_t sz);
     
     std::vector<Stream*> m_streams; // vector of Streams to manage
+    std::vector<int*> stream_ptrs; // vector of stream_ptrs
     ChannelMap chn_map;
     uint32_t m_n_streams = 0;
     uint32_t m_max_per_stream = 0;
@@ -199,8 +203,9 @@ private:
     uint64_t m_output_cnt = 0; // output count
 
     DataPipe<Cmd> m_commands; // command pipe for writers to put in commands
-    DataPipe<int16_t> m_output; // pipe for output and hardware to output
-
+    DataPipe<int> m_output; // pipe for output and hardware to output
+    constexpr static uint32_t output_block_sz = 1;
+    
     Cmd *m_cmd_read_ptr = nullptr; // pointer to read commands
     size_t m_cmd_read = 0;
     size_t m_cmd_max_read = 0;

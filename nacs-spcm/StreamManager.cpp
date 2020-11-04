@@ -9,7 +9,7 @@ using namespace NaCs;
 
 namespace Spcm {
 
-inline Cmd *StreamManager::get_cmd()
+inline Cmd *StreamManagerBase::get_cmd()
 {
     if (m_cmd_read == m_cmd_max_read) {
         m_cmd_read = 0;
@@ -21,35 +21,35 @@ inline Cmd *StreamManager::get_cmd()
     return &m_cmd_read_ptr[m_cmd_read];
 }
 
-inline void StreamManager::cmd_next()
+inline void StreamManagerBase::cmd_next()
 {
     // increment m_cmd_read in the if statement. If hit max_read, alert writer that reading is done
     if (++m_cmd_read == m_cmd_max_read) {
         m_commands.read_size(m_cmd_max_read);
     }
 }
-
-inline void StreamManager::send_cmd_to_all(Cmd &cmd)
+// TODO: Command Flushing
+inline void StreamManagerBase::send_cmd_to_all(Cmd &cmd)
 {
     for (int i = 0; i < n_streams; ++i) {
         m_streams[i]->add_cmd(cmd);
     }
 }
 
-template<typename T> inline void StreamManager::sort_cmd_chn(T begin, T end)
+template<typename T> inline void StreamManagerBase::sort_cmd_chn(T begin, T end)
 {
     // sort amp and freq commands by stream number and then by id within that channel
     return std::sort(begin, end, [] (auto &p1, auto &p2) {
             std::pair<uint32_t, uint32_t> chn_info1, chn_info2;
-            chn_info1 = chn_map.at(p1.chn);
-            chn_info2 = chn_map.at(p2.chn);
+            chn_info1 = chn_map.ChnToStream(p1.chn);
+            chn_info2 = chn_map.ChnToStream(p2.chn);
             if (chn_info1.first != chn_info2.first)
                 return chn_info1.first < chn_info2.first;
             return chn_info1.second < chn_info2.second;
         });
 }
 
-inline void actual_distribute_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz)
+inline void StreamManagerBase::actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz)
 {
     // actual distribution to stream_idx
     size_t copied_sz;
@@ -59,38 +59,143 @@ inline void actual_distribute_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz)
     }
 }
 
-inline void flush_cmds(Cmd *cmd, size_t sz)
+inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
 {
     // input are commands at a given time. They will be sorted and then distributed to the right streams. Assumes inputs are only amp and freq commands
-    sort_cmd_chn(cmd, cmd + sz);
-    uint32_t stream_idx = 0;
-    uint32_t tot = 0;
-    uint32_t loc = 0; // location in commands
-    while ((tot < sz) && (stream_idx < n_streams)) {
-        this_cmd_chn = (cmd + loc)->chn;
-        if (chn_map.at(this_cmd_chn) == stream_idx) {
-            loc++;
-            tot++;
+    if (sz) {
+        sort_cmd_chn(cmd, cmd + sz);
+        uint32_t stream_idx = 0;
+        uint32_t tot = 0;
+        uint32_t loc = 0; // location in commands
+        while ((tot < sz) && (stream_idx < n_streams)) {
+            this_cmd_chn = (cmd + loc)->chn;
+            std::pair<uint32_t, uint32_t> this_stream_info = chn_map.ChnToStream(this_cmd_chn);
+            stream_num = this_stream_info.first;
+            stream_pos = this_stream_info.second;
+            (*(cmd + loc)).chn = stream_pos; // gets correct channel within stream
+            if (stream_num == stream_idx) {
+                // keep on accumulating commands for this stream_idx
+                loc++;
+                tot++;
+            }
+            else {
+                actual_send_cmds(stream_idx, cmd, loc);
+                stream_idx++;
+                cmd += loc;
+                loc = 0;
+            }
         }
-        else {
-            actual_distribute_cmds(stream_idx, cmd, loc);
-            stream_idx++;
-            loc = 0;
-            cmd += loc;
+    // after exiting loop, may still need to distribute some commands.
+        if (loc && (stream_idx < n_streams)) {
+            actual_send_cmds(stream_idx, cmd, loc);
         }
     }
 }
 
-inline size_t StreamManager::distribute_cmds()
+inline size_t StreamManagerBase::distribute_cmds()
 {
     // distribute all commands
+    // What needs to be handled
+    //   1) Interpret modChn commands and Meta commands
+    //   2) Gather commands at a given t and send them out
+
     Cmd *cmd;
+    Cmd *first_cmd = nullptr;// first_cmd is first cmd in a group to send
     uint32_t t = 0;
+    size_t sz_to_send = 0;
     while ((cmd = get_cmd())){
-        
-    }
-    
+        if (cmd->op() == CmdType::Meta) {
+            // send out previous commands and reset first_cmd
+            send_cmds(first_cmd, sz_to_send);
+            first_cmd = nullptr;
+            sz_to_send = 0;
+            // for now, assume meta commands are sent to all
+            send_cmd_to_all(cmd);
+        }
+        else if (cmd->op() == CmdType::ModChn) {
+            send_cmds(first_cmd, sz_to_send);
+            first_cmd = nullptr;
+            size_to_send = 0;
+            if (cmd->chn == Cmd::add_chn) {
+                // if add channel command
+                uint32_t stream_num = chn_map.addChn(cmd->final_val); // final_val encodes the real channel number
+                m_streams[stream_num]->add_cmd(cmd); // add an add channel command to the right stream
+            }
+            else {
+                std::pair<uint32_t, uint32_t> stream_info = chn_map.delChn(cmd->chn);
+                uint32_t stream_num = stream_info.first;
+                (*cmd).chn = stream_info.second; // change real chn ID to one in the stream
+                m_streams[stream_num]->add_cmd(cmd); 
+            }
+        }
+        else {
+            // amplitude, phase or freq command
+            if (cmd->t != t) {
+                // send out previous commands, reset first_cmd
+                send_cmds(first_cmd, sz_to_send);
+                sz_to_send = 1;
+                first_cmd = cmd;
+                t = cmd->t;
+            }
+            else {
+                sz_to_send++; // keep on collecting commands
+            }
+        }
+    } // while brace
+    // send out remaining commands
+    send_cmds(first_cmd, sz_to_send);
 }
+
+NACS_INLINE void StreamManagerBase::generate_page()
+{
+    // function which processes outputs from streams.
+    int *out_ptr;
+    while (true) {
+        size_t sz_to_write;
+        out_ptr = m_output.get_write_ptr(&sz_to_write);
+        if (sz >= output_block_sz) {
+            break;
+        }
+        if (sz > 0)
+            m_output.sync_writer();
+        CPU::pause();
+    }
+    // wait for streams to be ready
+    uint32_t stream_idx = 0;
+    size_t sz_to_read;
+    int *read_ptr;
+    while (stream_idx < m_n_streams) {
+        read_ptr = (*m_streams[stream_idx]).get_read_ptr(&sz_to_read);
+        if (sz_to_read >= output_block_sz) {
+            stream_ptrs[stream_idx] = read_ptr;
+            stream_idx++;
+        }
+        else {
+            CPU::pause();
+            (*m_streams[stream_idx]).sync_reader();
+        }
+    }
+    // now streams are ready. 
+    for (uint32_t stream_idx = 0; stream_idx < m_n_streams; stream_idx++) {
+        for (uint32_t i = 0; i < output_block_sz; i++) {
+            if (stream_idx == 0) {
+                // first pass
+                *(out_ptr + i) = *(stream_ptrs[stream_idx] + i);
+            }
+            else {
+                *(out_ptr + i) = *(out_ptr + i) + *(stream_ptrs[stream_idx] + i);
+            }
+            if (i == output_block_sz - 1) {
+                (*m_streams[stream_idx]).read_size(output_block_sz) // allow stream to continue
+            }
+        }
+    }
+    m_output.wrote_size(output_block_sz); // wrote to output. 
+    m_cur_t += output_block_sz;
+    m_output_cnt += output_block_sz;
+}
+
+
 
 
 
