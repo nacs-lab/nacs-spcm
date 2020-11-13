@@ -5,6 +5,7 @@
 
 #include <nacs-utils/thread.h>
 #include <nacs-utils/mem.h>
+#include "Stream.h"
 
 #include <thread>
 #include <vector>
@@ -12,6 +13,7 @@
 using namespace NaCs;
 
 namespace Spcm {
+uint32_t UINT_MAX = 4294967295;
 
 template<class T>
 inline std::pair<uint32_t, T> get_min(T *begin, size_t sz) {
@@ -69,7 +71,7 @@ public:
         return getStreamInfo(getChn(chnid));
     }
     inline uint32_t StreamToChn(std::pair<uint32_t, uint32_t> stream_info) {
-        return chn_map[getIdx[stream_info]];
+        return chn_map[getIdx(stream_info)];
     }
 
     inline uint32_t addChn(uint32_t chnid) {
@@ -78,6 +80,7 @@ public:
             return stream_cnt; // return number of streams if unsuccessful
         }
         uint32_t idx = getChn(chnid);
+        uint32_t stream_idx;
         if (idx != chn_map.size())
         {
             return idx / m_max_per_chn;
@@ -86,8 +89,7 @@ public:
             // add a chn to stream with fewest channels
             std::pair<uint32_t, uint32_t> min_info;
             min_info = get_min<uint32_t>(chn_counts.data(), chn_counts.size());
-            uint32_t stream_idx = min_info.first;
-            uint32_t val = min_info.second;
+            stream_idx = min_info.first;
             uint32_t map_idx = getIdx(min_info);
             chn_map[map_idx] = chnid;
             chn_counts[stream_idx] = chn_counts[idx] + 1;
@@ -100,7 +102,7 @@ public:
         // returns stream idx to delete from and position there
         uint32_t idx = getChn(chnid);
         if (idx == chn_map.size()){
-            return std::make_pair<idx,UINT_MAX>; // entry doesnt exist
+            return std::make_pair(idx,UINT_MAX); // entry doesnt exist
         }
         else {
             // implements what happens in stream. when a channel is deleted, the last channel gets moved to the deleted channel.
@@ -120,13 +122,13 @@ private:
     uint32_t tot_chns = 0;
     uint32_t m_max_per_chn;
     uint32_t stream_cnt;
-}
+};
 
 class StreamManagerBase
 {
     // This class is responsible for passing commands to the various streams and also conveying output.
 public:
-    inline const int16_t *get_output(size_t &sz)
+    inline const int *get_output(size_t &sz)
     {
         return m_output.get_read_ptr(&sz); // stores into size number of outputs ready, and returns a pointer
     }
@@ -170,6 +172,22 @@ public:
     Cmd *get_cmd();
     inline size_t distribute_cmds(); // distributes all commands to streams
 protected:
+    StreamManagerBase(uint32_t n_streams, uint32_t max_per_stream,
+                      double step_t, std::atomic<uint64_t> &cmd_underflow,
+                      std::atomic<uint64_t> &underflow, bool start = false)
+        : m_n_streams(n_streams),
+          m_max_per_stream(max_per_stream),
+          chn_map(n_streams, max_per_stream),
+          m_commands((Cmd*)mapAnonPage(24 * 1024ll, Prot::RW), 1024, 1),
+          m_output((int*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll, 1)
+    {
+        // start streams
+        for (int i = 0; i < n_streams; i++) {
+            Stream<128> *stream_ptr;
+            stream_ptr = new Stream<128>(step_t, cmd_underflow, underflow, start);
+            m_streams.push_back(stream_ptr);
+        }
+    }
     void generate_page();
 private:
     inline bool probe_cmd_input()
@@ -193,7 +211,7 @@ private:
     void actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz);
     void send_cmds(Cmd *cmd, size_t sz);
     
-    std::vector<Stream*> m_streams; // vector of Streams to manage
+    std::vector<Stream<128>*> m_streams; // vector of Streams to manage
     std::vector<int*> stream_ptrs; // vector of stream_ptrs
     ChannelMap chn_map;
     uint32_t m_n_streams = 0;
@@ -206,13 +224,50 @@ private:
     DataPipe<int> m_output; // pipe for output and hardware to output
     constexpr static uint32_t output_block_sz = 1;
     
-    Cmd *m_cmd_read_ptr = nullptr; // pointer to read commands
+    const Cmd *m_cmd_read_ptr = nullptr; // pointer to read commands
     size_t m_cmd_read = 0;
     size_t m_cmd_max_read = 0;
     Cmd *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr;
     size_t m_cmd_wrote = 0;
     size_t m_cmd_max_write = 0;
     
+};
+
+struct StreamManager : StreamManagerBase {
+    StreamManager(uint32_t n_streams, uint32_t max_per_stream,
+                  double step_t, std::atomic<uint64_t> &cmd_underflow,
+                  std::atomic<uint64_t> &underflow, bool startStream = false,
+                  bool startWorker = false)
+        : StreamManagerBase(n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream) 
+    {
+        if (startWorker)
+        {
+            start_worker();
+        }
+    }
+
+    void start_worker()
+    {
+        m_worker = std::thread(&StreamManager::thread_fun, this);
+    }
+    void stop_worker()
+    {
+        if (m_worker.joinable()) {
+            m_worker.join();
+        }
+    }
+    ~StreamManager()
+    {
+        stop_worker();
+    }
+private:
+    void thread_fun()
+    {
+
+    }
+
+    std::thread m_worker{};
+
 };
 
 } // namespace brace

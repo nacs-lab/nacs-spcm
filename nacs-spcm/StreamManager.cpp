@@ -18,7 +18,9 @@ inline Cmd *StreamManagerBase::get_cmd()
             return nullptr;
         }
     }
-    return &m_cmd_read_ptr[m_cmd_read];
+    Cmd *ptr; // the command can be modified through this pointer.
+    ptr = &m_cmd_read_ptr[m_cmd_read];
+    return ptr;
 }
 
 inline void StreamManagerBase::cmd_next()
@@ -31,7 +33,7 @@ inline void StreamManagerBase::cmd_next()
 // TODO: Command Flushing
 inline void StreamManagerBase::send_cmd_to_all(Cmd &cmd)
 {
-    for (int i = 0; i < n_streams; ++i) {
+    for (int i = 0; i < m_n_streams; ++i) {
         m_streams[i]->add_cmd(cmd);
     }
 }
@@ -39,7 +41,7 @@ inline void StreamManagerBase::send_cmd_to_all(Cmd &cmd)
 template<typename T> inline void StreamManagerBase::sort_cmd_chn(T begin, T end)
 {
     // sort amp and freq commands by stream number and then by id within that channel
-    return std::sort(begin, end, [] (auto &p1, auto &p2) {
+    return std::sort(begin, end, [this] (auto &p1, auto &p2) {
             std::pair<uint32_t, uint32_t> chn_info1, chn_info2;
             chn_info1 = chn_map.ChnToStream(p1.chn);
             chn_info2 = chn_map.ChnToStream(p2.chn);
@@ -67,11 +69,11 @@ inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
         uint32_t stream_idx = 0;
         uint32_t tot = 0;
         uint32_t loc = 0; // location in commands
-        while ((tot < sz) && (stream_idx < n_streams)) {
-            this_cmd_chn = (cmd + loc)->chn;
+        while ((tot < sz) && (stream_idx < m_n_streams)) {
+            uint32_t this_cmd_chn = (cmd + loc)->chn;
             std::pair<uint32_t, uint32_t> this_stream_info = chn_map.ChnToStream(this_cmd_chn);
-            stream_num = this_stream_info.first;
-            stream_pos = this_stream_info.second;
+            uint32_t stream_num = this_stream_info.first;
+            uint32_t stream_pos = this_stream_info.second;
             (*(cmd + loc)).chn = stream_pos; // gets correct channel within stream
             if (stream_num == stream_idx) {
                 // keep on accumulating commands for this stream_idx
@@ -86,7 +88,7 @@ inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
             }
         }
     // after exiting loop, may still need to distribute some commands.
-        if (loc && (stream_idx < n_streams)) {
+        if (loc && (stream_idx < m_n_streams)) {
             actual_send_cmds(stream_idx, cmd, loc);
         }
     }
