@@ -36,7 +36,7 @@
 #include <atomic>
 #include <thread>
 #include <vector>
-
+#include <numeric>
 using namespace NaCs;
 
 static std::exception_ptr teptr = nullptr;
@@ -230,7 +230,8 @@ int main()
 
     hdl.set_param(SPC_AMP0, 2500); // Amp
     hdl.set_param(SPC_FILTER0, 0);
-    
+
+    /*
     std::vector<float> amps = {0.3f, 0.03f, 0.1f, 0.02f, 0.2f, 0.1f, 0.1f, 0.2f, 0.15f,
                                0.01f, 0.02f, 0.001f,0.005f, 0.006f, 0.01f, 0.001f, 0.002f, 0.02f,
                                0.001f, 0.001f, 0.002f, 0.0005f, 0.0005f, 0.001f, 0.002f, 0.001f, 0.002f,
@@ -239,9 +240,19 @@ int main()
                                  498e3, 499.001e3, 500.5e3, 499.5e3, 498.5e3, 490e3, 494e3, 497.005e3,500.6e3,
                                  498.6e3, 499.1e3, 501.1e3, 501.2e3, 506e3, 508e3, 510.1e3, 500.2e3, 498.5e3,
                                  491.1e3, 509.5e3, 505.1e3, 501.5e3, 500.003e3, 502.5e3, 507.5e3, 498.85e3, 495.75e3};
+    */
+    std::vector<float> amps = {1.0f,1.0f,1.0f,1.0f,1.0f,1.0f,1.0f,1.0f,1.0f,1.0f};
+    //std::vector<double> freqs = {95e6,130e6,150e6,170e6};
+    std::vector<double> freqs = {94.9627e6,102.8191e6,110.5688e6,118.2931e6,126.0890e6,133.8936e6,141.7124e6,149.4909e6,157.1880e6,165.0471e6};
+    //std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
+    //std::vector<double> freqs = {95.2286e6,102.7705e6,110.7057e6,118.1543e6,126.0720e6,134.0968e6,141.8128e6,149.6742e6,157.3001e6,164.7679e6};
+    float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
+    std::transform(amps.begin(), amps.end(), amps.begin(),
+                   [amps_sum](float f){return f/(amps_sum+0.01);});
+    
     std::vector<MultiStream*> Streams;
-    int nchn = 7;
-    int n_per_thread = 7;
+    int nchn = amps.size();
+    int n_per_thread = 3;
     for (int i = 0; i < nchn; i += n_per_thread){
         int this_n;
         if ((i + n_per_thread) > nchn) {
@@ -356,17 +367,17 @@ int main()
         //}
         write_to_buffer_int(fsptrs.data(), nthreads, buff_ptr, &curr_pos, count);
         // tell card data is ready
-        Log::log("avail: %lu ", avail);
-        Log::log("count: %lu ", count);
+//        Log::log("avail: %lu ", avail);
+//        Log::log("count: %lu ", count);
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
         try{
             hdl.check_error();
         }
         catch (std::exception& test)
         {
-            Log::log("avail: %lu ", avail);
-            Log::log("count: %lu ", count);
-            Log::log(test.what());
+            //          Log::log("avail: %lu ", avail);
+            //  Log::log("count: %lu ", count);
+            //Log::log(test.what());
             throw test;
         }
         // tell datagen that data has been read
