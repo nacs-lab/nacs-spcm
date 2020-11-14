@@ -103,22 +103,24 @@ __m512i calc_sins2(int64_t* phase_cnt, uint64_t* freq_cnt, float* amp, size_t nc
 constexpr uint64_t buff_nele =  4 / 2 * 1024ll * 1024ll * 1024ll;
 
 struct MultiStream : DataPipe<int16_t> {
-    MultiStream(float* amp, double* freq, size_t nchn)
+    MultiStream(float* amp, double* freq, float* phase, size_t nchn)
         : MultiStream((int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW),
-                      amp, freq, nchn)
+                      amp, freq, phase, nchn)
     {
     }
 
 private:
-    MultiStream(int16_t *base, float* amp, double* freq, size_t nchn)
+    MultiStream(int16_t *base, float* amp, double* freq, float* phase, size_t nchn)
         : DataPipe(base, buff_nele, 4096 * 512 * 32),
           m_base(base),
           m_amp(amp),
           m_freq_cnt(nchn, 0),
+          m_phase_cnt(nchn, 0),
           nchn(nchn),
           worker()
     {
         for (int i = 0; i < nchn; ++i){
+            m_phase_cnt[i] = int64_t(round(phase[i]*2147483647));
             m_freq_cnt[i] = uint64_t(round(freq[i] * 10));
             m_amp[i] *= 6.7465185e9f;
         }
@@ -135,7 +137,7 @@ private:
         // // const uint64_t freq_cnt = 1390000000ull / 10; // In unit of 0.1Hz
         // const uint64_t freq_cnt = uint64_t(1.953125e8);
         // // const uint64_t freq_cnt = 1562500000ull; // In unit of 0.1Hz
-        std::vector<int64_t> phase_cnt(nchn,0);
+        //std::vector<int64_t> phase_cnt(nchn,0);
         while (true) {
             size_t sz;
             auto ptr = get_write_ptr(&sz);
@@ -148,7 +150,7 @@ private:
             sz &= ~(size_t)(64 / 2 - 1);
             size_t write_sz = 0;
             for (; write_sz < sz; write_sz += 64 / 2) {
-                auto data = calc_sins2(phase_cnt.data(), m_freq_cnt.data(), m_amp, nchn);
+                auto data = calc_sins2(m_phase_cnt.data(), m_freq_cnt.data(), m_amp, nchn);
                 _mm512_store_si512(&ptr[write_sz], data);
             }
             wrote_size(write_sz);
@@ -159,6 +161,7 @@ private:
     int16_t *const m_base;
     float *m_amp;
     std::vector<uint64_t> m_freq_cnt;
+    std::vector<int64_t> m_phase_cnt;
     //double *m_freq;
     size_t nchn;
     //std::vector<float> m_amp;
@@ -231,23 +234,22 @@ int main()
     hdl.set_param(SPC_AMP0, 2500); // Amp
     hdl.set_param(SPC_FILTER0, 0);
 
-    /*
-    std::vector<float> amps = {0.3f, 0.03f, 0.1f, 0.02f, 0.2f, 0.1f, 0.1f, 0.2f, 0.15f,
-                               0.01f, 0.02f, 0.001f,0.005f, 0.006f, 0.01f, 0.001f, 0.002f, 0.02f,
-                               0.001f, 0.001f, 0.002f, 0.0005f, 0.0005f, 0.001f, 0.002f, 0.001f, 0.002f,
-                               0.002f, 0.0001f, 0.0002f, 0.001f, 0.01f, 0.003f, 0.001f, 0.0005f, 0.002f};
-    std::vector<double> freqs = {500e3, 500.001e3, 499.995e3, 500.002e3, 495e3, 497e3, 499e3, 505e3, 502e3,
-                                 498e3, 499.001e3, 500.5e3, 499.5e3, 498.5e3, 490e3, 494e3, 497.005e3,500.6e3,
-                                 498.6e3, 499.1e3, 501.1e3, 501.2e3, 506e3, 508e3, 510.1e3, 500.2e3, 498.5e3,
-                                 491.1e3, 509.5e3, 505.1e3, 501.5e3, 500.003e3, 502.5e3, 507.5e3, 498.85e3, 495.75e3};
-    */
-    std::vector<float> amps = {1.0f,1.0f,1.0f,1.0f,1.0f,1.0f,1.0f,1.0f,1.0f,1.0f};
-    //std::vector<double> freqs = {95e6,130e6,150e6,170e6};
-    std::vector<double> freqs = {94.9627e6,102.8191e6,110.5688e6,118.2931e6,126.0890e6,133.8936e6,141.7124e6,149.4909e6,157.1880e6,165.0471e6};
-    //std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
+    float amp0 = 0.1f;
+    std::vector<float> amps = {amp0,amp0,amp0,amp0,amp0,amp0,amp0,amp0,amp0,amp0};
+    //std::vector<double> freqs = {94.9627e6,102.8191e6,110.5688e6,118.2931e6,126.0890e6,133.8936e6,141.7124e6,149.4909e6,157.1880e6,165.0471e6};
+    //std::vector<float> phases = {0,0,0,0,0,0,0,0,0,0};
+
+    //float amp0 = 0.17f;
+    //std::vector<float> amps = {amp0,amp0,amp0,amp0,amp0,amp0};
+    //std::vector<double> freqs = {118.2931e6,126.0890e6,133.8936e6,141.7124e6,149.4909e6,157.1880e6}; //{138e6,147.2e6};
+    std::vector<float> phases = {-0.4462,-0.9077,-0.8057,0.6469,0.3897,-0.3658,0.9004,-0.93,-0.122,-0.2369};
+    //std::vector<float> phases = {0.3102,-0.6748,-0.7620,-0.0033,0.9195,-0.3192,0.1705,-0.5524,0.5025,-0.4898};
+    std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
+    //std::vector<double> freqs = {110e6,115e6,120e6,125e6,130e6,135e6,140e6,145e6,150e6,155e6};
     //std::vector<double> freqs = {95.2286e6,102.7705e6,110.7057e6,118.1543e6,126.0720e6,134.0968e6,141.8128e6,149.6742e6,157.3001e6,164.7679e6};
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
-    std::transform(amps.begin(), amps.end(), amps.begin(),
+    if (amps_sum > 1)
+        std::transform(amps.begin(), amps.end(), amps.begin(),
                    [amps_sum](float f){return f/(amps_sum+0.01);});
     
     std::vector<MultiStream*> Streams;
@@ -261,7 +263,7 @@ int main()
             this_n = n_per_thread;
         }
         MultiStream *fsptr;
-        fsptr = new MultiStream(amps.data() + i, freqs.data() + i, (size_t) this_n);
+        fsptr = new MultiStream(amps.data() + i, freqs.data() + i, phases.data() + i, (size_t) this_n);
         Streams.push_back(fsptr);
     }
 
