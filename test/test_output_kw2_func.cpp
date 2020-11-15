@@ -120,7 +120,7 @@ private:
           worker()
     {
         for (int i = 0; i < nchn; ++i){
-            m_phase_cnt[i] = int64_t(round(phase[i]*2147483647));
+            m_phase_cnt[i] = int64_t(round(phase[i]*2147483647*2.9)); // no idea how these numbers come about, but it works...
             m_freq_cnt[i] = uint64_t(round(freq[i] * 10));
             m_amp[i] *= 6.7465185e9f;
         }
@@ -234,19 +234,22 @@ int main()
     hdl.set_param(SPC_AMP0, 2500); // Amp
     hdl.set_param(SPC_FILTER0, 0);
 
-    float amp0 = 0.1f;
-    std::vector<float> amps = {amp0,amp0,amp0,amp0,amp0,amp0,amp0,amp0,amp0,amp0};
+//    float amp0 = 0.1f;
+//    std::vector<float> amps = {amp0,amp0,amp0,amp0,amp0,amp0,amp0,amp0,amp0,amp0};
     //std::vector<double> freqs = {94.9627e6,102.8191e6,110.5688e6,118.2931e6,126.0890e6,133.8936e6,141.7124e6,149.4909e6,157.1880e6,165.0471e6};
     //std::vector<float> phases = {0,0,0,0,0,0,0,0,0,0};
 
     //float amp0 = 0.17f;
     //std::vector<float> amps = {amp0,amp0,amp0,amp0,amp0,amp0};
     //std::vector<double> freqs = {118.2931e6,126.0890e6,133.8936e6,141.7124e6,149.4909e6,157.1880e6}; //{138e6,147.2e6};
-    std::vector<float> phases = {-0.4462,-0.9077,-0.8057,0.6469,0.3897,-0.3658,0.9004,-0.93,-0.122,-0.2369};
+//    std::vector<float> phases = {-0.4462,-0.9077,-0.8057,0.6469,0.3897,-0.3658,0.9004,-0.93,-0.122,-0.2369};
     //std::vector<float> phases = {0.3102,-0.6748,-0.7620,-0.0033,0.9195,-0.3192,0.1705,-0.5524,0.5025,-0.4898};
-    std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
+//    std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
     //std::vector<double> freqs = {110e6,115e6,120e6,125e6,130e6,135e6,140e6,145e6,150e6,155e6};
     //std::vector<double> freqs = {95.2286e6,102.7705e6,110.7057e6,118.1543e6,126.0720e6,134.0968e6,141.8128e6,149.6742e6,157.3001e6,164.7679e6};
+    std::vector<float> amps = {1.0f};
+    std::vector<double> freqs = {527e3};
+    std::vector<float> phases = {-0.75};
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
     if (amps_sum > 1)
         std::transform(amps.begin(), amps.end(), amps.begin(),
