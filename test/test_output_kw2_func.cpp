@@ -255,9 +255,10 @@ std::vector<float> phases = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594
     std::vector<double> freqs = {123e6};
     std::vector<float> phases = {0};
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
-    if (amps_sum > 0.025) // (amps_sum > .07)//(amps_sum > 0)//
+    float amp_max = 0.03f;
+    if (amps_sum > amp_max) // (amps_sum > .07)//(amps_sum > 0)//
         std::transform(amps.begin(), amps.end(), amps.begin(),
-                   [amps_sum](float f){return f/(amps_sum)*0.025;});
+                       [amps_sum,amp_max](float f){return f/(amps_sum)*amp_max;});
     
     std::vector<MultiStream*> Streams;
     int nchn = amps.size();
