@@ -234,29 +234,23 @@ int main()
     hdl.set_param(SPC_AMP0, 2500); // Amp
     hdl.set_param(SPC_FILTER0, 0);
 
+    
     float amp0 = 0.1f;
-    std::vector<float> amps = {amp0+0.005,amp0,amp0-0.013,amp0-0.012,amp0-0.005,amp0-0.012+0.001,amp0-0.001,amp0+0.005,amp0-0.001,amp0-0.013};
-//    std::vector<float> amps = {amp0+0.01,amp0+0.016,amp0-0.003,amp0-0.003,amp0-0.003,amp0-0.01,amp0+0.013,amp0+0.013,amp0+0.013,amp0-0.005};
-//    std::vector<float> amps ={0.13,0.129,0.10,0.1,0.105,0.1,0.113,0.12,0.112,0.1};
+    std::vector<float> amps = {amp0+0.013+0.003,amp0+0.006-0.0005,amp0-0.013+0.002,amp0-0.012+0.001,amp0-0.006,amp0-0.012-0.002,amp0-0.0045,amp0+0.002,amp0-0.00,amp0-0.013+0.0055};
     std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
-//    std::vector<float> phases = {-0.4462,-0.9077,-0.8057,0.6469,0.3897,-0.3658,0.9004,-0.93,-0.122,-0.2369};
     std::vector<float> phases = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212};
-    //std::vector<double> freqs = {94.9627e6,102.8191e6,110.5688e6,118.2931e6,126.0890e6,133.8936e6,141.7124e6,149.4909e6,157.1880e6,165.0471e6};
-    //std::vector<float> phases = {0,0,0,0,0,0,0,0,0,0};
+    
+    /*
+    std::vector<float> amps = {0.9999f};
+    std::vector<double> freqs = {123e6};
+    std::vector<float> phases = {0};
+    */
 
-    //float amp0 = 0.17f;
-    //std::vector<float> amps = {amp0,amp0,amp0,amp0,amp0,amp0};
-    //std::vector<double> freqs = {118.2931e6,126.0890e6,133.8936e6,141.7124e6,149.4909e6,157.1880e6}; //{138e6,147.2e6};
-    //std::vector<float> phases = {0.3102,-0.6748,-0.7620,-0.0033,0.9195,-0.3192,0.1705,-0.5524,0.5025,-0.4898};
-    //std::vector<double> freqs = {110e6,115e6,120e6,125e6,130e6,135e6,140e6,145e6,150e6,155e6};
-    //std::vector<double> freqs = {95.2286e6,102.7705e6,110.7057e6,118.1543e6,126.0720e6,134.0968e6,141.8128e6,149.6742e6,157.3001e6,164.7679e6};
-//    std::vector<float> amps = {0.01f};
-//    std::vector<double> freqs = {120e6};
-//    std::vector<float> phases = {0};
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
-    if (amps_sum > .07)//(amps_sum > 0)//
+    float amp_max = 0.9999f;
+    if (amps_sum > amp_max)//(amps_sum > 0)//
         std::transform(amps.begin(), amps.end(), amps.begin(),
-                   [amps_sum](float f){return f/(amps_sum)*0.07;});
+                       [amps_sum,amp_max](float f){return f/(amps_sum)*amp_max;});
     
     std::vector<MultiStream*> Streams;
     int nchn = amps.size();
