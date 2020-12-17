@@ -296,13 +296,13 @@ int main()
     std::vector<float> phases = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212};
     */
     
-    std::vector<float> amps = {0.9999f};
-    std::vector<double> freqs = {123e6};
-    std::vector<float> phases = {0};
+    std::vector<float> amps = {0.1f, 0.05f, 0.02f, 0.04f, 0.02f, 0.01f, 0.02f, 0.01f, 0.05f, 0.03f, 0.01f, 0.01f, 0.01f, 0.005f, 0.01f, 0.01f};
+    std::vector<double> freqs = {123e6, 127e6, 121e6, 125e6, 120e6, 117e6, 115e6, 90e6, 150e6, 70e6, 80e6, 200e6, 220e6, 170e6, 110e6, 105e6};
+    std::vector<float> phases = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-    std::vector<float> amps2 = {0.9999f};
-    std::vector<double> freqs2 = {120e6};
-    std::vector<float> phases2 = {0};
+    std::vector<float> amps2 = {0.1f, 0.05f, 0.02f, 0.04f, 0.02f, 0.01f, 0.02f, 0.01f, 0.07f, 0.01f, 0.005f, 0.02f, 0.005f, 0.005f, 0.002f, 0.01f};
+    std::vector<double> freqs2 = {120e6, 115e6, 110e6, 116e6, 112e6, 118e6, 124e6, 140e6, 111e6, 40e6, 56e6, 75e6, 30e6, 41e6, 77e6, 66e6};
+    std::vector<float> phases2 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     
     /*
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
@@ -313,8 +313,9 @@ int main()
     */
     
     std::vector<MultiStream*> Streams;
-    int nchn = amps.size();
-    int n_per_thread = 3;
+    //int nchn = amps.size();
+    int nchn = 12;
+    int n_per_thread = 4;
     for (int i = 0; i < nchn; i += n_per_thread){
         int this_n;
         if ((i + n_per_thread) > nchn) {
@@ -330,8 +331,9 @@ int main()
     size_t nthreads = Streams.size();
 
     std::vector<MultiStream*> Streams2;
-    int nchn2 = amps2.size();
-    int n_per_thread2 = 3;
+    //int nchn2 = amps2.size();
+    int nchn2 = 12;
+    int n_per_thread2 = 4;
     for (int i = 0; i < nchn2; i += n_per_thread2){
         int this_n;
         if ((i + n_per_thread2) > nchn2) {
