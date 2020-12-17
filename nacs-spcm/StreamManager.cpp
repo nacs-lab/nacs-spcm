@@ -9,7 +9,7 @@ using namespace NaCs;
 
 namespace Spcm {
 
-inline Cmd *StreamManagerBase::get_cmd()
+inline const Cmd *StreamManagerBase::get_cmd()
 {
     if (m_cmd_read == m_cmd_max_read) {
         m_cmd_read = 0;
@@ -18,7 +18,7 @@ inline Cmd *StreamManagerBase::get_cmd()
             return nullptr;
         }
     }
-    Cmd *ptr; // the command can be modified through this pointer.
+    const Cmd *ptr; // the command can be modified through this pointer.
     ptr = &m_cmd_read_ptr[m_cmd_read];
     return ptr;
 }
@@ -31,7 +31,7 @@ inline void StreamManagerBase::cmd_next()
     }
 }
 // TODO: Command Flushing
-inline void StreamManagerBase::send_cmd_to_all(Cmd &cmd)
+inline void StreamManagerBase::send_cmd_to_all(const Cmd &cmd)
 {
     for (int i = 0; i < m_n_streams; ++i) {
         m_streams[i]->add_cmd(cmd);
@@ -100,8 +100,9 @@ inline size_t StreamManagerBase::distribute_cmds()
     // What needs to be handled
     //   1) Interpret modChn commands and Meta commands
     //   2) Gather commands at a given t and send them out
-
-    Cmd *cmd;
+    const Cmd *cmd;
+    Cmd var_cmd; // non const command
+    std::vector<Cmd> non_const_cmds; // non constant commands
     Cmd *first_cmd = nullptr;// first_cmd is first cmd in a group to send
     uint32_t t = 0;
     size_t sz_to_send = 0;
@@ -112,37 +113,41 @@ inline size_t StreamManagerBase::distribute_cmds()
             first_cmd = nullptr;
             sz_to_send = 0;
             // for now, assume meta commands are sent to all
-            send_cmd_to_all(cmd);
+            send_cmd_to_all(*cmd);
         }
         else if (cmd->op() == CmdType::ModChn) {
             send_cmds(first_cmd, sz_to_send);
             first_cmd = nullptr;
-            size_to_send = 0;
+            sz_to_send = 0;
             if (cmd->chn == Cmd::add_chn) {
                 // if add channel command
                 uint32_t stream_num = chn_map.addChn(cmd->final_val); // final_val encodes the real channel number
-                m_streams[stream_num]->add_cmd(cmd); // add an add channel command to the right stream
+                m_streams[stream_num]->add_cmd(*cmd); // add an add channel command to the right stream
             }
             else {
+                var_cmd = *cmd; // needs modification
                 std::pair<uint32_t, uint32_t> stream_info = chn_map.delChn(cmd->chn);
                 uint32_t stream_num = stream_info.first;
-                (*cmd).chn = stream_info.second; // change real chn ID to one in the stream
-                m_streams[stream_num]->add_cmd(cmd); 
+                (var_cmd).chn = stream_info.second; // change real chn ID to one in the stream
+                m_streams[stream_num]->add_cmd(var_cmd);
             }
         }
         else {
             // amplitude, phase or freq command
+            var_cmd = *cmd;
+            non_const_cmds.push_back(var_cmd);
             if (cmd->t != t) {
                 // send out previous commands, reset first_cmd
                 send_cmds(first_cmd, sz_to_send);
                 sz_to_send = 1;
-                first_cmd = cmd;
+                first_cmd = &non_const_cmds.back();
                 t = cmd->t;
             }
             else {
                 sz_to_send++; // keep on collecting commands
             }
         }
+        cmd_next(); // move to next command
     } // while brace
     // send out remaining commands
     send_cmds(first_cmd, sz_to_send);
@@ -155,19 +160,19 @@ NACS_INLINE void StreamManagerBase::generate_page()
     while (true) {
         size_t sz_to_write;
         out_ptr = m_output.get_write_ptr(&sz_to_write);
-        if (sz >= output_block_sz) {
+        if (sz_to_write >= output_block_sz) {
             break;
         }
-        if (sz > 0)
+        if (sz_to_write > 0)
             m_output.sync_writer();
         CPU::pause();
     }
-    // wait for streams to be ready
+    // wait for input streams to be ready
     uint32_t stream_idx = 0;
     size_t sz_to_read;
-    int *read_ptr;
+    const int *read_ptr;
     while (stream_idx < m_n_streams) {
-        read_ptr = (*m_streams[stream_idx]).get_read_ptr(&sz_to_read);
+        read_ptr = (*m_streams[stream_idx]).get_output(&sz_to_read);
         if (sz_to_read >= output_block_sz) {
             stream_ptrs[stream_idx] = read_ptr;
             stream_idx++;
@@ -188,7 +193,7 @@ NACS_INLINE void StreamManagerBase::generate_page()
                 *(out_ptr + i) = *(out_ptr + i) + *(stream_ptrs[stream_idx] + i);
             }
             if (i == output_block_sz - 1) {
-                (*m_streams[stream_idx]).read_size(output_block_sz) // allow stream to continue
+                (*m_streams[stream_idx]).consume_output(output_block_sz); // allow stream to continue
             }
         }
     }

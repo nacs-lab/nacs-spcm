@@ -184,13 +184,17 @@ struct activeCmd {
 class StreamBase
 {
 public:
-    inline const int16_t *get_output(size_t &sz)
+    inline const int *get_output(size_t *sz)
     {
-        return m_output.get_read_ptr(&sz); // call to obtain values for output 
+        return m_output.get_read_ptr(sz); // call to obtain values for output 
     }
     inline void consume_output(size_t sz)
     {
         return m_output.read_size(sz); // call after finishing using values for output
+    }
+    inline void sync_reader()
+    {
+        return m_output.sync_reader();
     }
     //similar commands for the command pipe to come
     inline size_t copy_cmds(const Cmd *cmds, size_t sz)
@@ -293,7 +297,7 @@ protected:
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
         m_commands((Cmd*)mapAnonPage(24 * 1024ll, Prot::RW), 1024, 1),
-        m_output((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll)
+        m_output((int*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll)
     {
     }
 private:
@@ -343,7 +347,7 @@ private:
     uint32_t m_start_trigger_cnt{0};
 
     DataPipe<Cmd> m_commands;
-    DataPipe<int16_t> m_output;
+    DataPipe<int> m_output;
     std::vector<activeCmd*> active_cmds;
     std::atomic<uint32_t> m_end_triggered{0};
     std::atomic<int64_t> m_time_offset{0};

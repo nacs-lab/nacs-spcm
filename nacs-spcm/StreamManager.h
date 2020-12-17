@@ -81,9 +81,9 @@ public:
         }
         uint32_t idx = getChn(chnid);
         uint32_t stream_idx;
-        if (idx != chn_map.size())
+        if (idx != chn_map.size()) // if already added
         {
-            return idx / m_max_per_chn;
+            return idx / m_max_per_chn; // return stream num
         }
         else {
             // add a chn to stream with fewest channels
@@ -169,7 +169,7 @@ public:
             m_cmd_wrote = 0;
         }
     }
-    Cmd *get_cmd();
+    const Cmd *get_cmd();
     inline size_t distribute_cmds(); // distributes all commands to streams
 protected:
     StreamManagerBase(uint32_t n_streams, uint32_t max_per_stream,
@@ -207,12 +207,12 @@ private:
     template<typename T> inline void sort_cmd_chn(T begin, T end);
     // Cmd *get_cmd_curt();
     void cmd_next();
-    void send_cmd_to_all(Cmd &cmd);
+    void send_cmd_to_all(const Cmd &cmd);
     void actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz);
     void send_cmds(Cmd *cmd, size_t sz);
     
     std::vector<Stream<128>*> m_streams; // vector of Streams to manage
-    std::vector<int*> stream_ptrs; // vector of stream_ptrs
+    std::vector<const int*> stream_ptrs; // vector of stream_ptrs
     ChannelMap chn_map;
     uint32_t m_n_streams = 0;
     uint32_t m_max_per_stream = 0;
