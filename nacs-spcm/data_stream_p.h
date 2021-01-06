@@ -144,8 +144,9 @@ __m128 sinpif_pi(__m128 d)
 
     __m128 s = d * d;
 
-    auto neg = _mm_cmpeq_epi32(q & _mm_set1_epi32(1), _mm_set1_epi32(1));
-    d = __m128((neg & _mm_set1_epi32(0x80000000)) ^ __m128i(d));
+    // Shift the last bit of `q` to the sign bit
+    // and therefore flip the sign of `d` if `q` is odd
+    d = __m128(_mm_slli_epi32(q, 31) ^ __m128i(d));
 
     auto u = -0.17818783f * s + 0.8098674f;
     u = u * s - 1.6448531f;
@@ -197,14 +198,14 @@ __m256 sinpif_pi(__m256 d)
 
     __m256 s = d * d;
 
-    auto tmp = q & _mm256_set1_epi32(1);
-    __m128i tmp2[2] = {_mm256_castsi256_si128(tmp),
-                       _mm256_extractf128_si256(tmp, 1)};
-    tmp2[0] = _mm_cmpeq_epi32(tmp2[0], _mm_set1_epi32(1));
-    tmp2[1] = _mm_cmpeq_epi32(tmp2[1], _mm_set1_epi32(1));
-    auto neg = _mm256_castsi128_si256(tmp2[0]);
-    neg = _mm256_insertf128_si256(neg, tmp2[1], 1);
-    d = __m256((neg & _mm256_set1_epi32(0x80000000)) ^ __m256i(d));
+    // Shift the last bit of `q` to the sign bit
+    // and therefore flip the sign of `d` if `q` is odd
+    __m128i tmp[2] = {_mm256_castsi256_si128(q), _mm256_extractf128_si256(q, 1)};
+    tmp[0] = _mm_slli_epi32(tmp[0], 31);
+    tmp[1] = _mm_slli_epi32(tmp[1], 31);
+    auto mask = _mm256_castsi128_si256(tmp[0]);
+    mask = _mm256_insertf128_si256(mask, tmp[1], 1);
+    d = __m256(mask ^ __m256i(d));
 
     auto u = -0.17818783f * s + 0.8098674f;
     u = u * s - 1.6448531f;
@@ -256,8 +257,9 @@ __m256 sinpif_pi(__m256 d)
 
     __m256 s = d * d;
 
-    auto neg = _mm256_cmpeq_epi32(q & _mm256_set1_epi32(1), _mm256_set1_epi32(1));
-    d = __m256((neg & _mm256_set1_epi32(0x80000000)) ^ __m256i(d));
+    // Shift the last bit of `q` to the sign bit
+    // and therefore flip the sign of `d` if `q` is odd
+    d = __m256(_mm256_slli_epi32(q, 31) ^ __m256i(d));
 
     auto u = -0.17818783f * s + 0.8098674f;
     u = u * s - 1.6448531f;
@@ -309,9 +311,7 @@ __m512 sinpif_pi(__m512 d)
 
     __m512 s = d * d;
 
-    auto neg = _mm512_test_epi32_mask(q, _mm512_set1_epi32(1));
-    d = (__m512)_mm512_mask_xor_epi32((__m512i)d, neg, (__m512i)d,
-                                      _mm512_set1_epi32(0x80000000));
+    d = __m512(_mm512_slli_epi32(q, 31) ^ __m512i(d));
 
     auto u = -0.17818783f * s + 0.8098674f;
     u = u * s - 1.6448531f;

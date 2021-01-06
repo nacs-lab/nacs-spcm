@@ -1,5 +1,5 @@
 #
-add_definitions(-UNDEBUG)
+add_definitions(-UNDEBUG -ggdb3)
 
 add_executable(test-data_stream_perf test_data_stream_perf.cpp)
 target_link_libraries(test-data_stream_perf nacs-utils)
