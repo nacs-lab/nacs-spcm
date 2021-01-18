@@ -37,10 +37,7 @@
 #include <thread>
 #include <vector>
 #include <numeric>
-#include <random>
 using namespace NaCs;
-
-typedef int16_t m512i16 __attribute__((vector_size (64)));
 
 static std::exception_ptr teptr = nullptr;
 
@@ -54,16 +51,6 @@ static constexpr v32si mask0 = {1, 3, 5, 7, 9, 11, 13, 15,
                                 17, 19, 21, 23, 25, 27, 29, 31,
                                 33, 35, 37, 39, 41, 43, 45, 47,
                                 49, 51, 53, 55, 57, 59, 61, 63};
-
-static constexpr m512i16 interweave_idx1 = {0, 32, 1, 33, 2, 34, 3, 35, 4, 36, 5, 37,
-                                 6, 38, 7, 39, 8, 40, 9, 41, 10, 42, 11, 43,
-                                 12, 44, 13, 45, 14, 46, 15, 47};
-static constexpr m512i16 interweave_idx2 = {16, 48, 17, 49, 18, 50, 19, 51, 20, 52,
-                                 21, 53, 22, 54, 23, 55, 24, 56, 25, 57,
-                                 26, 58, 27, 59, 28, 60, 29, 61, 30, 62,
-                                 31,63}; // idx1 and idx2 used for interweaving in multi channel output
-
-
 
 __attribute__((target("avx512f,avx512bw"), flatten))
 __m512 xsinpif_pi(__m512 d)
@@ -113,18 +100,18 @@ __m512i calc_sins2(int64_t* phase_cnt, uint64_t* freq_cnt, float* amp, size_t nc
                                      _mm512_cvttps_epi32(v2));
 }
 
-constexpr uint64_t buff_nele = 1024ll * 1024ll / 2; // make < L3 cache/10 cores which is 1.375 MiB was 4 / 2 * 1024ll * 1024ll * 1024ll;
+constexpr uint64_t buff_nele =  4 / 2 * 1024ll * 1024ll * 1024ll;
 
 struct MultiStream : DataPipe<int16_t> {
     MultiStream(float* amp, double* freq, float* phase, size_t nchn)
-        : MultiStream((int16_t*)mapAnonPage(1024ll * 1024ll, Prot::RW),
+        : MultiStream((int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW),
                       amp, freq, phase, nchn)
     {
     }
 
 private:
     MultiStream(int16_t *base, float* amp, double* freq, float* phase, size_t nchn)
-        : DataPipe(base, buff_nele, 1024ll * 1024ll / 2 / 8), // make block size 1/8 the buffer size
+        : DataPipe(base, buff_nele, 4096 * 512 * 32),
           m_base(base),
           m_amp(amp),
           m_freq_cnt(nchn, 0),
@@ -197,43 +184,42 @@ void write_to_buffer_int(const int16_t **msptrs, size_t nthreads, int16_t* write
             data = _mm512_add_epi16(data, *(__m512i*)msptrs[i]);
             msptrs[i] += 32;
         }
-        _mm512_stream_si512((__m512i*)curr_ptr, data); // non temporal write
+        _mm512_stream_si512((__m512i*)curr_ptr, data);
     }
 }
 
-__attribute__((target("avx512f,avx512bw"), flatten))
-void write_to_buffer_int_multi_chn(const int16_t **msptrs1, size_t nthreads1,
-                                   const int16_t **msptrs2, size_t nthreads2,
-                                   int16_t* write_buf, size_t* curr_pos,
-                                   uint64_t bytes_to_write) {
+void write_to_buffer_int_multi_chn(const int16_t **msptrs, size_t nthreads1, size_t nthreads2,
+                                   int16_t* write_buf, size_t* curr_pos, uint64_t bytes_to_write) {
     size_t write_pos = 0;
-    for (; write_pos < (bytes_to_write / 2); write_pos += 64) { 
-        *curr_pos += 64; // store two __m512i at a time, which is 64 samples
-        if (*curr_pos >= buff_nele) {
-            *curr_pos = 0;
-        }
-        int16_t* curr_ptr1 = write_buf + *curr_pos;
-        int16_t* curr_ptr2 = write_buf + *curr_pos + 32;
+    for (; write_pos < (bytes_to_write / 4); write_pos += 64/2) {
+        *curr_pos += 64/2;
+
         __m512i data1 = _mm512_set1_epi16(0);
-        for (int i = 0; i < nthreads1; ++i) {
-            data1 = _mm512_add_epi16(data1, *(__m512i*)msptrs1[i]);
-            msptrs1[i] += 32;
-        }
         __m512i data2 = _mm512_set1_epi16(0);
-        for (int i = 0; i < nthreads2; ++i) {
-            data2 = _mm512_add_epi16(data2, *(__m512i*)msptrs2[i]);
-            msptrs2[i] += 32;
+        for (int i = 0; i < nthreads1+nthreads2; ++i) {            
+            data1 = _mm512_add_epi16(data1, *(__m512i*)msptrs[i]);
+            msptrs[i] += 32;
+        }        
+        for (; i < nthreads2; ++i) {
+            data2 = _mm512_add_epi16(data2, *(__m512i*)msptrs[i]);
+            msptrs[i] += 32;
         }
-        // refer to stackoverflow.com/questions/63822215/interleaved-merging-of-2-avx-512-vector-elements-c-intrinsic
-        // Also, can use documentation on _mm512_mask_permutex2var_epi16
-        // goal is to merge the two __m512i in an interleaved way
-        //__m512i out1 = _mm512_set1_epi16(0);
-        //__m512i out2 = _mm512_set1_epi16(0);
-        __m512i out1, out2;
-        out1 = _mm512_mask_permutex2var_epi16(data1, 0xFFFFFFFF, (__m512i) interweave_idx1, data2);
-        out2 = _mm512_mask_permutex2var_epi16(data1, 0xFFFFFFFF, (__m512i) interweave_idx2, data2);
-        _mm512_stream_si512((__m512i*)curr_ptr1, out1);
-        _mm512_stream_si512((__m512i*)curr_ptr2, out2);
+        __m512i idx1 = _mm512_set_epi16( 47, 15, 46, 14, 45, 13, 44, 12,
+                                         43, 11, 42, 10, 41, 9, 40, 8, 39,
+                                         7, 38, 6, 37, 5, 36, 4, 35, 3, 34,
+                                         2, 33, 1, 32, 0 );
+        __m512i idx2 = _mm512_set_epi16(
+        47 + 16, 15 + 16, 46 + 16, 14 + 16, 45 + 16, 13 + 16, 44 + 16, 12 + 16, 43 + 16, 11 + 16, 42 + 16, 10 + 16, 41 + 16, 9 + 16, 40 + 16, 8 + 16,
+        39 + 16, 7 + 16, 38 + 16, 6 + 16, 37 + 16, 5 + 16, 36 + 16, 4 + 16, 35 + 16, 3 + 16, 34 + 16, 2 + 16, 33 + 16, 1 + 16, 32 + 16, 0 + 16 );
+ 
+        _mm512_stream_si512((__m512i*)curr_ptr,
+                            _mm512_permutex2var_epi16(_mm512_cvttps_epi32(data1),
+                                                      (__m512i)idx1,
+                                                      _mm512_cvttps_epi32(data2)));
+        _mm512_stream_si512((__m512i*)curr_ptr,
+                            _mm512_permutex2var_epi16(_mm512_cvttps_epi32(data1),
+                                                      (__m512i)idx2,
+                                                      _mm512_cvttps_epi32(data2)));
     }
 
 }
@@ -291,49 +277,15 @@ int main()
     hdl.set_param(SPC_FILTER1, 0);
     
     /*
-      float amp0 = 0.1f;
-      std::vector<float> amps = {amp0+0.013+0.003,amp0+0.006-0.0005,amp0-0.013+0.002,amp0-0.012+0.001,amp0-0.006,amp0-0.012-0.002,amp0-0.0045,amp0+0.002,amp0-0.00,amp0-0.013+0.0055};
-      std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
-      std::vector<float> phases = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212};
-    */
-    /*
-    std::vector<float> amps = {0.1f, 0.05f, 0.02f, 0.04f, 0.02f, 0.01f, 0.02f, 0.01f, 0.05f, 0.03f, 0.01f, 0.01f, 0.01f, 0.005f, 0.01f, 0.01f};
-    std::vector<double> freqs = {123e6, 127e6, 121e6, 125e6, 120e6, 117e6, 115e6, 90e6, 150e6, 70e6, 80e6, 200e6, 220e6, 170e6, 110e6, 105e6};
-    std::vector<float> phases = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-
-    std::vector<float> amps2 = {0.1f, 0.05f, 0.02f, 0.04f, 0.02f, 0.01f, 0.02f, 0.01f, 0.07f, 0.01f, 0.005f, 0.02f, 0.005f, 0.005f, 0.002f, 0.01f};
-    std::vector<double> freqs2 = {120e6, 115e6, 110e6, 116e6, 112e6, 118e6, 124e6, 140e6, 111e6, 40e6, 56e6, 75e6, 30e6, 41e6, 77e6, 66e6};
-    std::vector<float> phases2 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    float amp0 = 0.1f;
+    std::vector<float> amps = {amp0+0.013+0.003,amp0+0.006-0.0005,amp0-0.013+0.002,amp0-0.012+0.001,amp0-0.006,amp0-0.012-0.002,amp0-0.0045,amp0+0.002,amp0-0.00,amp0-0.013+0.0055};
+    std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
+    std::vector<float> phases = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212};
     */
     
-    // random amplitudes and frequencies to follow
-    std::default_random_engine generator;
-    std::uniform_real_distribution<double> distributiond(1.0,100e6);
-    std::uniform_real_distribution<float> distributionf(0.0,1.0);
-    std::vector<float> amps, phases, amps2, phases2;
-    std::vector<double> freqs, freqs2;
-    int n = 60;
-    for (int i = 0; i < n; ++i) {
-        // amps.push_back(distributionf(generator) / n);
-        // phases.push_back(distributionf(generator));
-        // phases2.push_back(distributionf(generator));
-        // freqs.push_back(distributiond(generator));
-        // freqs2.push_back(distributiond(generator));
-        amps.push_back(0.995f / n);
-        phases.push_back(0.0f);
-        phases2.push_back(0.0f);
-        freqs.push_back(100e6);
-        freqs2.push_back(100e6);
-    }
-    
-
-    float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
-    float amp_max = 0.9999f;
-    if (amps_sum > amp_max)//(amps_sum > 0)//
-        std::transform(amps.begin(), amps.end(), amps.begin(),
-                       [amps_sum,amp_max](float f){return f/(amps_sum)*amp_max;});
-    
-    amps2 = amps;
+    std::vector<float> amps = {0.9999f};
+    std::vector<double> freqs = {123e6};
+    std::vector<float> phases = {0};
     
     /*
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
@@ -342,12 +294,10 @@ int main()
         std::transform(amps.begin(), amps.end(), amps.begin(),
                        [amps_sum,amp_max](float f){return f/(amps_sum)*amp_max;});
     */
-    
     
     std::vector<MultiStream*> Streams;
-    //int nchn = amps.size();
-    int nchn = 48;
-    int n_per_thread = 12;
+    int nchn = amps.size();
+    int n_per_thread = 3;
     for (int i = 0; i < nchn; i += n_per_thread){
         int this_n;
         if ((i + n_per_thread) > nchn) {
@@ -361,28 +311,7 @@ int main()
     }
 
     size_t nthreads = Streams.size();
-    Log::log("%i\n", nthreads);
 
-    std::vector<MultiStream*> Streams2;
-    //int nchn2 = amps2.size();
-    int nchn2 = 36;
-    int n_per_thread2 = 12;
-    for (int i = 0; i < nchn2; i += n_per_thread2){
-        int this_n;
-        if ((i + n_per_thread2) > nchn2) {
-            this_n = ((int) nchn2) - i;
-        } else {
-            this_n = n_per_thread2;
-        }
-        MultiStream *fsptr;
-        fsptr = new MultiStream(amps2.data() + i, freqs2.data() + i, phases2.data() + i, (size_t) this_n);
-        Streams2.push_back(fsptr);
-    }
-
-    size_t nthreads2 = Streams2.size();
-    Log::log("%i\n", nthreads2);
-
-    
     // set up transfer buffer
     int16_t* buff_ptr = (int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW);
     size_t curr_pos = 0;
@@ -394,11 +323,8 @@ int main()
     // int16_t last_p = 0;
     std::vector<const int16_t*> fsptrs;
     fsptrs.reserve(nthreads);
-    std::vector<const int16_t*> fsptrs2;
-    fsptrs2.reserve(nthreads2);
     auto send_data = [&] {
         size_t min_sz = buff_nele * 4; // cannot possibly be this big
-        size_t this_sz;
         int j = 0;
         while (j < nthreads){ // wait for MultiFloatStreams
             // ptr = stream.get_read_ptr(&sz);
@@ -409,8 +335,9 @@ int main()
             //}
             //break;
             const int16_t* this_fsptr;
+            size_t this_sz;
             this_fsptr = (*Streams[j]).get_read_ptr(&this_sz);
-            if (this_sz >= 4096 / 2 / 2){ // wait for half as many ready values 
+            if (this_sz >= 4096 / 2){ 
                 if (min_sz > this_sz){
                     min_sz = this_sz;
                 }
@@ -421,30 +348,15 @@ int main()
                 (*Streams[j]).sync_reader();
             }
         }
-        j = 0;
-        while (j < nthreads2) {
-            const int16_t* this_fsptr;
-            this_fsptr = (*Streams2[j]).get_read_ptr(&this_sz);
-            if (this_sz >= 4096 / 2 / 2){
-                if (min_sz > this_sz) {
-                    min_sz = this_sz;
-                }
-                fsptrs2.push_back(this_fsptr);
-                j += 1;
-            } else {
-                CPU::pause();
-                (*Streams2[j]).sync_reader();
-            }
-        }
         //Log::log("%d ", sz);
-        min_sz = min_sz & ~(size_t)1023; // 1024 is half the number of bytes to read
+        min_sz = min_sz & ~(size_t)2047; // half the number of bytes to read
         // read out the available bytes that are free again
         uint64_t count = 0;
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &count);
         hdl.check_error();
         // printf("count=%zu\n", count);
         uint64_t avail = count;
-        count = std::min(count, uint64_t(min_sz * 2) * 2); // min_sz * 2 to actually get number of bytes cause of int16_t pointers, multiply by another 2 since each entry needs 2 outputs, cause of the interweaving
+        count = std::min(count, uint64_t(min_sz * 2)); // min_sz * 2 to actually get number of bytes cause of int16_t pointers
         if (!count)
             return;
         if (count & 1)
@@ -499,8 +411,7 @@ int main()
         //                           _mm512_cvttps_epi32(v2));
         //  _mm512_store_si512(curr_ptr, data);
         //}
-        write_to_buffer_int_multi_chn(fsptrs.data(), nthreads, fsptrs2.data(), nthreads2,
-                                     buff_ptr, &curr_pos, count);
+        write_to_buffer_int(fsptrs.data(), nthreads, buff_ptr, &curr_pos, count);
         // tell card data is ready
 //        Log::log("avail: %lu ", avail);
 //        Log::log("count: %lu ", count);
@@ -517,13 +428,9 @@ int main()
         }
         // tell datagen that data has been read
         for (int i = 0; i < nthreads; ++i){
-            (*Streams[i]).read_size(count / 2 / 2); // count is number of bytes. With only one channel, we have to advance count /2 . With two channels, we advance count / 4
-        }
-        for (int i = 0; i < nthreads2; ++i) {
-            (*Streams2[i]).read_size(count / 2 / 2);
+            (*Streams[i]).read_size(count / 2); // count/2 is number of pointers to advance, but we read twice the amount of data.
         }
         fsptrs.clear();
-        fsptrs2.clear();
         CPU::wake();
     };
     send_data();

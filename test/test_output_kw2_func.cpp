@@ -37,6 +37,7 @@
 #include <thread>
 #include <vector>
 #include <numeric>
+#include <random>
 using namespace NaCs;
 
 static std::exception_ptr teptr = nullptr;
@@ -100,18 +101,19 @@ __m512i calc_sins2(int64_t* phase_cnt, uint64_t* freq_cnt, float* amp, size_t nc
                                      _mm512_cvttps_epi32(v2));
 }
 
-constexpr uint64_t buff_nele =  4 / 2 * 1024ll * 1024ll * 1024ll;
+constexpr uint64_t buff_nele = 1024ll * 1024ll / 2; // was 4 / 2 * 1024ll * 1024ll * 1024ll;
+constexpr uint64_t trans_buff_sz_nele = 4 * 1024ll * 1024ll * 1024ll / 2;
 
 struct MultiStream : DataPipe<int16_t> {
     MultiStream(float* amp, double* freq, float* phase, size_t nchn)
-        : MultiStream((int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW),
+        : MultiStream((int16_t*)mapAnonPage(1024ll * 1024ll, Prot::RW),
                       amp, freq, phase, nchn)
     {
     }
 
 private:
     MultiStream(int16_t *base, float* amp, double* freq, float* phase, size_t nchn)
-        : DataPipe(base, buff_nele, 4096 * 512 * 32),
+        : DataPipe(base, buff_nele, 1024ll * 1024ll / 2 / 8),
           m_base(base),
           m_amp(amp),
           m_freq_cnt(nchn, 0),
@@ -175,7 +177,7 @@ void write_to_buffer_int(const int16_t **msptrs, size_t nthreads, int16_t* write
     for (; write_pos < (bytes_to_write / 2); write_pos += 64/2){ //bytes_to_write/2 is number of int16_t pointer positions to advance
             // check for overflow
         *curr_pos += 64 / 2; // move 64 bytes or one __m512i object that has been stored.
-        if (*curr_pos >= buff_nele){
+        if (*curr_pos >= trans_buff_sz_nele){
             *curr_pos = 0;
         }
         int16_t* curr_ptr = write_buf + *curr_pos;
@@ -185,6 +187,7 @@ void write_to_buffer_int(const int16_t **msptrs, size_t nthreads, int16_t* write
             msptrs[i] += 32;
         }
         _mm512_stream_si512((__m512i*)curr_ptr, data);
+        //Log::log("%i,", *curr_ptr);
     }
 }
 
@@ -234,11 +237,16 @@ int main()
     hdl.set_param(SPC_AMP0, 2500); // Amp
     hdl.set_param(SPC_FILTER0, 0);
 
+    // Jessie's amplitudes below
     
     float amp0 = 0.1f;
-    std::vector<float> amps = {amp0+0.013+0.003,amp0+0.006-0.0005,amp0-0.013+0.002,amp0-0.012+0.001,amp0-0.006,amp0-0.012-0.002,amp0-0.0045,amp0+0.002,amp0-0.00,amp0-0.013+0.0055};
-    std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
+    std::vector<float> amps = {amp0+0.105,amp0+0.04,amp0+0.05,amp0,amp0-0.02,amp0,amp0+0.03,amp0-0.01,amp0-0.02,amp0-0.007};
+//    std::vector<float> amps = {amp0+0.013+0.003,amp0+0.006-0.0005,amp0-0.013+0.002,amp0-0.012+0.001,amp0-0.006,amp0-0.012-0.002,amp0-0.0045,amp0+0.002,amp0-0.00,amp0-0.013+0.0055};
+//    std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
+    std::vector<double> freqs = {100e6,107e6,114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6};
+
     std::vector<float> phases = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212};
+    
     
     /*
     std::vector<float> amps = {0.9999f};
@@ -246,15 +254,34 @@ int main()
     std::vector<float> phases = {0};
     */
 
+    // linear spaced equal amplitude
+/*    
+    int n = 54;
+    std::vector<float> amps(n);
+    std::vector<float> phases(n);
+    std::vector<double> freqs(n);
+    double start = 50e6;
+    double end = 150e6;
+    for (int i = 0; i < n; i++) {
+        amps[i] = 0.01f;
+        freqs[i] = start + (end - start) * double((i + 1)) / double(n);
+    phases[i] = 0;
+    }
+*/  
+
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
     float amp_max = 0.9999f;
     if (amps_sum > amp_max)//(amps_sum > 0)//
         std::transform(amps.begin(), amps.end(), amps.begin(),
                        [amps_sum,amp_max](float f){return f/(amps_sum)*amp_max;});
+
+    for (int i = 0; i < amps.size(); i++){
+        Log::log("amp: %f, freq: %f\n", amps[i], freqs[i]);
+    }
     
     std::vector<MultiStream*> Streams;
     int nchn = amps.size();
-    int n_per_thread = 3;
+    int n_per_thread = 6;
     for (int i = 0; i < nchn; i += n_per_thread){
         int this_n;
         if ((i + n_per_thread) > nchn) {
@@ -272,16 +299,18 @@ int main()
     // set up transfer buffer
     int16_t* buff_ptr = (int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW);
     size_t curr_pos = 0;
-    size_t buff_sz = buff_nele;
+    size_t buff_sz = trans_buff_sz_nele;
     hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 4096 * 32,
                      (void*)buff_ptr, 0, 2 * buff_sz); //buff_nele is the size of the buffer of int16_t types. Mult by 2 to get number of bytes
     // bool last_p_set = false;
     // int16_t last_p = 0;
-    std::vector<const int16_t*> fsptrs;
-    fsptrs.reserve(nthreads);
+    std::vector<const int16_t*> fsptrs(nthreads);
+    // fsptrs.reserve(nthreads);
     auto send_data = [&] {
-        size_t min_sz = buff_nele * 4; // cannot possibly be this big
+        size_t min_sz = trans_buff_sz_nele * 4; // cannot possibly be this big
         int j = 0;
+        Timer timer;
+        timer.restart();
         while (j < nthreads){ // wait for MultiFloatStreams
             // ptr = stream.get_read_ptr(&sz);
             //if (sz < 4096 / 2) {
@@ -297,11 +326,17 @@ int main()
                 if (min_sz > this_sz){
                     min_sz = this_sz;
                 }
-                fsptrs.push_back(this_fsptr);
+                // fsptrs.push_back(this_fsptr);
+                fsptrs[j] = this_fsptr;
                 j += 1;
             } else {
                 CPU::pause();
                 (*Streams[j]).sync_reader();
+            }
+            auto res = timer.elapsed();
+            if (res > 1e6){
+                Log::log("stuck");
+                timer.restart();
             }
         }
         //Log::log("%d ", sz);
@@ -309,6 +344,7 @@ int main()
         // read out the available bytes that are free again
         uint64_t count = 0;
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &count);
+        //Log::log("Now checking error");
         hdl.check_error();
         // printf("count=%zu\n", count);
         uint64_t avail = count;
@@ -348,7 +384,7 @@ int main()
         //now prepare data for card.
         //size_t write_pos = 0;
         //for (; write_pos < (count / 2); write_pos += 64/2){ //count/2 is number of int16_t pointer positions to advance
-            // check for overflow
+        // check for overflow
         // curr_pos += 64 / 2; // move 64 bytes or one __m512i object that has been stored.
         // if (curr_pos > buff_nele){
         //      curr_pos = 0;
@@ -369,28 +405,41 @@ int main()
         //}
         write_to_buffer_int(fsptrs.data(), nthreads, buff_ptr, &curr_pos, count);
         // tell card data is ready
-//        Log::log("avail: %lu ", avail);
-//        Log::log("count: %lu ", count);
+        //Log::log("avail: %lu ", avail);
+        //Log::log("count: %lu ", count);
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
-        try{
-            hdl.check_error();
-        }
-        catch (std::exception& test)
-        {
-            //          Log::log("avail: %lu ", avail);
-            //  Log::log("count: %lu ", count);
-            //Log::log(test.what());
-            throw test;
-        }
+        hdl.check_error();
+        // Log::log("avail: %lu ", avail);
+        //Log::log("count: %lu ", count);
+        //Log::log(test.what())
         // tell datagen that data has been read
         for (int i = 0; i < nthreads; ++i){
             (*Streams[i]).read_size(count / 2); // count/2 is number of pointers to advance, but we read twice the amount of data.
         }
-        fsptrs.clear();
+        //fsptrs.clear();
+        // std::vector<const int16_t*>().swap(fsptrs);
+        //fsptrs.reserve(nthreads);
         CPU::wake();
     };
-    send_data();
+    // 12 MiB corresponds to about 10 ms of delay.
+
+    //for (int i = 0; i < amps.size(); i++) {
+    //    Log::log("(%d, %f), ", freqs[i], amps[i]);
+    //}
+    //Log::log("\n");
+    
+    uint64_t available_space = 0;
+    hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &available_space);
+    while (available_space > (4 * 1024ll * 1024ll * 1024ll - 4 * 1024ll * 1024ll * 1024ll)) {
+        send_data();
+        hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &available_space);
+        //Log::log("%lu\n", available_space);
+    }
     Log::log("Done with Initial Data send \n");
+    //uint64_t tot_used = 4 * 1024ll * 1024ll * 1024ll - available_space;
+    //hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, tot_used);
+    //hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &available_space);
+    //Log::log("%lu\n", available_space);
     hdl.cmd(M2CMD_DATA_STARTDMA | M2CMD_DATA_WAITDMA);
     hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);
     hdl.cmd(M2CMD_CARD_START | M2CMD_CARD_ENABLETRIGGER);
