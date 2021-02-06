@@ -240,10 +240,10 @@ int main()
     // Jessie's amplitudes below
     
     float amp0 = 0.1f;
-    std::vector<float> amps = {amp0+0.105,amp0+0.04,amp0+0.05,amp0,amp0-0.02,amp0,amp0+0.03,amp0-0.01,amp0-0.02,amp0-0.007};
+    std::vector<float> amps = {amp0+0.03,amp0+0.01,amp0-0.01,amp0-0.02,amp0-0.022,amp0-0.013,amp0,amp0,amp0,amp0+0.03};
 //    std::vector<float> amps = {amp0+0.013+0.003,amp0+0.006-0.0005,amp0-0.013+0.002,amp0-0.012+0.001,amp0-0.006,amp0-0.012-0.002,amp0-0.0045,amp0+0.002,amp0-0.00,amp0-0.013+0.0055};
 //    std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
-    std::vector<double> freqs = {100e6,107e6,114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6};
+    std::vector<double> freqs = {107e6,114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6,170e6};
 
     std::vector<float> phases = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212};
     
@@ -270,7 +270,7 @@ int main()
 */  
 
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
-    float amp_max = 0.9999f;
+    float amp_max = 0.9999f; //0.9999f;
     if (amps_sum > amp_max)//(amps_sum > 0)//
         std::transform(amps.begin(), amps.end(), amps.begin(),
                        [amps_sum,amp_max](float f){return f/(amps_sum)*amp_max;});
@@ -281,7 +281,7 @@ int main()
     
     std::vector<MultiStream*> Streams;
     int nchn = amps.size();
-    int n_per_thread = 6;
+    int n_per_thread = 4;
     for (int i = 0; i < nchn; i += n_per_thread){
         int this_n;
         if ((i + n_per_thread) > nchn) {
