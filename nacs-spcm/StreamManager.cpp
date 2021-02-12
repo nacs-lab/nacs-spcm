@@ -9,6 +9,15 @@ using namespace NaCs;
 
 namespace Spcm {
 
+NACS_EXPORT() std::ostream &operator<<(std::ostream &stm, ChannelMap cmap) {
+    stm << "Channel Map: (";
+    for (int i = 0; i < cmap.chn_map.size(); i++) {
+        stm << cmap.chn_map[i] << ", ";
+    }
+    stm << ")" << std::endl;
+    return stm;
+}
+
 inline const Cmd *StreamManagerBase::get_cmd()
 {
     if (m_cmd_read == m_cmd_max_read) {
@@ -58,6 +67,7 @@ inline void StreamManagerBase::actual_send_cmds(uint32_t stream_idx, Cmd *cmd, s
     while (sz > 0) {
         copied_sz = m_streams[stream_idx]->copy_cmds(cmd, sz);
         sz -= copied_sz;
+        std::cout << "Sent " << *cmd << " to Stream" << stream_idx << std::endl;
     }
 }
 
@@ -65,15 +75,30 @@ inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
 {
     // input are commands at a given time. They will be sorted and then distributed to the right streams. Assumes inputs are only amp and freq commands
     if (sz) {
+        for (int i = 0; i < sz; ++i) {
+            std::cout << "Considering inside send_cmds before sort " << cmd[i] << std::endl;
+        }
         sort_cmd_chn(cmd, cmd + sz);
+        for (int i = 0; i < sz; ++i) {
+            std::cout << "Considering inside send_cmds " << cmd[i] << std::endl;
+        }/*
         uint32_t stream_idx = 0;
         uint32_t tot = 0;
         uint32_t loc = 0; // location in commands
+        std::vector<uint32_t> real_chn;
         while ((tot < sz) && (stream_idx < m_n_streams)) {
-            uint32_t this_cmd_chn = (cmd + loc)->chn;
-            std::pair<uint32_t, uint32_t> this_stream_info = chn_map.ChnToStream(this_cmd_chn);
+            uint32_t this_cmd_real_chn;
+            if (real_chn.size() < tot + 1) {
+                this_cmd_real_chn = (cmd + loc)->chn;
+                real_chn.push_back(this_cmd_real_chn);
+            }
+            else {
+                this_cmd_real_chn = real_chn[tot];
+            }
+            std::pair<uint32_t, uint32_t> this_stream_info = chn_map.ChnToStream(this_cmd_real_chn);
             uint32_t stream_num = this_stream_info.first;
             uint32_t stream_pos = this_stream_info.second;
+            std::cout << "stream num to send to: " << stream_num << std::endl;
             (*(cmd + loc)).chn = stream_pos; // gets correct channel within stream
             if (stream_num == stream_idx) {
                 // keep on accumulating commands for this stream_idx
@@ -90,6 +115,28 @@ inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
     // after exiting loop, may still need to distribute some commands.
         if (loc && (stream_idx < m_n_streams)) {
             actual_send_cmds(stream_idx, cmd, loc);
+            }*/
+        std::vector<uint32_t> stream_num, stream_pos;
+        for (int i = 0; i < sz; ++i){
+            std::pair<uint32_t, uint32_t> this_stream_info = chn_map.ChnToStream(cmd[i].chn);
+            stream_num.push_back(this_stream_info.first);
+            stream_pos.push_back(this_stream_info.second);
+            (*(cmd + i)).chn = this_stream_info.second;
+        }
+        int counter = 0;
+        for (int this_stream_num = 0; this_stream_num < m_n_streams; ++this_stream_num) {
+            uint32_t sz_to_send = 0;
+            uint32_t first_idx = counter;
+            if (counter < sz) {
+                while (stream_num[counter] == this_stream_num) {
+                    sz_to_send++;
+                    counter++;
+                    if (counter >= sz) {
+                        break;
+                    }
+                }
+            }
+            actual_send_cmds(this_stream_num, cmd + first_idx, sz_to_send);
         }
     }
 }
@@ -103,10 +150,12 @@ inline size_t StreamManagerBase::distribute_cmds()
     const Cmd *cmd;
     Cmd var_cmd; // non const command
     std::vector<Cmd> non_const_cmds; // non constant commands
+    non_const_cmds.reserve(100);
     Cmd *first_cmd = nullptr;// first_cmd is first cmd in a group to send
     uint32_t t = 0;
     size_t sz_to_send = 0;
     while ((cmd = get_cmd())){
+        std::cout << "Considering " << *cmd << std::endl;
         if (cmd->op() == CmdType::Meta) {
             // send out previous commands and reset first_cmd
             send_cmds(first_cmd, sz_to_send);
@@ -134,18 +183,40 @@ inline size_t StreamManagerBase::distribute_cmds()
         }
         else {
             // amplitude, phase or freq command
+            std::cout << "This is a amp, phase or freq command" << std::endl;
             var_cmd = *cmd;
             non_const_cmds.push_back(var_cmd);
+            //if (!first_cmd){
+            //    first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
+            //}
+            for (int i = 0; i < non_const_cmds.size(); ++i) {
+                std::cout << "non const commands: " << i << " " << non_const_cmds[i] << " at address " << &non_const_cmds[i] << std::endl;
+            }
             if (cmd->t != t) {
                 // send out previous commands, reset first_cmd
+                //std::cout << "size of non const commands " << non_const_cmds.size() << std::endl;
+                if (first_cmd) {
+                    std::cout << "first command is actually " << *first_cmd << std::endl;
+                    std::cout << "first command address " << first_cmd << std::endl;
+                }
+                if (sz_to_send > 1) {
+                    std::cout << "second command is " << *(first_cmd + 1) << std::endl;
+                    std::cout << "second command address " << first_cmd + 1 << std::endl;
+                    std::cout << "second command address vec " << &first_cmd[1] << std::endl;
+                }
                 send_cmds(first_cmd, sz_to_send);
+                // std::cout << "Sending " << sz_to_send << " commands starting from " << first_cmd << std::endl;
                 sz_to_send = 1;
-                first_cmd = &non_const_cmds.back();
+                first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
+                std::cout << "First cmd is now: " << *first_cmd << " at address " << first_cmd << std::endl;
                 t = cmd->t;
+                std:: cout << "Now t is: " << t << std::endl;
             }
             else {
                 sz_to_send++; // keep on collecting commands
-            }
+                }
+            //sz_to_send++;
+            // send_cmds(&var_cmd, 1);
         }
         cmd_next(); // move to next command
     } // while brace
@@ -163,8 +234,9 @@ NACS_INLINE void StreamManagerBase::generate_page()
         if (sz_to_write >= output_block_sz) {
             break;
         }
-        if (sz_to_write > 0)
+        if (sz_to_write > 0) {
             m_output.sync_writer();
+        }
         CPU::pause();
     }
     // wait for input streams to be ready
@@ -174,6 +246,7 @@ NACS_INLINE void StreamManagerBase::generate_page()
     while (stream_idx < m_n_streams) {
         read_ptr = (*m_streams[stream_idx]).get_output(&sz_to_read);
         if (sz_to_read >= output_block_sz) {
+            //std::cout << stream_idx << std::endl;
             stream_ptrs[stream_idx] = read_ptr;
             stream_idx++;
         }
@@ -182,7 +255,8 @@ NACS_INLINE void StreamManagerBase::generate_page()
             (*m_streams[stream_idx]).sync_reader();
         }
     }
-    // now streams are ready. 
+    // now streams are ready.
+    std::cout << "reading from streams" << std::endl;
     for (uint32_t stream_idx = 0; stream_idx < m_n_streams; stream_idx++) {
         for (uint32_t i = 0; i < output_block_sz; i++) {
             if (stream_idx == 0) {
@@ -197,6 +271,8 @@ NACS_INLINE void StreamManagerBase::generate_page()
             }
         }
     }
+    std::cout << "output_block_sz: " << output_block_sz << std::endl;
+    std::cout << "m_cur_t: " << m_cur_t << std::endl;
     m_output.wrote_size(output_block_sz); // wrote to output. 
     m_cur_t += output_block_sz;
     m_output_cnt += output_block_sz;

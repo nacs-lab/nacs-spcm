@@ -19,7 +19,7 @@ template<class T>
 inline std::pair<uint32_t, T> get_min(T *begin, size_t sz) {
     T smallest = *begin;
     uint32_t smallest_idx = 0;
-    for (int i = 0; i < sz; i++) {
+    for (uint32_t i = 0; i < sz; i++) {
         if (*begin < smallest) {
             smallest = *begin;
             smallest_idx = i;
@@ -40,6 +40,11 @@ struct ChannelMap {
               for (int i = n_streams; i < (n_streams * max_per_chn); i++) {
                   chn_map.push_back(UINT_MAX);
               }
+              std::cout << "Initial chn count: ";
+              for (int i = 0; i < n_streams; i++) {
+                  std::cout << chn_counts[i] << ' ';
+              }
+              std::cout << std::endl;
           }
 private:
     inline uint32_t getChn(uint32_t chnid) {
@@ -89,10 +94,19 @@ public:
             // add a chn to stream with fewest channels
             std::pair<uint32_t, uint32_t> min_info;
             min_info = get_min<uint32_t>(chn_counts.data(), chn_counts.size());
+            //std::cout << "chn_counts:";
+            //for (int i = 0; i < chn_counts.size(); ++i) {
+            //    std::cout << chn_counts[i] << ' ';
+            //}
+            //std::cout << std::endl;
+            //std::cout << min_info.first << std::endl;
+            //std::cout << min_info.second << std::endl;
             stream_idx = min_info.first;
             uint32_t map_idx = getIdx(min_info);
+            //std::cout << map_idx << std::endl;
+            //std::cout << chn_map.size() << std::endl;
             chn_map[map_idx] = chnid;
-            chn_counts[stream_idx] = chn_counts[idx] + 1;
+            chn_counts[stream_idx] = chn_counts[stream_idx] + 1;
             tot_chns++;
         }
         return stream_idx;
@@ -116,13 +130,16 @@ public:
             return stream_info;
         }
     }
-private:
+
     std::vector<uint32_t> chn_map; // vector of size m_max_per_chn * stream_cnt. entry is chnid
+private:
     std::vector<uint32_t> chn_counts; // vector of size stream_cnt. gives number of chns in each stream
     uint32_t tot_chns = 0;
     uint32_t m_max_per_chn;
     uint32_t stream_cnt;
 };
+
+std::ostream &operator<<(std::ostream &stm, ChannelMap cmap);
 
 class StreamManagerBase
 {
@@ -171,6 +188,18 @@ public:
     }
     const Cmd *get_cmd();
     inline size_t distribute_cmds(); // distributes all commands to streams
+    uint32_t get_cur_t(){
+        return m_cur_t;
+    }
+    inline ChannelMap get_chn_map() {
+        return chn_map;
+    }
+    inline void start_streams() {
+        for (int i = 0; i < m_n_streams; i++) {
+            (*m_streams[i]).start_worker();
+            std::cout << "Started Stream: " << i << std::endl;
+        }
+    }
 protected:
     StreamManagerBase(uint32_t n_streams, uint32_t max_per_stream,
                       double step_t, std::atomic<uint64_t> &cmd_underflow,
@@ -179,13 +208,14 @@ protected:
           m_max_per_stream(max_per_stream),
           chn_map(n_streams, max_per_stream),
           m_commands((Cmd*)mapAnonPage(24 * 1024ll, Prot::RW), 1024, 1),
-          m_output((int*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll, 1)
+          m_output((int*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll, 20)
     {
         // start streams
         for (int i = 0; i < n_streams; i++) {
             Stream<128> *stream_ptr;
-            stream_ptr = new Stream<128>(step_t, cmd_underflow, underflow, start);
+            stream_ptr = new Stream<128>(step_t, cmd_underflow, underflow, i, start);
             m_streams.push_back(stream_ptr);
+            stream_ptrs.push_back(nullptr);
         }
     }
     void generate_page();
@@ -263,7 +293,18 @@ struct StreamManager : StreamManagerBase {
 private:
     void thread_fun()
     {
-
+        while (get_cur_t() < 19) {
+            generate_page();
+        }
+        // after page generation, let's read the data to test it.
+        const int *ptr;
+        size_t sz;
+        ptr = get_output(sz);
+        ChannelMap cmap = get_chn_map();
+        std::cout << cmap;
+        for (int i = 0; i < sz; i++) {
+            std::cout << i << ": " << ptr[i] << std::endl;
+        }
     }
 
     std::thread m_worker{};

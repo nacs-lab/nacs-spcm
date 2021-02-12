@@ -417,7 +417,7 @@ cmd_out:
     out1amp = out2amp = out1freq = out2freq = 0;
     uint32_t _nchns = m_chns;
     if(!cmd){
-        std::cout << "This command is null" << std::endl;
+        //std::cout << "This command is null" << std::endl;
     }
     else {
         std::cout << (*cmd) << std::endl;
@@ -531,15 +531,32 @@ cmd_out:
     } // channel iteration
     // after done iterating channels
     m_cur_t++; // increment time
-    *out = out1amp;
-    *(out + 1) = out2amp;
-    *(out + 2) = out1freq;
-    *(out + 3) = out2freq;
+    *out = out2amp + out2freq;
 }
 
 NACS_EXPORT() void StreamBase::generate_page(State *states)
 {
-    
+    int *out_ptr;
+    while (true) {
+        size_t sz_to_write;
+        out_ptr = m_output.get_write_ptr(&sz_to_write);
+        if (sz_to_write >= output_block_sz) {
+            break;
+        }
+        if (sz_to_write > 0) {
+            m_output.sync_writer();
+        }
+        CPU::pause();
+    }
+    // Now ready to write to output. Write in output_block_sz chunks
+    for (uint32_t i = 0; i < output_block_sz; i++) {
+        // for now advance one position at a time.
+        m_output_cnt += 1;
+        step(&out_ptr[i], states);
+        //std::cout << "stream stepped" << std::endl;
+    }
+    //std::cout << "Stream" << m_stream_num << " wrote " << *out_ptr << std::endl; 
+    m_output.wrote_size(output_block_sz); // alert reader that data is ready.
 }
 
 }

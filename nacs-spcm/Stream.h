@@ -186,7 +186,7 @@ class StreamBase
 public:
     inline const int *get_output(size_t *sz)
     {
-        return m_output.get_read_ptr(sz); // call to obtain values for output 
+        return m_output.get_read_ptr(sz); // call to obtain values for output
     }
     inline void consume_output(size_t sz)
     {
@@ -221,7 +221,8 @@ public:
         while(!try_add_cmd(cmd)){
             CPU::pause();
         }
-        std::cout << "Command Added!" << std::endl;
+        std::cout << "added: " << cmd << std::endl;
+        //std::cout << "Command Added!" << std::endl;
     }
     inline void flush_cmd()
     {
@@ -292,12 +293,13 @@ protected:
     void generate_page(State *states); //workhorse, takes a vector of states for the channels
     void step(int *out, State *states); // workhorse function to step to next time
     const Cmd *get_cmd();
-    StreamBase(double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow) :
+    StreamBase(double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num) :
         m_step_t(step_t),
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
         m_commands((Cmd*)mapAnonPage(24 * 1024ll, Prot::RW), 1024, 1),
-        m_output((int*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll)
+        m_output((int*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll),
+        m_stream_num(stream_num)
     {
     }
 private:
@@ -312,7 +314,7 @@ private:
                 return false; // return false if no commands
             }
         }
-        std::cout << "m_cmd_max_write:" << m_cmd_max_write << std::endl;
+        //std::cout << "m_cmd_max_write:" << m_cmd_max_write << std::endl;
         return true;
     }
     const Cmd *get_cmd_curt();
@@ -322,11 +324,12 @@ private:
     void clear_underflow();
 
     
-    constexpr static uint32_t output_block_sz = 512; // COME BACK TO THIS, WHEN THE UNITS ARE KNOWN
+    constexpr static uint32_t output_block_sz = 1; //512; // COME BACK TO THIS, WHEN THE UNITS ARE KNOWN
     // Members accessed by worker threads
 protected:
     std::atomic_bool m_stop{false};
 private:
+    uint32_t m_stream_num;
     std::atomic_bool m_slow_mode{true}; // related to trigger
     uint32_t m_end_trigger_pending{0};
     uint32_t m_end_trigger_waiting{0};
@@ -362,8 +365,8 @@ private:
 template<uint32_t max_chns = 128>
 struct Stream : StreamBase {
     Stream(double step_t, std::atomic<uint64_t> &cmd_underflow,
-           std::atomic<uint64_t> &underflow, bool start=true)
-        : StreamBase(step_t, cmd_underflow, underflow)
+           std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true)
+        : StreamBase(step_t, cmd_underflow, underflow, stream_num)
     {
         if (start) {
             start_worker();
@@ -393,8 +396,8 @@ private:
         /*while (likely(!m_stop.load(std::memory_order_relaxed))) {
             generate_page(m_states);
             }*/
-        int outputs [4] = {0, 0, 0, 0};
-        while(get_cur_t() < 20) {
+        // int outputs [4] = {0, 0, 0, 0};
+        /* while(get_cur_t() < 20) {
             std::cout << "m_cur_t=" << get_cur_t() << std::endl;
             step(&(outputs[0]), m_states);
             //generate_page(m_states);
@@ -402,6 +405,10 @@ private:
             std::cout << "amp: ( " << outputs[0] << ", " << outputs[1] << ")" << std::endl;
             std::cout << "freq: ( " << outputs[2] << ", " << outputs[3] << ")" << std::endl;
             //std::cout << get_cmd() << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            } */
+        while(get_cur_t() < 50) {
+            generate_page(m_states);
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
     }
