@@ -305,41 +305,25 @@ int main()
     std::vector<double> freqs2 = {120e6, 115e6, 110e6, 116e6, 112e6, 118e6, 124e6, 140e6, 111e6, 40e6, 56e6, 75e6, 30e6, 41e6, 77e6, 66e6};
     std::vector<float> phases2 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     */
-/*
-    // Na chn 0
-    float amp0 = 0.1f;
-    std::vector<float> amps = {amp0+0.0,amp0-0.01,amp0-0.018,amp0-0.008,amp0-0.008,amp0+0.005,amp0+0.005,amp0-0.009,amp0+0.021,amp0+0.06};
-    std::vector<double> freqs = {114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6,170e6,177e6};
-
-    std::vector<float> phases = {0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212,0.53778339};
-
-
     
-    // Cs chn 1
-    std::vector<float> amps2 = {amp0+0.005,amp0,amp0-0.013,amp0-0.012,amp0-0.005,amp0-0.012+0.001,amp0-0.001,amp0+0.005,amp0-0.001,amp0-0.013};
-    std::vector<double> freqs2 = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
-    std::vector<float> phases2 = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212};
-    */
-
-    //
     // random amplitudes and frequencies to follow
     std::default_random_engine generator;
     std::uniform_real_distribution<double> distributiond(1.0,100e6);
     std::uniform_real_distribution<float> distributionf(0.0,1.0);
     std::vector<float> amps, phases, amps2, phases2;
     std::vector<double> freqs, freqs2;
-    int n = 60;
+    int n = 1;
     for (int i = 0; i < n; ++i) {
-        // amps.push_back(distributionf(generator) / n);
-        // phases.push_back(distributionf(generator));
-        // phases2.push_back(distributionf(generator));
-        // freqs.push_back(distributiond(generator));
-        // freqs2.push_back(distributiond(generator));
+        //amps.push_back(distributionf(generator) / n);
+        //phases.push_back(distributionf(generator));
+        //phases2.push_back(distributionf(generator));
+        //freqs.push_back(distributiond(generator));
+        //freqs2.push_back(distributiond(generator));
         amps.push_back(0.995f / n);
         phases.push_back(0.0f);
         phases2.push_back(0.0f);
-        freqs.push_back(100e6);
-        freqs2.push_back(100e6);
+        freqs.push_back(10e6);
+        freqs2.push_back(10e6);
     }
     
 
@@ -348,15 +332,8 @@ int main()
     if (amps_sum > amp_max)//(amps_sum > 0)//
         std::transform(amps.begin(), amps.end(), amps.begin(),
                        [amps_sum,amp_max](float f){return f/(amps_sum)*amp_max;});
-
-    /*float amps_sum2 = std::accumulate(amps2.begin(), amps2.end(), 0.0f);
-    float amp_max2 = 0.9999f;
-    if (amps_sum2 > amp_max2)//(amps_sum > 0)//
-        std::transform(amps2.begin(), amps2.end(), amps2.begin(),
-                       [amps_sum2,amp_max2](float f){return f/(amps_sum2)*amp_max2;});
-    */
     
-     amps2 = amps;
+    amps2 = amps;
     
     /*
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
@@ -369,8 +346,8 @@ int main()
     
     std::vector<MultiStream*> Streams;
     //int nchn = amps.size();
-    int nchn = 48;
-    int n_per_thread = 12;
+    int nchn = 1;
+    int n_per_thread = 2;
     for (int i = 0; i < nchn; i += n_per_thread){
         int this_n;
         if ((i + n_per_thread) > nchn) {
@@ -388,8 +365,8 @@ int main()
 
     std::vector<MultiStream*> Streams2;
     //int nchn2 = amps2.size();
-    int nchn2 = 36;
-    int n_per_thread2 = 12;
+    int nchn2 = 1;
+    int n_per_thread2 = 2;
     for (int i = 0; i < nchn2; i += n_per_thread2){
         int this_n;
         if ((i + n_per_thread2) > nchn2) {
@@ -423,6 +400,8 @@ int main()
         size_t min_sz = buff_nele * 4; // cannot possibly be this big
         size_t this_sz;
         int j = 0;
+        Timer timer;
+        timer.restart();
         while (j < nthreads){ // wait for MultiFloatStreams
             // ptr = stream.get_read_ptr(&sz);
             //if (sz < 4096 / 2) {
@@ -457,6 +436,11 @@ int main()
             } else {
                 CPU::pause();
                 (*Streams2[j]).sync_reader();
+            }
+            auto res = timer.elapsed();
+            if (res > 1e6){
+                Log::log("stuck");
+                timer.restart();
             }
         }
         //Log::log("%d ", sz);
