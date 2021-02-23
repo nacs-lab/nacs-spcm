@@ -240,14 +240,23 @@ int main()
     // Jessie's amplitudes below
     
     float amp0 = 0.1f;
-    std::vector<float> amps = {amp0+0.03,amp0+0.01,amp0-0.01,amp0-0.02,amp0-0.022,amp0-0.013,amp0,amp0,amp0,amp0+0.03};
+    std::vector<float> amps = {amp0+0.0,amp0-0.01,amp0-0.018,amp0-0.008,amp0-0.008,amp0+0.005,amp0+0.005,amp0-0.009,amp0+0.021,amp0+0.06};
 //    std::vector<float> amps = {amp0+0.013+0.003,amp0+0.006-0.0005,amp0-0.013+0.002,amp0-0.012+0.001,amp0-0.006,amp0-0.012-0.002,amp0-0.0045,amp0+0.002,amp0-0.00,amp0-0.013+0.0055};
 //    std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
-    std::vector<double> freqs = {107e6,114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6,170e6};
+    std::vector<double> freqs = {114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6,170e6,177e6};
 
-    std::vector<float> phases = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212};
+    std::vector<float> phases = {0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212,0.53778339};
     
-    
+/*
+    std::vector<float> amps = {0.1f,0.1f};
+    std::vector<double> freqs = {145e6,152e6};
+    std::vector<float> phases = {0.48109314,0.23145855};
+*/
+/*
+    std::vector<float> amps = {0.1f};
+    std::vector<double> freqs = {142e6};
+    std::vector<float> phases = {0.23145855};
+*/  
     /*
     std::vector<float> amps = {0.9999f};
     std::vector<double> freqs = {123e6};
