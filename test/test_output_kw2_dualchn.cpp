@@ -314,8 +314,10 @@ int main()
     std::vector<float> phases = {0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212,0.53778339};
     
     // Cs chn 1
-    std::vector<float> amps2 = {amp0+0.005,amp0,amp0-0.013,amp0-0.012,amp0-0.005,amp0-0.012+0.001,amp0-0.001,amp0+0.005,amp0-0.001,amp0-0.013};
-    std::vector<double> freqs2 = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
+    //std::vector<float> amps2 = {amp0+0.06,amp0,amp0-0.013,amp0+0.005,amp0-0.02,amp0+0.005,amp0-0.001,amp0+0.005,amp0+0.005,amp0-0.02};
+    std::vector<float> amps2 = {amp0+0.03,amp0,amp0-0.0,amp0+0.035,amp0+0.005,amp0+0.02,amp0+0.005,amp0+0.03,amp0+0.015,amp0+0.03};
+    //std::vector<double> freqs2 = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
+    std::vector<double> freqs2 = {102.5067e6,107.8386e6,113.1704e6,118.5022e6,123.8341e6,129.1659e6,134.4978e6,139.8296e6,145.1614e6,150.4933e6};
     std::vector<float> phases2 = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212};    
     
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
