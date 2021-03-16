@@ -309,12 +309,12 @@ int main()
 
     // Na chn 0
     float amp0 = 0.1f;
-    std::vector<float> amps = {amp0+0.0,amp0-0.01,amp0-0.018,amp0-0.008,amp0-0.008,amp0+0.005,amp0+0.005,amp0-0.009,amp0+0.021,amp0+0.06};
-    std::vector<double> freqs = {114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6,170e6,177e6};
-    std::vector<float> phases = {0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212,0.53778339};
-    //std::vector<float> amps = {amp0};
-    //std::vector<double> freqs = {114e6};
-    //std::vector<float> phases = {0.57133858};
+    //std::vector<float> amps = {amp0+0.0,amp0-0.01,amp0-0.018,amp0-0.008,amp0-0.008,amp0+0.005,amp0+0.005,amp0-0.009,amp0+0.021,amp0+0.06};
+    //std::vector<double> freqs = {114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6,170e6,177e6};
+    //std::vector<float> phases = {0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212,0.53778339};
+    std::vector<float> amps = {amp0};
+    std::vector<double> freqs = {145.5e6};
+    std::vector<float> phases = {0.57133858};
     
     // Cs chn 1
     std::vector<float> amps2 = {amp0+0.035,amp0-0.0045,amp0+0.00,amp0+0.0165,amp0+0.0032,amp0-0.001,amp0+0.01,amp0+0.0081,amp0+0.0125,amp0+0.0133};
