@@ -111,19 +111,20 @@ __m512i calc_sins2(int64_t* phase_cnt, uint64_t* freq_cnt, float* amp, size_t nc
     return _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,
                                      _mm512_cvttps_epi32(v2));
 }
-
-constexpr uint64_t buff_nele =  4 / 2 * 1024ll * 1024ll * 1024ll;
+constexpr uint64_t testn = 4 * 1024ll;
+constexpr uint64_t buff_nele =  4 * 1024ll * 1024ll * 1024ll / 2 / testn; // * 1024ll;
+constexpr uint64_t trans_buff_sz_nele = 4 * 1024ll * 1024ll * 1024ll / 2;
 
 struct MultiStream : DataPipe<int16_t> {
     MultiStream(float* amp, double* freq, float* phase, size_t nchn)
-        : MultiStream((int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW),
+        : MultiStream((int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll / testn, Prot::RW),
                       amp, freq, phase, nchn)
     {
     }
 
 private:
     MultiStream(int16_t *base, float* amp, double* freq, float* phase, size_t nchn)
-        : DataPipe(base, buff_nele, 4096 * 512 * 32),
+        : DataPipe(base, buff_nele, 1024ll * 1024ll / 8),
           m_base(base),
           m_amp(amp),
           m_freq_cnt(nchn, 0),
@@ -187,7 +188,7 @@ void write_to_buffer_int(const int16_t **msptrs, size_t nthreads, int16_t* write
     for (; write_pos < (bytes_to_write / 2); write_pos += 64/2){ //bytes_to_write/2 is number of int16_t pointer positions to advance
             // check for overflow
         *curr_pos += 64 / 2; // move 64 bytes or one __m512i object that has been stored.
-        if (*curr_pos >= buff_nele){
+        if (*curr_pos >= trans_buff_sz_nele){
             *curr_pos = 0;
         }
         int16_t* curr_ptr = write_buf + *curr_pos;
@@ -208,7 +209,7 @@ void write_to_buffer_int_multi_chn(const int16_t **msptrs1, size_t nthreads1,
     size_t write_pos = 0;
     for (; write_pos < (bytes_to_write / 2); write_pos += 64) { 
         *curr_pos += 64; // store two __m512i at a time, which is 64 samples
-        if (*curr_pos >= buff_nele) {
+        if (*curr_pos >= trans_buff_sz_nele) {
             *curr_pos = 0;
         }
         int16_t* curr_ptr1 = write_buf + *curr_pos;
@@ -308,22 +309,40 @@ int main()
 
 
     // Na chn 0
-    float amp0 = 0.1f;
-    std::vector<float> amps = {amp0+0.0,amp0-0.01,amp0-0.018,amp0-0.008,amp0-0.008,amp0+0.005,amp0+0.005,amp0-0.009,amp0+0.021,amp0+0.06};
-    std::vector<double> freqs = {114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6,170e6,177e6};
-    std::vector<float> phases = {0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212,0.53778339};
-    
+    //float amp0 = 0.1f;
+    //std::vector<float> amps = {amp0+0.0f,amp0-0.01f,amp0-0.018f,amp0-0.008f,amp0-0.008f,amp0+0.005f,amp0+0.005f,amp0-0.009f,amp0+0.021f,amp0+0.06f};
+    //std::vector<double> freqs = {114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6,170e6,177e6};
+    //std::vector<float> phases = {0.57133858f,0.15728503f,0.881126f,0.74086594f,0.81601378f,0.48109314f,0.23145855f,0.37910408f,0.66274212f,0.53778339f};
     // Cs chn 1
     //std::vector<float> amps2 = {amp0+0.06,amp0,amp0-0.013,amp0+0.005,amp0-0.02,amp0+0.005,amp0-0.001,amp0+0.005,amp0+0.005,amp0-0.02};
-    std::vector<float> amps2 = {amp0+0.0325,amp0-0.0075,amp0+0.0039,amp0+0.016,amp0+0.0032,amp0-0.001,amp0+0.01,amp0+0.0101,amp0+0.0135,amp0+0.0173};
+    //std::vector<float> amps2 = {0.99f};
+    //std::vector<double> freqs2 = {100e6};
+    //std::vector<float> phases2 = {0};
+    //std::vector<float> amps2 = {amp0+0.0325f,amp0-0.0075f,amp0+0.0039f,amp0+0.016f,amp0+0.0032f,amp0-0.001f,amp0+0.01f,amp0+0.0101f,amp0+0.0135f,amp0+0.0173f};
     //std::vector<double> freqs2 = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
     //std::vector<double> freqs2 = {102.4680e6,107.8085e6,113.1489e6,118.4893e6,123.8298e6,129.1702e6,134.5107e6,139.8511e6,145.1915e6,150.5320e6};
 //    std::vector<double> freqs2 = {102.4680e6,107.8486e6,113.2292e6,118.6098e6,123.9904e6,129.3710e6,134.7516e6,140.1322e6,145.5128e6,150.8934e6};
 //    std::vector<double> freqs2 = {102.4680e6,107.7684e6,113.0688e6,118.3692e6,123.6696e6,128.9700e6,134.2704e6,139.5708e6,144.8712e6,150.1716e6};
-    std::vector<double> freqs2 = {102.2964e6,107.5968e6,112.8972e6,118.1976e6,123.4980e6,128.7984e6,134.0988e6,139.3992e6,144.6996e6,150e6};
+    //std::vector<double> freqs2 = {102.2964e6,107.5968e6,112.8972e6,118.1976e6,123.4980e6,128.7984e6,134.0988e6,139.3992e6,144.6996e6,150e6};
     //std::vector<double> freqs2 = {105.0e6,110.0e6,115.0e6,120.0e6,125.0e6,130.0e6,135.0e6,140.0e6,145.0e6,150.0e6};
-    std::vector<float> phases2 = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212};    
-    
+    //std::vector<float> phases2 = {1.1030484f,0.57133858f,0.15728503f,0.881126f,0.74086594f,0.81601378f,0.48109314f,0.23145855f,0.37910408f,0.66274212f};
+    int n = 28;
+    std::vector<float> amps(n);
+    std::vector<float> phases(n);
+    std::vector<double> freqs(n);
+    std::vector<float> amps2(n);
+    std::vector<float> phases2(n);
+    std::vector<double> freqs2(n);
+    double start = 50e6;
+    double end = 150e6;
+    for (int i = 0; i < n; i++) {
+        amps[i] = 0.01f;
+        amps2[i] = amps[i];
+        freqs[i] = start + (end - start) * double((i + 1)) / double(n);
+        freqs2[i] = freqs[i];
+        phases[i] = 0;
+        phases2[i] = 0;
+    }
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
     float amp_max = 0.9999f;
     if (amps_sum > amp_max)//(amps_sum > 0)//
@@ -335,9 +354,6 @@ int main()
     if (amps_sum2 > amp_max2)//(amps_sum > 0)//
         std::transform(amps2.begin(), amps2.end(), amps2.begin(),
                        [amps_sum2,amp_max2](float f){return f/(amps_sum2)*amp_max2;});
-    
-    
-    
     std::vector<MultiStream*> Streams;
     int nchn = amps.size();
     int n_per_thread = 4;
@@ -370,13 +386,13 @@ int main()
         Streams2.push_back(fsptr);
     }
 
-    size_t nthreads2 = Streams.size();
+    size_t nthreads2 = Streams2.size();
 
     
     // set up transfer buffer
     int16_t* buff_ptr = (int16_t*)mapAnonPage(4 * 1024ll * 1024ll * 1024ll, Prot::RW);
     size_t curr_pos = 0;
-    size_t buff_sz = buff_nele;
+    size_t buff_sz = trans_buff_sz_nele;
     hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 4096 * 32,
                      (void*)buff_ptr, 0, 2 * buff_sz); //buff_nele is the size of the buffer of int16_t types. Mult by 2 to get number of bytes
 
@@ -387,7 +403,7 @@ int main()
     std::vector<const int16_t*> fsptrs2;
     fsptrs2.reserve(nthreads2);
     auto send_data = [&] {
-        size_t min_sz = buff_nele * 4; // cannot possibly be this big
+        size_t min_sz = trans_buff_sz_nele * 4; // cannot possibly be this big
         size_t this_sz;
         int j = 0;
         while (j < nthreads){ // wait for MultiFloatStreams
@@ -495,28 +511,36 @@ int main()
 //        Log::log("avail: %lu ", avail);
 //        Log::log("count: %lu ", count);
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
-        try{
+        //try{
             hdl.check_error();
-        }
-        catch (std::exception& test)
-        {
-            //          Log::log("avail: %lu ", avail);
+            //}
+        //catch (std::exception& test)
+        //{
+            //Log::log("avail: %lu ", avail);
             //  Log::log("count: %lu ", count);
             //Log::log(test.what());
-            throw test;
-        }
+            //throw test;
+        //}
         // tell datagen that data has been read
         for (int i = 0; i < nthreads; ++i){
             (*Streams[i]).read_size(count / 2 / 2); // count is number of bytes. With only one channel, we have to advance count /2 . With two channels, we advance count / 4
         }
-        for (int i = 0; i < nthreads; ++i) {
+        for (int i = 0; i < nthreads2; ++i) {
             (*Streams2[i]).read_size(count / 2 / 2);
         }
         fsptrs.clear();
         fsptrs2.clear();
         CPU::wake();
     };
-    send_data();
+    uint64_t available_space = 0;
+    hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &available_space);
+    //Timer timer2;
+    //timer2.restart();
+    while (available_space > (4 * 1024ll * 1024ll * 1024ll - 4 * 1024ll * 1024ll * 1024ll)) {
+        send_data();
+        hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &available_space);
+        // Log::log("%lu\n", available_space);
+    }
     Log::log("Done with Initial Data send \n");
     hdl.cmd(M2CMD_DATA_STARTDMA | M2CMD_DATA_WAITDMA);
     hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);

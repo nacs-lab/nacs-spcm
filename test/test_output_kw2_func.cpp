@@ -239,13 +239,13 @@ int main()
 
     // Jessie's amplitudes below
     
-    float amp0 = 0.1f;
-    std::vector<float> amps = {amp0+0.0,amp0-0.01,amp0-0.018,amp0-0.008,amp0-0.008,amp0+0.005,amp0+0.005,amp0-0.009,amp0+0.021,amp0+0.06};
+    //float amp0 = 0.1f;
+    //std::vector<float> amps = {amp0+0.0f,amp0-0.01f,amp0-0.018f,amp0-0.008f,amp0-0.008f,amp0+0.005f,amp0+0.005f,amp0-0.009f,amp0+0.021f,amp0+0.06f};
 //    std::vector<float> amps = {amp0+0.013+0.003,amp0+0.006-0.0005,amp0-0.013+0.002,amp0-0.012+0.001,amp0-0.006,amp0-0.012-0.002,amp0-0.0045,amp0+0.002,amp0-0.00,amp0-0.013+0.0055};
 //    std::vector<double> freqs = {95e6,102e6,109e6,116e6,123e6,130e6,137e6,144e6,151e6,158e6};
-    std::vector<double> freqs = {114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6,170e6,177e6};
+    //std::vector<double> freqs = {114e6,121e6,128e6,135e6,142e6,149e6,156e6,163e6,170e6,177e6};
 
-    std::vector<float> phases = {0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212,0.53778339};
+    //std::vector<float> phases = {0.57133858f,0.15728503f,0.881126f,0.74086594f,0.81601378f,0.48109314f,0.23145855f,0.37910408f,0.66274212f,0.53778339f};
     
 /*
     std::vector<float> amps = {0.1f,0.1f};
@@ -258,14 +258,14 @@ int main()
     std::vector<float> phases = {0.23145855};
 */  
     /*
-    std::vector<float> amps = {0.9999f};
-    std::vector<double> freqs = {123e6};
-    std::vector<float> phases = {0};
+    std::vector<float> amps = {0.5f, 0.5f};
+    std::vector<double> freqs = {123e6, 130e6};
+    std::vector<float> phases = {0, 0};
     */
 
     // linear spaced equal amplitude
-/*    
-    int n = 54;
+
+    int n = 64;
     std::vector<float> amps(n);
     std::vector<float> phases(n);
     std::vector<double> freqs(n);
@@ -274,9 +274,9 @@ int main()
     for (int i = 0; i < n; i++) {
         amps[i] = 0.01f;
         freqs[i] = start + (end - start) * double((i + 1)) / double(n);
-    phases[i] = 0;
+        phases[i] = 0;
     }
-*/  
+
 
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
     float amp_max = 0.9999f; //0.9999f;
@@ -439,12 +439,16 @@ int main()
     
     uint64_t available_space = 0;
     hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &available_space);
+    Timer timer2;
+    timer2.restart();
     while (available_space > (4 * 1024ll * 1024ll * 1024ll - 4 * 1024ll * 1024ll * 1024ll)) {
         send_data();
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &available_space);
         //Log::log("%lu\n", available_space);
     }
+    auto res = timer2.elapsed();
     Log::log("Done with Initial Data send \n");
+    Log::log("Took %f\n", res);
     //uint64_t tot_used = 4 * 1024ll * 1024ll * 1024ll - available_space;
     //hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, tot_used);
     //hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &available_space);

@@ -219,7 +219,7 @@ int main()
     hdl.set_param(SPC_AMP0, 2500); // Amp
     hdl.set_param(SPC_FILTER0, 0);
 
-    Stream stream(0.9f, 1.39);
+    Stream stream(0.9f, 50e6);
 
     size_t buff_sz;
     auto buff_ptr = stream.get_read_buff(&buff_sz);
