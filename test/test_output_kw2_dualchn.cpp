@@ -326,7 +326,7 @@ int main()
     //std::vector<double> freqs2 = {102.2964e6,107.5968e6,112.8972e6,118.1976e6,123.4980e6,128.7984e6,134.0988e6,139.3992e6,144.6996e6,150e6};
     //std::vector<double> freqs2 = {105.0e6,110.0e6,115.0e6,120.0e6,125.0e6,130.0e6,135.0e6,140.0e6,145.0e6,150.0e6};
     //std::vector<float> phases2 = {1.1030484f,0.57133858f,0.15728503f,0.881126f,0.74086594f,0.81601378f,0.48109314f,0.23145855f,0.37910408f,0.66274212f};
-    int n = 28;
+    int n = 24;
     std::vector<float> amps(n);
     std::vector<float> phases(n);
     std::vector<double> freqs(n);

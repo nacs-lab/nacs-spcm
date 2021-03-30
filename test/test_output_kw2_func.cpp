@@ -38,6 +38,8 @@
 #include <vector>
 #include <numeric>
 #include <random>
+#include <time.h>
+#include <stdlib.h>
 using namespace NaCs;
 
 static std::exception_ptr teptr = nullptr;
@@ -264,7 +266,7 @@ int main()
     */
 
     // linear spaced equal amplitude
-
+    srand (time(NULL));
     int n = 64;
     std::vector<float> amps(n);
     std::vector<float> phases(n);
@@ -274,7 +276,7 @@ int main()
     for (int i = 0; i < n; i++) {
         amps[i] = 0.01f;
         freqs[i] = start + (end - start) * double((i + 1)) / double(n);
-        phases[i] = 0;
+        phases[i] = static_cast<float> (rand()) / static_cast<float> (RAND_MAX) * 2.0f * 3.14f;
     }
 
 
@@ -285,9 +287,8 @@ int main()
                        [amps_sum,amp_max](float f){return f/(amps_sum)*amp_max;});
 
     for (int i = 0; i < amps.size(); i++){
-        Log::log("amp: %f, freq: %f\n", amps[i], freqs[i]);
+        Log::log("amp: %f, freq: %f, phase %f\n", amps[i], freqs[i]);
     }
-    
     std::vector<MultiStream*> Streams;
     int nchn = amps.size();
     int n_per_thread = 4;
