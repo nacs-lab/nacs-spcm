@@ -59,7 +59,7 @@ private:
     static_assert((int)CmdType::_MAX < (1 << op_bits), ""); // ensure op_bits are enough to describe the number of commands. << is the left shift operator.
 public:
     static constexpr uint32_t add_chn = (uint32_t(1) << chn_bits) - 1; // code for adding a channel
-    uint32_t t; // start time for command 
+    uint32_t t; // start time for command
     uint8_t _op:op_bits; // op should only contain op_bits amount of information.
     uint32_t chn:chn_bits;
     int32_t final_val; // final value at end of command.
@@ -104,7 +104,7 @@ public:
     }
     static Cmd getAddChn(uint32_t t, uint32_t chn)
     {
-        return Cmd{t, (uint8_t)CmdType::ModChn, add_chn, chn}; //overload NOT meant to be used in stream. Meant for usage with real chn ID not chn within a stream
+        return Cmd{t, (uint8_t)CmdType::ModChn, add_chn, static_cast<int32_t> (chn)}; //overload NOT meant to be used in stream. Meant for usage with real chn ID not chn within a stream
     }
     static Cmd getDelChn(uint32_t t, uint32_t chn)
     {
@@ -184,7 +184,7 @@ struct activeCmd {
 class StreamBase
 {
 public:
-    inline const int *get_output(size_t *sz)
+    inline const int16_t *get_output(size_t *sz)
     {
         return m_output.get_read_ptr(sz); // call to obtain values for output
     }
@@ -286,19 +286,19 @@ public:
 protected:
     struct State {
         // structure which keeps track of the state of a channel
-        int64_t phase;
-        int32_t freq;
-        int32_t amp;
+        int64_t phase; // phase_cnt = (0 to 1 phase) * 625e6 * 10
+        uint64_t freq; // freq_cnt = real freq * 10
+        float amp; // real amp * 6.7465185e9f
     };
     void generate_page(State *states); //workhorse, takes a vector of states for the channels
-    void step(int *out, State *states); // workhorse function to step to next time
+    void step(int16_t *out, State *states); // workhorse function to step to next time
     const Cmd *get_cmd();
     StreamBase(double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num) :
         m_step_t(step_t),
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
         m_commands((Cmd*)mapAnonPage(24 * 1024ll, Prot::RW), 1024, 1),
-        m_output((int*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll),
+        m_output((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 2 * 1024ll * 1024ll, 32 * 16 * 1024ll),
         m_stream_num(stream_num)
     {
     }
@@ -322,9 +322,7 @@ private:
     const Cmd *consume_old_cmds(State * states);
     bool check_start(uint32_t t, uint32_t id);
     void clear_underflow();
-
-    
-    constexpr static uint32_t output_block_sz = 1; //512; // COME BACK TO THIS, WHEN THE UNITS ARE KNOWN
+    constexpr static uint32_t output_block_sz = 2048; // units of int16_t. 32 of these per _m512
     // Members accessed by worker threads
 protected:
     std::atomic_bool m_stop{false};
@@ -350,7 +348,7 @@ private:
     uint32_t m_start_trigger_cnt{0};
 
     DataPipe<Cmd> m_commands;
-    DataPipe<int> m_output;
+    DataPipe<int16_t> m_output;
     std::vector<activeCmd*> active_cmds;
     std::atomic<uint32_t> m_end_triggered{0};
     std::atomic<int64_t> m_time_offset{0};
@@ -407,9 +405,9 @@ private:
             //std::cout << get_cmd() << std::endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             } */
-        while(get_cur_t() < 50) {
+        while(likely(!m_stop.load(std::memory_order_relaxed))) {
             generate_page(m_states);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
     }
     State m_states[max_chns]{}; // array of states

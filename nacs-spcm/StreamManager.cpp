@@ -64,10 +64,14 @@ inline void StreamManagerBase::actual_send_cmds(uint32_t stream_idx, Cmd *cmd, s
 {
     // actual distribution to stream_idx
     size_t copied_sz;
+    Cmd *this_cmd = cmd;
+    std::cout << "Sz: " << sz << std::endl;
     while (sz > 0) {
-        copied_sz = m_streams[stream_idx]->copy_cmds(cmd, sz);
+        copied_sz = m_streams[stream_idx]->copy_cmds(this_cmd, sz);
         sz -= copied_sz;
-        std::cout << "Sent " << *cmd << " to Stream" << stream_idx << std::endl;
+        //std::cout << "Sz after: " << sz << std::endl;
+        std::cout << "Sent " << *this_cmd << " to Stream" << stream_idx << std::endl;
+        this_cmd = cmd + copied_sz;
     }
 }
 
@@ -141,8 +145,9 @@ inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
     }
 }
 
-inline size_t StreamManagerBase::distribute_cmds()
+NACS_EXPORT() void StreamManagerBase::distribute_cmds()
 {
+    std::cout << "Calling distribute_cmds" << std::endl;
     // distribute all commands
     // What needs to be handled
     //   1) Interpret modChn commands and Meta commands
@@ -204,6 +209,7 @@ inline size_t StreamManagerBase::distribute_cmds()
                     std::cout << "second command address " << first_cmd + 1 << std::endl;
                     std::cout << "second command address vec " << &first_cmd[1] << std::endl;
                 }
+                std::cout << "sending cmds in" << std::endl;
                 send_cmds(first_cmd, sz_to_send);
                 // std::cout << "Sending " << sz_to_send << " commands starting from " << first_cmd << std::endl;
                 sz_to_send = 1;
@@ -221,13 +227,16 @@ inline size_t StreamManagerBase::distribute_cmds()
         cmd_next(); // move to next command
     } // while brace
     // send out remaining commands
+    std::cout << "Size to send: " << sz_to_send << std::endl;
+    std::cout << "sending commands final" << std::endl;
     send_cmds(first_cmd, sz_to_send);
+    std::cout << "done with command distribution" << std::endl;
 }
-
-NACS_INLINE void StreamManagerBase::generate_page()
+__attribute__((target("avx512f,avx512bw"), flatten))
+NACS_EXPORT() void StreamManagerBase::generate_page()
 {
     // function which processes outputs from streams.
-    int *out_ptr;
+    int16_t *out_ptr;
     while (true) {
         size_t sz_to_write;
         out_ptr = m_output.get_write_ptr(&sz_to_write);
@@ -239,10 +248,11 @@ NACS_INLINE void StreamManagerBase::generate_page()
         }
         CPU::pause();
     }
+    //std::cout << "can write" << std::endl;
     // wait for input streams to be ready
     uint32_t stream_idx = 0;
     size_t sz_to_read;
-    const int *read_ptr;
+    const int16_t *read_ptr;
     while (stream_idx < m_n_streams) {
         read_ptr = (*m_streams[stream_idx]).get_output(&sz_to_read);
         if (sz_to_read >= output_block_sz) {
@@ -255,27 +265,34 @@ NACS_INLINE void StreamManagerBase::generate_page()
             (*m_streams[stream_idx]).sync_reader();
         }
     }
+    //std::cout << "stream ready" << std::endl;
     // now streams are ready.
-    std::cout << "reading from streams" << std::endl;
+    //std::cout << "reading from streams" << std::endl;
+    //__m512i data;
     for (uint32_t stream_idx = 0; stream_idx < m_n_streams; stream_idx++) {
-        for (uint32_t i = 0; i < output_block_sz; i++) {
+        for (uint32_t i = 0; i < output_block_sz; i+= 32) {
             if (stream_idx == 0) {
                 // first pass
-                *(out_ptr + i) = *(stream_ptrs[stream_idx] + i);
+                _mm512_store_si512(&out_ptr[i], *(__m512i*)(stream_ptrs[stream_idx] + i));
+                //*(out_ptr + i) = *(stream_ptrs[stream_idx] + i);
             }
             else {
-                *(out_ptr + i) = *(out_ptr + i) + *(stream_ptrs[stream_idx] + i);
+                _mm512_store_si512(&out_ptr[i], _mm512_add_epi16(
+                                       *(__m512i*)(&out_ptr[i]),
+                                       *(__m512i*)(stream_ptrs[stream_idx] + i)));
+                //*(out_ptr + i) = *(out_ptr + i) + *(stream_ptrs[stream_idx] + i);
             }
-            if (i == output_block_sz - 1) {
+            if (i == output_block_sz - 32) {
                 (*m_streams[stream_idx]).consume_output(output_block_sz); // allow stream to continue
             }
         }
     }
-    std::cout << "output_block_sz: " << output_block_sz << std::endl;
-    std::cout << "m_cur_t: " << m_cur_t << std::endl;
-    m_output.wrote_size(output_block_sz); // wrote to output. 
-    m_cur_t += output_block_sz;
-    m_output_cnt += output_block_sz;
+    //std::cout << "output_block_sz: " << output_block_sz << std::endl;
+    //std::cout << "m_cur_t: " << m_cur_t << std::endl;
+    m_output.wrote_size(output_block_sz); // wrote to output.
+    //std::cout << "output written" << std::endl;
+    m_cur_t += 1;
+    m_output_cnt += 1;
 }
 
 

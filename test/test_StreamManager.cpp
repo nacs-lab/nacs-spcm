@@ -44,8 +44,8 @@ int main() {
     }
     // std::cout << cmd_vector << std::endl;
     std::cout << "here" << std::endl;
-    size_t sz2;
-    sz2 = sm.distribute_cmds();
+    //size_t sz2;
+    //sz2 = sm.distribute_cmds();
     std::cout << "after distribution" << std::endl;
     sm.start_streams();
     sm.start_worker();

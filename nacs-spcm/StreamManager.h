@@ -13,7 +13,7 @@
 using namespace NaCs;
 
 namespace Spcm {
-uint32_t UINT_MAX = 4294967295;
+const uint32_t UINT_MAX = 4294967295;
 
 template<class T>
 inline std::pair<uint32_t, T> get_min(T *begin, size_t sz) {
@@ -145,7 +145,7 @@ class StreamManagerBase
 {
     // This class is responsible for passing commands to the various streams and also conveying output.
 public:
-    inline const int *get_output(size_t &sz)
+    inline const int16_t *get_output(size_t &sz)
     {
         return m_output.get_read_ptr(&sz); // stores into size number of outputs ready, and returns a pointer
     }
@@ -187,7 +187,7 @@ public:
         }
     }
     const Cmd *get_cmd();
-    inline size_t distribute_cmds(); // distributes all commands to streams
+    void distribute_cmds(); // distributes all commands to streams
     uint32_t get_cur_t(){
         return m_cur_t;
     }
@@ -200,6 +200,11 @@ public:
             std::cout << "Started Stream: " << i << std::endl;
         }
     }
+    inline void stop_streams() {
+        for (int i = 0; i < m_n_streams; i++) {
+            (*m_streams[i]).stop_worker();
+        }
+    }
 protected:
     StreamManagerBase(uint32_t n_streams, uint32_t max_per_stream,
                       double step_t, std::atomic<uint64_t> &cmd_underflow,
@@ -208,7 +213,7 @@ protected:
           m_max_per_stream(max_per_stream),
           chn_map(n_streams, max_per_stream),
           m_commands((Cmd*)mapAnonPage(24 * 1024ll, Prot::RW), 1024, 1),
-          m_output((int*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll, 20)
+          m_output((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 2 * 1024ll * 1024ll, 32 * 16 * 1024ll)
     {
         // start streams
         for (int i = 0; i < n_streams; i++) {
@@ -219,6 +224,8 @@ protected:
         }
     }
     void generate_page();
+
+    std::atomic_bool m_stop{false};
 private:
     inline bool probe_cmd_input()
     {
@@ -242,7 +249,7 @@ private:
     void send_cmds(Cmd *cmd, size_t sz);
     
     std::vector<Stream<128>*> m_streams; // vector of Streams to manage
-    std::vector<const int*> stream_ptrs; // vector of stream_ptrs
+    std::vector<const int16_t*> stream_ptrs; // vector of stream_ptrs
     ChannelMap chn_map;
     uint32_t m_n_streams = 0;
     uint32_t m_max_per_stream = 0;
@@ -251,8 +258,8 @@ private:
     uint64_t m_output_cnt = 0; // output count
 
     DataPipe<Cmd> m_commands; // command pipe for writers to put in commands
-    DataPipe<int> m_output; // pipe for output and hardware to output
-    constexpr static uint32_t output_block_sz = 1;
+    DataPipe<int16_t> m_output; // pipe for output and hardware to output
+    constexpr static uint32_t output_block_sz = 2048;
     
     const Cmd *m_cmd_read_ptr = nullptr; // pointer to read commands
     size_t m_cmd_read = 0;
@@ -268,7 +275,7 @@ struct StreamManager : StreamManagerBase {
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false)
-        : StreamManagerBase(n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream) 
+        : StreamManagerBase(n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream)
     {
         if (startWorker)
         {
@@ -278,10 +285,12 @@ struct StreamManager : StreamManagerBase {
 
     void start_worker()
     {
+        m_stop.store(false, std::memory_order_relaxed);
         m_worker = std::thread(&StreamManager::thread_fun, this);
     }
     void stop_worker()
     {
+        m_stop.store(true, std::memory_order_relaxed);
         if (m_worker.joinable()) {
             m_worker.join();
         }
@@ -293,17 +302,21 @@ struct StreamManager : StreamManagerBase {
 private:
     void thread_fun()
     {
-        while (get_cur_t() < 19) {
-            generate_page();
-        }
+        //while (get_cur_t() < 19) {
+        //    generate_page();
+        //}
         // after page generation, let's read the data to test it.
-        const int *ptr;
-        size_t sz;
-        ptr = get_output(sz);
-        ChannelMap cmap = get_chn_map();
-        std::cout << cmap;
-        for (int i = 0; i < sz; i++) {
-            std::cout << i << ": " << ptr[i] << std::endl;
+        //const int *ptr;
+        //size_t sz;
+        //ptr = get_output(sz);
+        //ChannelMap cmap = get_chn_map();
+        //std::cout << cmap;
+        //for (int i = 0; i < sz; i++) {
+        //    std::cout << i << ": " << ptr[i] << std::endl;
+        //}
+        while(likely(!m_stop.load(std::memory_order_relaxed))) {
+            //std::cout << "here" << std::endl;
+            generate_page();
         }
     }
 

@@ -15,6 +15,7 @@
 
 #include <immintrin.h>
 #include <sleef.h>
+#include <typeinfo>
 
 using namespace NaCs;
 
@@ -31,10 +32,10 @@ static NACS_INLINE void accum_nonzero(T &out, T in, float s)
 constexpr long long int sample_rate = 625ll * 1000000ll;
 constexpr int cycle = 1024/32;
 
-constexpr uint64_t max_phase = uint64_t(625e6 * 10);
+constexpr uint64_t max_phase = uint64_t(sample_rate * 10);
 constexpr double phase_scale = 2 / double(max_phase);
-constexpr double freq_scale = 0.1 / (625e6 / 32); // 1 cycle in 32 samples at 625 MHz sampling rate. Converts a frequency at 10 times the real frequency, hence the 0.1.
-
+constexpr double freq_scale = 0.1 / (sample_rate / 32); // 1 cycle in 32 samples at 625 MHz sampling rate. Converts a frequency at 10 times the real frequency, hence the 0.1.
+constexpr double amp_scale = 6.7465185e9f;
 
 //__m512 is a vector type that can hold 16 32 bit floats
 static constexpr __m512 tidxs = {0.0, 0.0625, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375,
@@ -68,19 +69,30 @@ __m512 xsinpif_pi(__m512 d)
 // Phase is in unit of pi
 // Frequency of 1 means one full cycle per 32 samples. At 625 MHz sampling rate, this is 19.531250 MHz
 __attribute__((target("avx512f,avx512bw"), flatten))
-void compute_single_chn(__m512 &v1, __m512 &v2, float phase, float freq,
+void compute_single_chn(__m512 &v1, __m512 &v2, int64_t* phase, float freq,
                         float df, float amp, float damp)
 {
-    auto phase_v1 = phase + freq * tidxs; // first 16 samples
-    auto phase_v2 = phase + freq * (tidxs + 1); // next 16 samples with no df
-    accum_nonzero(phase_v1, tidxs, df / 2);
-    accum_nonzero(phase_v2, (tidxs + 1), df / 2);
-    auto amp_v1 = _mm512_set1_ps(amp);
-    auto amp_v2 = _mm512_set1_ps(amp + damp / 2);
-    accum_nonzero(amp_v1, tidxs, damp / 2); // accumulate half amplitude in one go
-    accum_nonzero(amp_v2, tidxs, damp / 2); // accumulate next half
+    int64_t phase_cnt = *phase;
+    float phase_f = float(double(phase_cnt * phase_scale));
+    __m512 phase_v1 = phase_f + freq * tidxs; // first 16 samples
+    __m512 phase_v2 = phase_f + freq * (tidxs + 1); // next 16 samples with no df
+    //accum_nonzero(phase_v1, tidxs, df / 2);
+    //accum_nonzero(phase_v2, (tidxs + 1), df / 2);
+    //__m512 amp_v1 = _mm512_set1_ps(amp);
+    //__m512 amp_v2 = _mm512_set1_ps(amp + damp / 2);
+    //accum_nonzero(amp_v1, tidxs, damp / 2); // accumulate half amplitude in one go
+    //accum_nonzero(amp_v2, tidxs, damp / 2); // accumulate next half
+    float amp_v1 = amp;
+    float amp_v2 = amp;
     v1 += xsinpif_pi(phase_v1) * amp_v1;
     v2 += xsinpif_pi(phase_v2) * amp_v2;
+    *phase = *phase + uint64_t(freq / freq_scale) * 32;
+    if (*phase > 0) {
+        *phase -= max_phase * 4;
+        while (unlikely(*phase > 0)) {
+            *phase -= max_phase * 4;
+        }
+    }
 }
 
 void test_compute_single_chn(int& out1, int& out2, int val, int dval) {
@@ -219,6 +231,8 @@ inline void StreamBase::cmd_next()
     if (++m_cmd_read == m_cmd_max_read) {
         m_commands.read_size(m_cmd_max_read);
     }
+    //std::cout << "m_cmd_max_read: " << m_cmd_max_read << std::endl;
+    //std::cout << "m_cmd_read: " << m_cmd_read << std::endl;
 }
 
 // TRIGGER STUFF. COME BACK TO
@@ -334,8 +348,8 @@ StreamBase::consume_old_cmds(State *states)
     } while((cmd = get_cmd())); // keep on going until there are no more commands or one reaches the present
     return nullptr;
 }
-
-NACS_EXPORT() void StreamBase::step(int *out, State *states)
+__attribute__((target("avx512f,avx512bw"), flatten))
+NACS_EXPORT() void StreamBase::step(int16_t *out, State *states)
 {
     // Key function
     const Cmd *cmd;
@@ -413,23 +427,23 @@ cmd_out:
     }
     // calculate actual output.
     // For testing purposes. At the moment keep the output simple.
-    int out1amp, out2amp, out1freq, out2freq;
-    out1amp = out2amp = out1freq = out2freq = 0;
+    __m512 v1 = _mm512_set1_ps(0.0f);
+    __m512 v2 = _mm512_set1_ps(0.0f);
     uint32_t _nchns = m_chns;
     if(!cmd){
         //std::cout << "This command is null" << std::endl;
     }
     else {
-        std::cout << (*cmd) << std::endl;
+        //std::cout << (*cmd) << std::endl;
     }
     for (uint32_t i = 0; i < _nchns; i++){
         // iterate through the number of channels
         auto &state = states[i];
-        auto phase = state.phase;
-        auto amp = state.amp;
-        auto freq = state.freq;
-        int32_t df = 0;
-        int32_t damp = 0;
+        int64_t phase = state.phase;
+        float amp = state.amp;
+        uint64_t freq = state.freq;
+        uint64_t df = 0;
+        float damp = 0;
         // check active commands
         auto it = active_cmds.begin();
         while(it != active_cmds.end()) {
@@ -470,12 +484,34 @@ cmd_out:
         }
         // now deal with current command
         if (!cmd || cmd->chn != i) {
-            test_compute_single_chn(out1amp, out2amp, amp, damp);
-            test_compute_single_chn(out1freq, out2freq, freq, df);
+            //std::cout << phase << std::endl;
+            //std::cout << "freq: " << freq << std::endl;
+            if (amp != 0)
+            {// && freq != 70e7)
+                //std::cout << "df: " << float(df * freq_scale) << std::endl;
+                //Log::log("Amp: %f\n", amp);
+            }
+            compute_single_chn(v1, v2, &phase, float(freq * freq_scale), float(df * freq_scale), amp, damp);
+            /*if (freq != 0) {
+                std::cout << "int64_t " <<typeid(int64_t(2)).name() << std::endl;
+                std::cout << "uint64_t: " << typeid(uint64_t(2)).name() << std::endl;
+            std::cout << "phase type: " << typeid(phase).name() << std::endl;
+            std::cout << "freq type: " << typeid(freq).name() << std::endl;
+            std::cout << "df type: " << typeid(df).name() << std::endl;
+            std::cout << "state phase: " <<typeid(state.phase).name() << std::endl;
+            }*/
+            //phase = phase + freq * 32 + df * 32 / 2;
+            //if (freq != 0) {
+            //std::cout << "phase type after: " << typeid(phase).name() << std::endl;
+            //}
+            //phase = phase + freq * 2;
+            //compute_single_chn(out1freq, out2freq, freq, df);
         }
         else {
             do {
+                std::cout << (*cmd) << std::endl;
                 if (cmd->op() == CmdType::FreqSet){
+                    std::cout << "in freq set" << std::endl;
                     freq = cmd->final_val;
                 }
                 else if (cmd->op() == CmdType::FreqFn || cmd->op() == CmdType::FreqVecFn) {
@@ -519,24 +555,36 @@ cmd_out:
                 cmd_next(); // increment cmd counter
                 cmd = get_cmd_curt(); // get command only if it's current
             } while (cmd && cmd->chn == i);
-            test_compute_single_chn(out1amp, out2amp, amp, damp);
-            test_compute_single_chn(out1freq, out2freq, freq, df);
+            compute_single_chn(v1, v2, &phase, float(freq * freq_scale), float(df * freq_scale), amp, damp);
+            //phase = phase + freq * 32 + df * 32 / 2;
+            //test_compute_single_chn(out1freq, out2freq, freq, df);
             state.amp = amp + damp;
             state.freq = freq + df;
         }
         // deal with phase wraparound
-        if (phase > max_phase || phase < -max_phase)
-            phase = phase % max_phase;
+        //if (phase > 0)
+        //{
+        //  phase -= max_phase * 4;
+        //  while (unlikely(phase > 0)) {
+        //      phase -= max_phase * 4;
+        //  }
+        //}
         state.phase = phase;
     } // channel iteration
     // after done iterating channels
     m_cur_t++; // increment time
-    *out = out2amp + out2freq;
+    //if (m_cur_t % uint32_t(1e6) == 0) {
+    //  std::cout << "t: " << m_cur_t << std::endl;
+    //}
+    __m512i v;
+    v = _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,
+                              _mm512_cvttps_epi32(v2));
+    _mm512_store_si512(out, v);
 }
 
 NACS_EXPORT() void StreamBase::generate_page(State *states)
 {
-    int *out_ptr;
+    int16_t *out_ptr;
     while (true) {
         size_t sz_to_write;
         out_ptr = m_output.get_write_ptr(&sz_to_write);
@@ -548,16 +596,16 @@ NACS_EXPORT() void StreamBase::generate_page(State *states)
         }
         CPU::pause();
     }
+    //std::cout << "ready to write" << std::endl;
     // Now ready to write to output. Write in output_block_sz chunks
-    for (uint32_t i = 0; i < output_block_sz; i++) {
+    for (uint32_t i = 0; i < output_block_sz; i += 32) {
         // for now advance one position at a time.
         m_output_cnt += 1;
         step(&out_ptr[i], states);
         //std::cout << "stream stepped" << std::endl;
     }
-    //std::cout << "Stream" << m_stream_num << " wrote " << *out_ptr << std::endl; 
+    //std::cout << "Stream" << m_stream_num << " wrote " << *out_ptr << std::endl;
     m_output.wrote_size(output_block_sz); // alert reader that data is ready.
 }
 
 }
-

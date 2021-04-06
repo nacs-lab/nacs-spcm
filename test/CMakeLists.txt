@@ -61,6 +61,11 @@ target_link_libraries(test_StreamManager nacs-utils nacs-spcm)
 set_source_files_properties(test_StreamManager.cpp
   PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")
 
+add_executable(test_Controller test_Controller.cpp)
+target_link_libraries(test_Controller nacs-utils nacs-spcm)
+set_source_files_properties(test_Controller.cpp
+  PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")
+
 add_executable(benchmarks benchmarks.cpp)
 target_link_libraries(benchmarks nacs-utils nacs-spcm)
 set_source_files_properties(benchmarks.cpp
