@@ -167,7 +167,7 @@ std::ostream &operator<<(std::ostream &stm, const std::vector<Cmd> &cmds); //pri
 struct activeCmd {
 // structure to keep track of commands that span longer times
     const Cmd* m_cmd;
-    std::vector<int32_t> vals; // precalculated values
+    std::vector<float> vals; // precalculated values
     activeCmd(const Cmd* cmd) : m_cmd(cmd) {
         if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn) {
 // only precalculate and store if it's vector input. If not calculate in real time.
@@ -175,10 +175,10 @@ struct activeCmd {
             ts.reserve((static_cast<size_t> (cmd->len)) + 1); // this should truncate.
             for (uint32_t i = 0; i < (cmd->len + 1); i++)
                 ts.push_back(i);
-            vals = ((std::vector<int32_t>(*)(std::vector<uint32_t>))(cmd->fnptr))(ts);
+            vals = ((std::vector<float>(*)(std::vector<uint32_t>))(cmd->fnptr))(ts);
         }
     }
-    std::pair<int32_t,int32_t> eval(uint32_t t);
+    std::pair<float,float> eval(uint32_t t);
 };
 
 class StreamBase
