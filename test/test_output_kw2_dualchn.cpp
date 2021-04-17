@@ -325,7 +325,7 @@ int main()
 //    std::vector<double> freqs = {114e6,128e6,142e6,156e6,170e6};
 //    std::vector<float> phases = {0.57133858,0.881126,0.81601378,0.23145855,0.66274212};
 // 6 traps
-    std::vector<float> amps = {amp0-0.005/1.5,amp0-0.029/1.5,amp0-0.008/1.5,amp0+0.005/1.5,amp0+0.035/1.5,amp0+0.086/1.5};
+    std::vector<float> amps = {amp0+0.003/1.5,amp0-0.019/1.5,amp0-0.008/1.5,amp0+0.005/1.5,amp0+0.038/1.5,amp0+0.089/1.5};
     std::vector<double> freqs = {114e6,121e6,142e6,149e6,170e6,177e6};
     std::vector<float> phases = {0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314};
     
@@ -347,7 +347,7 @@ int main()
 //    std::vector<double> freqs2 = {107.5968e6,118.1976e6,128.7984e6,139.3992e6,150e6};
 //    std::vector<float> phases2 = {1.1030484,0.15728503,0.74086594,0.48109314,0.37910408};    
 // 6 traps
-    std::vector<float> amps2 = {amp0+0.041/1.5,amp0-0.013/1.5,amp0-0.005/1.5,amp0-0.01/1.5,amp0+0.012/1.5,amp0+0.017/1.5};
+    std::vector<float> amps2 = {amp0+0.041/1.5,amp0-0.013/1.5,amp0-0.01/1.5,amp0-0.015/1.5,amp0+0.012/1.5,amp0+0.017/1.5};
 //    std::vector<double> freqs2 = {102.2964e6 - 0.05e6,107.5968e6 - 0.05e6,123.4980e6 - 0.05e6,128.7984e6 - 0.05e6,144.6996e6,150e6};
     std::vector<double> freqs2 = {102.2964e6,107.5968e6,123.4980e6,128.7984e6,144.6996e6,150e6};
 
