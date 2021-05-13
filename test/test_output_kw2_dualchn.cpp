@@ -133,7 +133,7 @@ private:
           worker()
     {
         for (int i = 0; i < nchn; ++i){
-            m_phase_cnt[i] = int64_t(round(phase[i]*2147483647*2.9)); // no idea how these numbers come about, but it works...
+            m_phase_cnt[i] = int64_t(round(phase[i] * 625e6 * 10)); // no idea how these numbers come about, but it works...
             m_freq_cnt[i] = uint64_t(round(freq[i] * 10));
             m_amp[i] *= 6.7465185e9f;
         }
@@ -270,10 +270,14 @@ int main()
     hdl.set_param(SPC_CLOCKMODE, SPC_CM_INTPLL);
     // hdl.set_param(SPC_CLOCKMODE, SPC_CM_EXTREFCLOCK);
     // hdl.set_param(SPC_REFERENCECLOCK, 100 * 1000 * 1000);
-
+    int64_t clock_rate;
+    
     hdl.set_param(SPC_SAMPLERATE, rate);
     hdl.get_param(SPC_SAMPLERATE, &rate);
     printf("Sampling rate set to %.1lf MHz\n", (double)rate / MEGA(1));
+    hdl.set_param(SPC_CLOCKOUT, 1);
+    hdl.get_param(SPC_CLOCKOUTFREQUENCY, &clock_rate);
+    printf("Clock out rate is %.1lf MHz\n", (double)clock_rate / MEGA(1));
     hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);
     hdl.set_param(SPC_TRIG_ANDMASK, 0);
     hdl.set_param(SPC_TRIG_CH_ORMASK0, 0);
@@ -297,16 +301,18 @@ int main()
     std::vector<float> phases = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314,0.23145855,0.37910408,0.66274212};
     */
 
-    /*
-    std::vector<float> amps = {0.9999f};
-    std::vector<double> freqs = {123e6};
-    std::vector<float> phases = {0};
+    
+    //std::vector<float> amps = {0.1f,0.1f,0.1f,0.1f};
+    //std::vector<double> freqs = {81e6,82.5e6,84e6,85.5e6};
+    //std::vector<float> phases = {0.3046,0.0508,0.1068,0.9058};
 
-    std::vector<float> amps2 = {0.9999f};
-    std::vector<double> freqs2 = {120e6};
-    std::vector<float> phases2 = {0};
-    */
+    std::vector<float> amps2 = {0.1446f,0.1554f};
+    std::vector<double> freqs2 = {64e6,83e6};
+    std::vector<float> phases2 = {0.6324,0.2785};
 
+    std::vector<float> amps = {0.1564f, 0.1436f};//, 0.1f};
+    std::vector<double> freqs = {64e6, 83e6};//, 75e6};
+    std::vector<float> phases = {0.0975, 0.5469};//, 0};
 
     // Na chn 0
     //float amp0 = 0.1f;
@@ -326,6 +332,7 @@ int main()
     //std::vector<double> freqs2 = {102.2964e6,107.5968e6,112.8972e6,118.1976e6,123.4980e6,128.7984e6,134.0988e6,139.3992e6,144.6996e6,150e6};
     //std::vector<double> freqs2 = {105.0e6,110.0e6,115.0e6,120.0e6,125.0e6,130.0e6,135.0e6,140.0e6,145.0e6,150.0e6};
     //std::vector<float> phases2 = {1.1030484f,0.57133858f,0.15728503f,0.881126f,0.74086594f,0.81601378f,0.48109314f,0.23145855f,0.37910408f,0.66274212f};
+    /*
     int n = 24;
     std::vector<float> amps(n);
     std::vector<float> phases(n);
@@ -342,7 +349,7 @@ int main()
         freqs2[i] = freqs[i];
         phases[i] = 0;
         phases2[i] = 0;
-    }
+        }*/
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
     float amp_max = 0.9999f;
     if (amps_sum > amp_max)//(amps_sum > 0)//

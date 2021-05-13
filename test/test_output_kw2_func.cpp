@@ -226,6 +226,10 @@ int main()
     hdl.set_param(SPC_SAMPLERATE, rate);
     hdl.get_param(SPC_SAMPLERATE, &rate);
     printf("Sampling rate set to %.1lf MHz\n", (double)rate / MEGA(1));
+    int64_t clock_rate;
+    hdl.set_param(SPC_CLOCKOUT, 1);
+    hdl.get_param(SPC_CLOCKOUTFREQUENCY, &clock_rate);
+    printf("Clock out rate is %.1lf MHz\n", (double)clock_rate / MEGA(1));
     hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);
     hdl.set_param(SPC_TRIG_ANDMASK, 0);
     hdl.set_param(SPC_TRIG_CH_ORMASK0, 0);
@@ -258,27 +262,36 @@ int main()
     std::vector<float> amps = {0.1f};
     std::vector<double> freqs = {142e6};
     std::vector<float> phases = {0.23145855};
-*/  
+*/
+    // Latest as of 5/13/21
+    // std::vector<float> amps = {0.010522f,0.008682f,0.010672f,0.010147f,0.011802f,0.00760f,0.009522f,0.011212f,0.010782f,0.011442f,0.010147f,0.007522f,0.008682f,0.011122f,0.010322f,0.011562f,0.009547f,0.009907f,0.009762f,0.00816f};
+    
     /*
-    std::vector<float> amps = {0.5f, 0.5f};
-    std::vector<double> freqs = {123e6, 130e6};
-    std::vector<float> phases = {0, 0};
+    std::vector<float> amps = {0.011933f,0.009117f,0.011107f,0.010582f,0.011870f,0.007224f,0.008946f,0.010836f,0.010006f,0.010866f,0.009771f,0.006746f,0.008306f,0.010546f,0.009946f,0.010986f,0.009615f,0.010142f,0.010806f,0.009771f};
     */
 
+    // Latest as of 5/13/21
+    // std::vector<double> freqs = {64e6,65e6,66e6,67e6,68e6,69e6,70e6,71e6,72e6,73e6,74e6,75e6,76e6,77e6,78e6,79e6,80e6,81e6,82e6,83e6};
+    // Latest as of 5/13/21
+    // std::vector<float> phases = {0.372923,0.515662,0.244937,0.798185,0.177665,0.070846,0.051939,0.748572,0.212511,0.737112,0.209474,0.099766,0.367207,0.598121,0.808453,0.425154,0.592815,0.253934,0.244705,0.594812};
+    std::vector<double> freqs = {64e6, 83e6};
+    std::vector<float> phases = {0.372923, 0.594812};
+    std::vector<float> amps = {0.010522f, 0.00816f};
+/*
     // linear spaced equal amplitude
     srand (time(NULL));
-    int n = 64;
+    int n = 20;
     std::vector<float> amps(n);
     std::vector<float> phases(n);
     std::vector<double> freqs(n);
-    double start = 50e6;
-    double end = 150e6;
+    double start = 64e6;
+    double end = 83e6;
     for (int i = 0; i < n; i++) {
         amps[i] = 0.01f;
-        freqs[i] = start + (end - start) * double((i + 1)) / double(n);
-        phases[i] = static_cast<float> (rand()) / static_cast<float> (RAND_MAX) * 2.0f * 3.14f;
+        freqs[i] = start + (end - start +1e6) * double((i)) / double(n);
+        phases[i] = static_cast<float> (rand()) / static_cast<float> (RAND_MAX);
     }
-
+*/
 
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
     float amp_max = 0.9999f; //0.9999f;
@@ -287,7 +300,7 @@ int main()
                        [amps_sum,amp_max](float f){return f/(amps_sum)*amp_max;});
 
     for (int i = 0; i < amps.size(); i++){
-        Log::log("amp: %f, freq: %f, phase %f\n", amps[i], freqs[i]);
+        Log::log("amp: %f, freq: %f, phase %lf\n", amps[i], freqs[i], phases[i]);
     }
     std::vector<MultiStream*> Streams;
     int nchn = amps.size();
