@@ -19,9 +19,16 @@ using namespace NaCs;
 namespace Spcm{
       class Controller {
       public:
-          Controller() :
-              m_stm_mngr(8, 4, 1, cmd_underflow, cmd_underflow, false)
+          Controller()
           {
+              /* StreamManager(uint32_t n_streams, uint32_t max_per_stream,
+                  double step_t, std::atomic<uint64_t> &cmd_underflow,
+                  std::atomic<uint64_t> &underflow, bool startStream = false,
+                  bool startWorker = false) */
+              for (int i = 0; i < n_phys_chn; i++) {
+                  m_stm_mngrs.emplace_back(new StreamManager(8, 4, 1, cmd_underflow, cmd_underflow, false));
+                  max_chns.push_back(32);
+              }
           }
           ~Controller()
           {
@@ -40,32 +47,35 @@ namespace Spcm{
               return m_worker.joinable();
           }
           // StreamManager commands
-          inline uint32_t copy_cmds(Cmd *cmds, uint32_t sz)
+          inline uint32_t copy_cmds(uint32_t idx, Cmd *cmds, uint32_t sz)
           {
-              return m_stm_mngr.copy_cmds(cmds, sz);
+              return m_stm_mngrs[idx]->copy_cmds(cmds, sz);
           }
-          inline bool try_add_cmd(Cmd &cmd)
+          inline bool try_add_cmd(uint32_t idx, Cmd &cmd)
           {
-              return m_stm_mngr.try_add_cmd(cmd);
+              return m_stm_mngrs[idx]->try_add_cmd(cmd);
           }
-          inline void add_cmd(Cmd &cmd)
+          inline void add_cmd(uint32_t idx, Cmd &cmd)
           {
-              m_stm_mngr.add_cmd(cmd);
+              m_stm_mngrs[idx]->add_cmd(cmd);
           }
-          inline void flush_cmd()
+          inline void flush_cmd(uint32_t idx)
           {
-              m_stm_mngr.flush_cmd();
+              m_stm_mngrs[idx]->flush_cmd();
           }
-          void distribute_cmds()
+          void distribute_cmds(uint32_t idx)
           {
-              m_stm_mngr.distribute_cmds();
+              m_stm_mngrs[idx]->distribute_cmds();
+          }
+          inline uint32_t getMaxChn(uint32_t idx) {
+              return max_chns[idx];
           }
           inline uint64_t check_avail()
           {
               return card_avail.load(std::memory_order_relaxed);
           }
           void force_trigger();
-          void runSeq(Cmd *p, size_t sz, bool wait=true);
+          void runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait=true);
       private:
           enum class WorkerRequest : uint8_t {
               None = 0,
@@ -77,7 +87,8 @@ namespace Spcm{
           void tryUnlock();
           void workerFunc();
           void startDMA(uint64_t sz);
-          StreamManager m_stm_mngr;
+          std::vector<std::unique_ptr<StreamManager>> m_stm_mngrs;
+          std::vector<uint32_t> max_chns;
           //Config &m_conf;
 
           bool m_initialized{false};
@@ -96,6 +107,7 @@ namespace Spcm{
           std::atomic<uint64_t> cmd_underflow{0};
           std::atomic<uint64_t> underflow{0};
           std::atomic<uint64_t> card_avail{4 * 1024ll * 1024ll * 1024ll};
+          uint32_t n_phys_chn{1}; // only supports 1 or 2.
       };
 }
 

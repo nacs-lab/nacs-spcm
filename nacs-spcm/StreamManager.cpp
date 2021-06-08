@@ -80,11 +80,11 @@ inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
     // input are commands at a given time. They will be sorted and then distributed to the right streams. Assumes inputs are only amp and freq commands
     if (sz) {
         for (int i = 0; i < sz; ++i) {
-            std::cout << "Considering inside send_cmds before sort " << cmd[i] << std::endl;
+            //std::cout << "Considering inside send_cmds before sort " << cmd[i] << std::endl;
         }
         sort_cmd_chn(cmd, cmd + sz);
         for (int i = 0; i < sz; ++i) {
-            std::cout << "Considering inside send_cmds " << cmd[i] << std::endl;
+            //std::cout << "Considering inside send_cmds " << cmd[i] << std::endl;
         }/*
         uint32_t stream_idx = 0;
         uint32_t tot = 0;
@@ -147,7 +147,7 @@ inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
 
 NACS_EXPORT() void StreamManagerBase::distribute_cmds()
 {
-    std::cout << "Calling distribute_cmds" << std::endl;
+    //std::cout << "Calling distribute_cmds" << std::endl;
     // distribute all commands
     // What needs to be handled
     //   1) Interpret modChn commands and Meta commands
@@ -157,16 +157,20 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
     std::vector<Cmd> non_const_cmds; // non constant commands
     non_const_cmds.reserve(100);
     Cmd *first_cmd = nullptr;// first_cmd is first cmd in a group to send
-    uint32_t t = 0;
+    int64_t t = 0;
     size_t sz_to_send = 0;
     while ((cmd = get_cmd())){
-        std::cout << "Considering " << *cmd << std::endl;
+        //std::cout << "Considering " << *cmd << std::endl;
         if (cmd->op() == CmdType::Meta) {
             // send out previous commands and reset first_cmd
             send_cmds(first_cmd, sz_to_send);
             first_cmd = nullptr;
             sz_to_send = 0;
             // for now, assume meta commands are sent to all
+            if (cmd->chn == (uint32_t)CmdMeta::ResetAll) {
+                // need to reset chn map
+                chn_map.reset();
+            }
             send_cmd_to_all(*cmd);
         }
         else if (cmd->op() == CmdType::ModChn) {
@@ -175,8 +179,11 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
             sz_to_send = 0;
             if (cmd->chn == Cmd::add_chn) {
                 // if add channel command
-                uint32_t stream_num = chn_map.addChn(cmd->final_val); // final_val encodes the real channel number
-                m_streams[stream_num]->add_cmd(*cmd); // add an add channel command to the right stream
+                uint32_t stream_num;
+                if(chn_map.addChn(cmd->final_val, stream_num)) // final_val encodes the real channel number
+                {
+                    m_streams[stream_num]->add_cmd(*cmd); // add an add channel command to the right stream
+                }
             }
             else {
                 var_cmd = *cmd; // needs modification
@@ -188,35 +195,35 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
         }
         else {
             // amplitude, phase or freq command
-            std::cout << "This is a amp, phase or freq command" << std::endl;
+            //std::cout << "This is a amp, phase or freq command" << std::endl;
             var_cmd = *cmd;
             non_const_cmds.push_back(var_cmd);
             //if (!first_cmd){
             //    first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
             //}
             for (int i = 0; i < non_const_cmds.size(); ++i) {
-                std::cout << "non const commands: " << i << " " << non_const_cmds[i] << " at address " << &non_const_cmds[i] << std::endl;
+                //std::cout << "non const commands: " << i << " " << non_const_cmds[i] << " at address " << &non_const_cmds[i] << std::endl;
             }
             if (cmd->t != t) {
                 // send out previous commands, reset first_cmd
                 //std::cout << "size of non const commands " << non_const_cmds.size() << std::endl;
                 if (first_cmd) {
-                    std::cout << "first command is actually " << *first_cmd << std::endl;
-                    std::cout << "first command address " << first_cmd << std::endl;
+                    // std::cout << "first command is actually " << *first_cmd << std::endl;
+                    //              std::cout << "first command address " << first_cmd << std::endl;
                 }
                 if (sz_to_send > 1) {
-                    std::cout << "second command is " << *(first_cmd + 1) << std::endl;
-                    std::cout << "second command address " << first_cmd + 1 << std::endl;
-                    std::cout << "second command address vec " << &first_cmd[1] << std::endl;
+                    // std::cout << "second command is " << *(first_cmd + 1) << std::endl;
+                    //std::cout << "second command address " << first_cmd + 1 << std::endl;
+                    //std::cout << "second command address vec " << &first_cmd[1] << std::endl;
                 }
-                std::cout << "sending cmds in" << std::endl;
+                //std::cout << "sending cmds in" << std::endl;
                 send_cmds(first_cmd, sz_to_send);
                 // std::cout << "Sending " << sz_to_send << " commands starting from " << first_cmd << std::endl;
                 sz_to_send = 1;
                 first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
                 std::cout << "First cmd is now: " << *first_cmd << " at address " << first_cmd << std::endl;
                 t = cmd->t;
-                std:: cout << "Now t is: " << t << std::endl;
+                //std:: cout << "Now t is: " << t << std::endl;
             }
             else {
                 sz_to_send++; // keep on collecting commands
@@ -227,10 +234,10 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
         cmd_next(); // move to next command
     } // while brace
     // send out remaining commands
-    std::cout << "Size to send: " << sz_to_send << std::endl;
-    std::cout << "sending commands final" << std::endl;
+    //std::cout << "Size to send: " << sz_to_send << std::endl;
+    //std::cout << "sending commands final" << std::endl;
     send_cmds(first_cmd, sz_to_send);
-    std::cout << "done with command distribution" << std::endl;
+    //std::cout << "done with command distribution" << std::endl;
 }
 __attribute__((target("avx512f,avx512bw"), flatten))
 NACS_EXPORT() void StreamManagerBase::generate_page()

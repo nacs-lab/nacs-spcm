@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <cmath>
 
 using namespace NaCs;
 
@@ -51,6 +52,8 @@ enum class CmdMeta : uint32_t
 // phase_scale is 2 / (625e6 * 10). We take the integer phase and multiply it by
 // phase_scale to get the actual phase in units of pi. 625e6 * 10 is the max possible frequency.
 
+constexpr uint64_t t_serv_to_client = 32/(625e6) * 1e12; // converts to client time standard which is in ps.
+
 struct Cmd
 {
 private:
@@ -59,72 +62,74 @@ private:
     static_assert((int)CmdType::_MAX < (1 << op_bits), ""); // ensure op_bits are enough to describe the number of commands. << is the left shift operator.
 public:
     static constexpr uint32_t add_chn = (uint32_t(1) << chn_bits) - 1; // code for adding a channel
-    uint32_t t; // start time for command
+    int64_t t; // start time for command
+    int64_t t_client; // time for client and that the function pointer takes
+    uint32_t id; // id only for sorting purposes
     uint8_t _op:op_bits; // op should only contain op_bits amount of information.
     uint32_t chn:chn_bits;
-    int32_t final_val; // final value at end of command.
-    float len = 0; // length of pulse
+    double final_val; // final value at end of command.
+    double len = 0; // length of pulse
     void(*fnptr)(void) = nullptr; // function pointer
     CmdType op() const
     {
         return (CmdType)_op; // returns integer index of operation
     }
     // Functions below are used to get the command object for the desired operation
-    static Cmd getReset(uint32_t t = 0)
+    static Cmd getReset(int64_t t = 0, int64_t t_client = 0, uint32_t id = 0)
     {
-        return Cmd{t, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::Reset, 0}; //initializer list notation, initializes in the order of declared variables above.
+        return Cmd{t, t_client, id, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::Reset, 0}; //initializer list notation, initializes in the order of declared variables above.
     }
-    static Cmd getResetAll(uint32_t t = 0)
+    static Cmd getResetAll(int64_t t = 0, int64_t t_client = 0, uint32_t id = 0)
     {
-        return Cmd{t, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::ResetAll, 0};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::ResetAll, 0};
     }
-    static Cmd getTriggerEnd(uint32_t t = 0)
+    static Cmd getTriggerEnd(int64_t t = 0, int64_t t_client = 0, uint32_t id = 0)
     {
-        return Cmd{t, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::TriggerEnd, 0};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::TriggerEnd, 0};
     }
-    static Cmd getTriggerStart(uint32_t t = 0)
+    static Cmd getTriggerStart(int64_t t = 0, int64_t t_client = 0, uint32_t id = 0)
     {
-        return Cmd{t, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::TriggerStart, 0};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::TriggerStart, 0};
     }
-    static Cmd getAmpSet(uint32_t t, uint32_t chn, int32_t amp)
+    static Cmd getAmpSet(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double amp)
     {
-        return Cmd{t, (uint8_t)CmdType::AmpSet, chn, amp};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::AmpSet, chn, amp};
     }
-    static Cmd getFreqSet(uint32_t t, uint32_t chn, int32_t freq)
+    static Cmd getFreqSet(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double freq)
     {
-        return Cmd{t, (uint8_t)CmdType::FreqSet, chn, freq};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::FreqSet, chn, freq};
     }
-    static Cmd getPhase(uint32_t t, uint32_t chn, int32_t phase)
+    static Cmd getPhase(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double phase)
     {
-        return Cmd{t, (uint8_t)CmdType::Phase, chn, phase};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::Phase, chn, phase};
     }
-    static Cmd getAddChn(uint32_t t)
+    static Cmd getAddChn(int64_t t, int64_t t_client, uint32_t id = 0)
     {
-        return Cmd{t, (uint8_t)CmdType::ModChn, add_chn, 0}; // largest possible chn_number interpretted as adding a channel
+        return Cmd{t, t_client, id, (uint8_t)CmdType::ModChn, add_chn, 0}; // largest possible chn_number interpretted as adding a channel
     }
-    static Cmd getAddChn(uint32_t t, uint32_t chn)
+    static Cmd getAddChn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn)
     {
-        return Cmd{t, (uint8_t)CmdType::ModChn, add_chn, static_cast<int32_t> (chn)}; //overload NOT meant to be used in stream. Meant for usage with real chn ID not chn within a stream
+        return Cmd{t, t_client, id, (uint8_t)CmdType::ModChn, add_chn, static_cast<int32_t> (chn)}; //overload NOT meant to be used in stream. Meant for usage with real chn ID not chn within a stream
     }
-    static Cmd getDelChn(uint32_t t, uint32_t chn)
+    static Cmd getDelChn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn)
     {
-        return Cmd{t, (uint8_t)CmdType::ModChn, chn, 0};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::ModChn, chn, 0};
     }
-    static Cmd getAmpFn(uint32_t t, uint32_t chn, int32_t final_val, float len, void(*fnptr)(void))
+    static Cmd getAmpFn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double final_val, double len, void(*fnptr)(void))
     {
-        return Cmd{t, (uint8_t)CmdType::AmpFn, chn, final_val, len, fnptr};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::AmpFn, chn, final_val, len, fnptr};
     }
-    static Cmd getFreqFn(uint32_t t, uint32_t chn, int32_t final_val, float len, void(*fnptr)(void))
+    static Cmd getFreqFn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double final_val, double len, void(*fnptr)(void))
     {
-        return Cmd{t, (uint8_t)CmdType::FreqFn, chn, final_val, len, fnptr};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::FreqFn, chn, final_val, len, fnptr};
     }
-    static Cmd getAmpVecFn(uint32_t t, uint32_t chn, int32_t final_val, float len, void(*fnptr)(void))
+    static Cmd getAmpVecFn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double final_val, double len, void(*fnptr)(void))
     {
-        return Cmd{t, (uint8_t)CmdType::AmpFn, chn, final_val, len, fnptr};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::AmpFn, chn, final_val, len, fnptr};
     }
-    static Cmd getFreqVecFn(uint32_t t, uint32_t chn, int32_t final_val, float len, void(*fnptr)(void))
+    static Cmd getFreqVecFn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double final_val, double len, void(*fnptr)(void))
     {
-        return Cmd{t, (uint8_t)CmdType::FreqFn, chn, final_val, len, fnptr};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::FreqFn, chn, final_val, len, fnptr};
     }
     const char *name() const; // returns name of cmd
     void dump() const;
@@ -159,7 +164,7 @@ public:
     }
 };
 
-static_assert(sizeof(Cmd) == 24, "");
+//static_assert(sizeof(Cmd) == 24, "");
 
 std::ostream &operator<<(std::ostream &stm, const Cmd &cmd);
 std::ostream &operator<<(std::ostream &stm, const std::vector<Cmd> &cmds); //printing functions
@@ -171,14 +176,14 @@ struct activeCmd {
     activeCmd(const Cmd* cmd) : m_cmd(cmd) {
         if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn) {
 // only precalculate and store if it's vector input. If not calculate in real time.
-            std::vector<uint32_t> ts;
-            ts.reserve((static_cast<size_t> (cmd->len)) + 1); // this should truncate.
+            std::vector<int64_t> ts;
+            ts.reserve(static_cast<size_t>(std::ceil(cmd->len)));
             for (uint32_t i = 0; i < (cmd->len + 1); i++)
-                ts.push_back(i);
-            vals = ((std::vector<float>(*)(std::vector<uint32_t>))(cmd->fnptr))(ts);
+                ts.push_back(i * t_serv_to_client); // convert to t_client
+            vals = ((std::vector<float>(*)(std::vector<int64_t>))(cmd->fnptr))(ts);
         }
     }
-    std::pair<float,float> eval(uint32_t t);
+    std::pair<double,double> eval(int64_t t); // called with server t convention
 };
 
 class StreamBase
@@ -288,7 +293,7 @@ protected:
         // structure which keeps track of the state of a channel
         int64_t phase; // phase_cnt = (0 to 1 phase) * 625e6 * 10
         uint64_t freq; // freq_cnt = real freq * 10
-        float amp; // real amp * 6.7465185e9f
+        double amp; // real amp * 6.7465185e9f
     };
     void generate_page(State *states); //workhorse, takes a vector of states for the channels
     void step(int16_t *out, State *states); // workhorse function to step to next time
@@ -320,7 +325,7 @@ private:
     const Cmd *get_cmd_curt();
     void cmd_next();
     const Cmd *consume_old_cmds(State * states);
-    bool check_start(uint32_t t, uint32_t id);
+    bool check_start(int64_t t, uint32_t id);
     void clear_underflow();
     constexpr static uint32_t output_block_sz = 2048; // units of int16_t. 32 of these per _m512
     // Members accessed by worker threads
@@ -332,8 +337,8 @@ private:
     uint32_t m_end_trigger_pending{0};
     uint32_t m_end_trigger_waiting{0};
     uint32_t m_chns = 0;
-    uint32_t m_cur_t = 0;
-    uint64_t m_output_cnt = 0; // in unit of 8 samples. COME BACK TO THIS TOO.
+    int64_t m_cur_t = 0;
+    uint64_t m_output_cnt = 0; // in unit of 8 bytes, or 32 samples (each sample 2 bits)
     const double m_step_t;
     const Cmd *m_cmd_read_ptr = nullptr;
     size_t m_cmd_read = 0;

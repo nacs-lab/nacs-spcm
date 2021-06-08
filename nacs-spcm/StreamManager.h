@@ -33,19 +33,21 @@ struct ChannelMap {
     ChannelMap(uint32_t n_streams, uint32_t max_per_chn)
         : m_max_per_chn(max_per_chn),
           stream_cnt(n_streams) {
-              for (int i = 0; i < n_streams; i++) {
-                  chn_counts.push_back(0);
-                  chn_map.push_back(UINT_MAX);
-              }
-              for (int i = n_streams; i < (n_streams * max_per_chn); i++) {
-                  chn_map.push_back(UINT_MAX);
-              }
-              std::cout << "Initial chn count: ";
-              for (int i = 0; i < n_streams; i++) {
-                  std::cout << chn_counts[i] << ' ';
-              }
-              std::cout << std::endl;
-          }
+        chn_counts.reserve(n_streams);
+        chn_map.reserve(n_streams * max_per_chn);
+        for (int i = 0; i < n_streams; i++) {
+            chn_counts.push_back(0);
+            chn_map.push_back(UINT_MAX);
+        }
+        for (int i = n_streams; i < (n_streams * max_per_chn); i++) {
+            chn_map.push_back(UINT_MAX);
+        }
+              //std::cout << "Initial chn count: ";
+              //for (int i = 0; i < n_streams; i++) {
+              //    std::cout << chn_counts[i] << ' ';
+              //}
+              //std::cout << std::endl;
+    }
 private:
     inline uint32_t getChn(uint32_t chnid) {
         // returns idx of entry with chnid
@@ -79,16 +81,18 @@ public:
         return chn_map[getIdx(stream_info)];
     }
 
-    inline uint32_t addChn(uint32_t chnid) {
-        // return stream idx to add to
+    inline bool addChn(uint32_t chnid, uint32_t &stream_num) {
+        // fills in stream_num to addChn to, returns true if it's added. returns false, if not.
         if (tot_chns >= (m_max_per_chn * stream_cnt)) {
-            return stream_cnt; // return number of streams if unsuccessful
+            stream_num = stream_cnt; // return number of streams if unsuccessful
+            return false;
         }
         uint32_t idx = getChn(chnid);
         uint32_t stream_idx;
         if (idx != chn_map.size()) // if already added
         {
-            return idx / m_max_per_chn; // return stream num
+            stream_num = idx / m_max_per_chn; // return stream num
+            return false;
         }
         else {
             // add a chn to stream with fewest channels
@@ -109,7 +113,8 @@ public:
             chn_counts[stream_idx] = chn_counts[stream_idx] + 1;
             tot_chns++;
         }
-        return stream_idx;
+        stream_num = stream_idx;
+        return true;
     }
 
     inline std::pair<uint32_t,uint32_t> delChn(uint32_t chnid) {
@@ -128,6 +133,16 @@ public:
             chn_map[stream_last] = UINT_MAX;
             tot_chns--;
             return stream_info;
+        }
+    }
+
+    inline void reset() {
+        for (int i = 0; i < stream_cnt; i++) {
+            chn_counts[i] = 0;
+            chn_map[i] = UINT_MAX;
+        }
+        for (int i = stream_cnt; i < (stream_cnt * m_max_per_chn); i++) {
+            chn_map[i] = UINT_MAX;
         }
     }
 
@@ -188,7 +203,7 @@ public:
     }
     const Cmd *get_cmd();
     void distribute_cmds(); // distributes all commands to streams
-    uint32_t get_cur_t(){
+    int64_t get_cur_t(){
         return m_cur_t;
     }
     inline ChannelMap get_chn_map() {
@@ -254,8 +269,8 @@ private:
     uint32_t m_n_streams = 0;
     uint32_t m_max_per_stream = 0;
     
-    uint32_t m_cur_t = 0; // current time for output
-    uint64_t m_output_cnt = 0; // output count
+    int64_t m_cur_t = 0; // current time for output
+    uint64_t m_output_cnt = 0; // output count, units of output_block_sz
 
     DataPipe<Cmd> m_commands; // command pipe for writers to put in commands
     DataPipe<int16_t> m_output; // pipe for output and hardware to output

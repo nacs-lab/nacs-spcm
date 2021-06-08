@@ -19,6 +19,9 @@ set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS)
 find_package(Sleef REQUIRED)
 find_package(SPCM REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(LLVM REQUIRED CONFIG NO_SYSTEM_ENVIRONMENT_PATH)
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 pkg_check_modules(DEPS REQUIRED nacs-utils>=9.0)
 #find_package(yaml-cpp REQUIRED)
 
@@ -43,6 +46,7 @@ set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${LINKER_FLAGS}")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -ggdb3 -O0")
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
+include_directories("${LLVM_INCLUDE_DIRS}")
 
 add_subdirectory(nacs-spcm)
 add_subdirectory(test)

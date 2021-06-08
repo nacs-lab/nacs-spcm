@@ -166,9 +166,9 @@ NACS_EXPORT() std::ostream &operator<<(std::ostream &stm, const std::vector<Cmd>
     return stm;
 }
 
-std::pair<float, float> activeCmd::eval(uint32_t t) {
+std::pair<double, double> activeCmd::eval(int64_t t) {
     // t is time from beginning of pulse
-    float val, dval;
+    double val, dval;
     if (m_cmd->op() == CmdType::AmpVecFn || m_cmd->op() == CmdType::FreqVecFn) {
         // assume all values are precalculated
         val = vals[t];
@@ -177,8 +177,8 @@ std::pair<float, float> activeCmd::eval(uint32_t t) {
     else if (m_cmd->op() == CmdType::AmpFn || m_cmd->op() == CmdType::FreqFn) {
         // check if t and t + 1 is evaluated
         while (vals.size() < (t + 2)) {
-            float thisval;
-            thisval = ((float(*)(uint32_t))(m_cmd->fnptr))((uint32_t) vals.size());
+            double thisval;
+            thisval = ((double(*)(int64_t))(m_cmd->fnptr))((int64_t) (vals.size() * t_serv_to_client));
             vals.push_back(thisval);
         }
         val = vals[t];
@@ -236,7 +236,7 @@ inline void StreamBase::cmd_next()
 }
 
 // TRIGGER STUFF. COME BACK TO
-inline bool StreamBase::check_start(uint32_t t, uint32_t id)
+inline bool StreamBase::check_start(int64_t t, uint32_t id)
 {
     // The corresponding time must be visible when the id is loaded
     // We don't load the time and the id atomically so it is possible
@@ -309,7 +309,7 @@ StreamBase::consume_old_cmds(State *states)
             if (cmd->t + cmd->len > m_cur_t) {
                 // command still active
                 active_cmds.push_back(new activeCmd(cmd));
-                std::pair<float, float> these_vals;
+                std::pair<double, double> these_vals;
                 these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                 states[cmd->chn].amp = these_vals.first + these_vals.second;
             }
@@ -322,7 +322,7 @@ StreamBase::consume_old_cmds(State *states)
             if (cmd->t + cmd->len > m_cur_t) {
                 // command still active
                 active_cmds.push_back(new activeCmd(cmd));
-                std::pair<float, float> these_vals;
+                std::pair<double, double> these_vals;
                 these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                 states[cmd->chn].freq = uint64_t(these_vals.first + these_vals.second);
             }
@@ -440,10 +440,10 @@ cmd_out:
         // iterate through the number of channels
         auto &state = states[i];
         int64_t phase = state.phase;
-        float amp = state.amp;
+        double amp = state.amp;
         uint64_t freq = state.freq;
         uint64_t df = 0;
-        float damp = 0;
+        double damp = 0;
         // check active commands
         auto it = active_cmds.begin();
         while(it != active_cmds.end()) {
@@ -451,7 +451,7 @@ cmd_out:
             if (this_cmd->chn == i) {
                 if (this_cmd->op() == CmdType::AmpFn || this_cmd->op() == CmdType::AmpVecFn) {
                     if (this_cmd->t + this_cmd->len > m_cur_t) {
-                        std::pair<float, float> these_vals;
+                        std::pair<double, double> these_vals;
                         these_vals = (*it)->eval(m_cur_t - this_cmd->t);
                         amp = these_vals.first;
                         damp = these_vals.second;
@@ -466,7 +466,7 @@ cmd_out:
                 }
                 else if (this_cmd->op() == CmdType::FreqFn || this_cmd->op() == CmdType::FreqVecFn) {
                     if (this_cmd->t + this_cmd->len > m_cur_t) {
-                        std::pair<float, float> these_vals;
+                        std::pair<double, double> these_vals;
                         these_vals = (*it)->eval(m_cur_t - this_cmd->t);
                         freq = uint64_t(these_vals.first);
                         df = uint64_t(these_vals.second);
@@ -537,7 +537,7 @@ cmd_out:
                     if (cmd->t + cmd->len > m_cur_t) {
                         // command still active
                         active_cmds.push_back(new activeCmd(cmd));
-                        std::pair<float, float> these_vals;
+                        std::pair<double, double> these_vals;
                         these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                         amp = these_vals.first;
                         damp = these_vals.second;

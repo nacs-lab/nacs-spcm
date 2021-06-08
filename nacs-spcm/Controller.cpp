@@ -11,6 +11,16 @@ using namespace NaCs;
 namespace Spcm {
 // TIME TRACKING STUFF
 
+typedef int16_t m512i16 __attribute__((vector_size (64)));
+
+static constexpr m512i16 interweave_idx1 = {0, 32, 1, 33, 2, 34, 3, 35, 4, 36, 5, 37,
+                                 6, 38, 7, 39, 8, 40, 9, 41, 10, 42, 11, 43,
+                                 12, 44, 13, 45, 14, 46, 15, 47};
+static constexpr m512i16 interweave_idx2 = {16, 48, 17, 49, 18, 50, 19, 51, 20, 52,
+                                 21, 53, 22, 54, 23, 55, 24, 56, 25, 57,
+                                 26, 58, 27, 59, 28, 60, 29, 61, 30, 62,
+                                 31,63}; // idx1 and idx2 used for interweaving in multi channel output
+
 void Controller::tryUnlock(){
     m_worker_lock.unlock();
     for (int i = 0; i < 16; i++) {
@@ -38,8 +48,10 @@ NACS_EXPORT() void Controller::startWorker()
     ensureInit();
     if (workerRunning())
         return;
-    m_stm_mngr.start_streams();
-    m_stm_mngr.start_worker();
+    for (int i = 0; i < n_phys_chn; ++i) {
+        (*m_stm_mngrs[i]).start_streams();
+        (*m_stm_mngrs[i]).start_worker();
+    }
     m_worker = std::thread(&Controller::workerFunc, this);
 }
 NACS_EXPORT() void Controller::stopWorker()
@@ -47,20 +59,22 @@ NACS_EXPORT() void Controller::stopWorker()
     if (!workerRunning())
         return;
     m_worker_req.store(WorkerRequest::Stop, std::memory_order_relaxed);
-    m_stm_mngr.stop_streams();
-    m_stm_mngr.stop_worker();
+    for (int i = 0; i < n_phys_chn; ++i) {
+        (*m_stm_mngrs[i]).stop_streams();
+        (*m_stm_mngrs[i]).stop_worker();
+    }
     m_worker.join();
 }
-NACS_EXPORT() void Controller::runSeq(Cmd *p, size_t sz, bool wait){
+NACS_EXPORT() void Controller::runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait){
     uint32_t nwrote;
     do {
-        nwrote = copy_cmds(p, sz);
+        nwrote = copy_cmds(idx, p, sz);
         p += nwrote;
         sz -= nwrote;
     } while (sz > 0);
-    flush_cmd();
+    flush_cmd(idx);
     std::cout << "now distributing" << std::endl;
-    distribute_cmds();
+    distribute_cmds(idx);
     std::cout << "after command distribution" << std::endl;
     bool wasRunning = workerRunning();
     if (!wasRunning)
@@ -171,15 +185,22 @@ void Controller::workerFunc()
         //std::cout << "working" << std::endl;
         // relay data from StreamManager to card
         size_t sz;
-        auto *ptr = m_stm_mngr.get_output(sz);
-        //std::cout << "sz: " << sz << std::endl;
-        if (sz < 4096 / 2) {
-            // data not ready
-            CPU::pause();
-            continue;
+        size_t min_sz = 8 * 1024ll * 1024ll * 1024ll; // cannot be this large..
+        std::vector<const int16_t*> ptrs(n_phys_chn, nullptr);
+        for (int i = 0; i < n_phys_chn; ++i) {
+            ptrs[i] = (*m_stm_mngrs[i]).get_output(sz);
+            //std::cout << "sz: " << sz << std::endl;
+            if (sz < 4096 / 2 / n_phys_chn) {
+                // data not ready
+                CPU::pause();
+                continue;
+            }
+            if (sz < min_sz) {
+                min_sz = sz;
+            }
         }
         //std::cout << "stream manager ready" << std::endl;
-        sz = sz & ~(size_t)2047; // make it chunks of 2048
+        min_sz = min_sz & ~(size_t)2047; // make it chunks of 2048
         //read out available number of bytes
         uint64_t count = 0;
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &count);
@@ -190,28 +211,55 @@ void Controller::workerFunc()
             first_avail = false;
         }
         card_avail.store(count, std::memory_order_relaxed); // Not a huge deal if this is wrong...
-        count = std::min(count, uint64_t(sz * 2));
+        count = std::min(count, uint64_t(sz * 2 * n_phys_chn)); // count is number of bytes we can fill. need to account for number of physical channels. 
         if (!count)
             continue;
         if (count & 1)
             abort();
         int16_t* curr_ptr;
+        int16_t* curr_ptr2;
         //std::cout << "storing data" << std::endl;
-        for(int i = 0; i < (count / 2); i += 64/2) {
-            curr_ptr = buff_ptr + buff_pos;
-            // count/2 number of int16_t, each advance advances 512 bytes, so 32 int_16
-            //std::cout << "writing" << std::endl;
-            _mm512_stream_si512((__m512*)curr_ptr, *(__m512*) ptr);
-            buff_pos += 64/2;
-            ptr += 64/2;
-            if (buff_pos >= buff_sz_nele) {
-                buff_pos = 0;
+        if (n_phys_chn == 1) {
+            for(int i = 0; i < (count / 2); i += 64/2) {
+                curr_ptr = buff_ptr + buff_pos;
+                // count/2 number of int16_t, each advance advances 512 bytes, so 32 int_16
+                //std::cout << "writing" << std::endl;
+                _mm512_stream_si512((__m512i*)curr_ptr, *(__m512i*) ptrs[1]);
+                buff_pos += 64/2;
+                ptrs[1] += 64/2;
+                if (buff_pos >= buff_sz_nele) {
+                    buff_pos = 0;
+                }
             }
         }
+        else if (n_phys_chn == 2) {
+            for (int i = 0; i < (count / 2); i+= 64) {
+                curr_ptr = buff_ptr + buff_pos;
+                curr_ptr2 = curr_ptr + 32;
+                __m512i out1, out2, data1, data2;
+                data1 = *(__m512i*)ptrs[1];
+                data2 = *(__m512i*)ptrs[2];
+                out1 = _mm512_mask_permutex2var_epi16(data1, 0xFFFFFFFF,
+                                                      (__m512i) interweave_idx1, data2);
+                out2 = _mm512_mask_permutex2var_epi16(data1, 0xFFFFFFFF,
+                                                      (__m512i) interweave_idx2, data2);
+                _mm512_stream_si512((__m512i*)curr_ptr, out1);
+                _mm512_stream_si512((__m512i*)curr_ptr2, out2);
+                ptrs[1] += 32;
+                ptrs[2] += 32;
+                buff_pos += 64;
+                if (buff_pos >= buff_sz_nele) {
+                    buff_pos = 0;
+                }
+            }
+        }
+        // NO SUPPORT FOR MORE THAN 2 PHYS OUTPUTS AT THE MOMENT
         //std::cout << "done writing" << std::endl;
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
         hdl.check_error();
-        m_stm_mngr.consume_output(count / 2);
+        for (int i = 0; i < n_phys_chn; ++i) {
+            (*m_stm_mngrs[i]).consume_output(count / 2 / n_phys_chn);
+        }
         if (!DMA_started)
         {
             //startDMA(0);
