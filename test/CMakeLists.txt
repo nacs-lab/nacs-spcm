@@ -73,3 +73,6 @@ set_source_files_properties(benchmarks.cpp
 
 add_executable(test-params test_params.cpp)
 target_link_libraries(test-params nacs-spcm)
+
+add_executable(test_config test_Config.cpp)
+target_link_libraries(test_config nacs-spcm yaml-cpp)
