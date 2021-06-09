@@ -4,7 +4,9 @@ set(nacs_spcm_HDRS
   spcm.h
   Stream.h
   StreamManager.h
+  Config.h
   Controller.h
+  DummyServer.h
   SeqCache.h
   IDataCache.h
   Sequence.h)
@@ -13,7 +15,9 @@ set(nacs_spcm_SRCS
   data_stream.cpp
   Stream.cpp
   StreamManager.cpp
+  Config.cpp
   Controller.cpp
+  DummyServer.cpp
   SeqCache.cpp
   IDataCache.cpp
   Sequence.cpp)

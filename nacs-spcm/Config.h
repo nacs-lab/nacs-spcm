@@ -6,6 +6,7 @@
 #include <string>
 #include <map>
 
+#include <nacs-utils/utils.h>
 #include <stdint.h>
 
 using namespace NaCs;
@@ -15,6 +16,7 @@ struct Config {
     std::string listen;
     uint32_t amp{2500};
     int64_t sample_rate{static_cast<int64_t> (625e6)};
+    uint64_t trig_delay{1};
     static Config loadYAML(const char *fname);
 };
 }

@@ -22,6 +22,8 @@ NACS_EXPORT() Config Config::loadYAML(const char *fname)
         conf.amp = amp_node.as<uint32_t>();
     if (auto sample_rate_node = file["sample_rate_mhz"])
         conf.sample_rate = sample_rate_node.as<int64_t>();
+    if (auto trig_node = file["trig_delay_ms"])
+        conf.trig_delay = uint64_t(trig_node.as<double>() * 1000 * 1000);
     return conf;
 }
 
