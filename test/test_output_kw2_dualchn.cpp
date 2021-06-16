@@ -317,17 +317,20 @@ int main()
 //    std::vector<float> phases = {0.57133858};
 //    std::vector<float> amps = {amp0,amp0+0.005};
 //    std::vector<double> freqs = {142e6,149e6};
-//     std::vector<float> phases = {0.81601378,0.48109314};
-//    std::vector<float> amps = {0.148};
+//    std::vector<float> phases = {0.81601378,0.48109314};
+//    std::vector<float> amps = {amp0};
 //    std::vector<double> freqs = {149e6};
 //    std::vector<float> phases = {0.48109314};
-//    std::vector<float> amps = {amp0+0.005,amp0-0.02,amp0-0.008,amp0+0.004,amp0+0.021};
-//    std::vector<double> freqs = {114e6,128e6,142e6,156e6,170e6};
-//    std::vector<float> phases = {0.57133858,0.881126,0.81601378,0.23145855,0.66274212};
+
+//     std::vector<float> amps = {amp0+0.005,amp0-0.022,amp0-0.008,amp0+0.002,amp0+0.025};
+         std::vector<float> amps = {amp0+0.005,amp0-0.025,amp0-0.008,amp0-0.001,amp0+0.025};
+    std::vector<double> freqs = {114e6,128e6,142e6,156e6,170e6};
+    std::vector<float> phases = {0.57133858,0.881126,0.81601378,0.23145855,0.66274212};
+
 // 6 traps
-    std::vector<float> amps = {amp0+0.003/1.5,amp0-0.019/1.5,amp0-0.008/1.5,amp0+0.005/1.5,amp0+0.038/1.5,amp0+0.089/1.5};
-    std::vector<double> freqs = {114e6,121e6,142e6,149e6,170e6,177e6};
-    std::vector<float> phases = {0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314};
+//    std::vector<float> amps = {amp0+0.003/1.5,amp0-0.019/1.5,amp0-0.008/1.5,amp0+0.005/1.5,amp0+0.038/1.5,amp0+0.089/1.5};
+//    std::vector<double> freqs = {114e6,121e6,142e6,149e6,170e6,177e6};
+//    std::vector<float> phases = {0.57133858,0.15728503,0.881126,0.74086594,0.81601378,0.48109314};
     
     
     // Cs chn 1
@@ -337,21 +340,25 @@ int main()
 //    std::vector<float> amps2 = {amp0};
 //    std::vector<double> freqs2 = {123.4980e6};
 //    std::vector<float> phases2 = {0.66274212};
-    //std::vector<float> amps2 = {amp0+0.0055,amp0};
-    //std::vector<double> freqs2 = {123.4980e6,128.7984e6};
-    //std::vector<float> phases2 = {0.74086594,0.81601378};
-//    std::vector<float> amps2 = {0.148};
-//    std::vector<double> freqs2 = {128.7984e6};
+//    std::vector<float> amps2 = {amp0+0.0055,amp0};
+//    std::vector<double> freqs2 = {107e6,124e6};
+//    std::vector<float> phases2 = {0.74086594,0.81601378};
+//    std::vector<float> amps2 = {amp0};
+//    std::vector<double> freqs2 = {129.0e6};
 //    std::vector<float> phases2 = {0.81601378};
-//    std::vector<float> amps2 = {amp0-0.00,amp0+0.005,amp0-0.0042,amp0+0.01,amp0+0.0225};
-//    std::vector<double> freqs2 = {107.5968e6,118.1976e6,128.7984e6,139.3992e6,150e6};
-//    std::vector<float> phases2 = {1.1030484,0.15728503,0.74086594,0.48109314,0.37910408};    
-// 6 traps
-    std::vector<float> amps2 = {amp0+0.041/1.5,amp0-0.013/1.5,amp0-0.01/1.5,amp0-0.015/1.5,amp0+0.012/1.5,amp0+0.017/1.5};
-//    std::vector<double> freqs2 = {102.2964e6 - 0.05e6,107.5968e6 - 0.05e6,123.4980e6 - 0.05e6,128.7984e6 - 0.05e6,144.6996e6,150e6};
-    std::vector<double> freqs2 = {102.2964e6,107.5968e6,123.4980e6,128.7984e6,144.6996e6,150e6};
 
-    std::vector<float> phases2 = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378};    
+    std::vector<float> amps2 = {amp0-0.00,amp0+0.01,amp0-0.0042,amp0+0.01,amp0+0.024};
+    std::vector<double> freqs2 = {107.5968e6,118.1976e6,128.7984e6,139.3992e6,150e6};
+     //std::vector<double> freqs2 = {107e6,118e6,129e6,140e6,151e6};
+    // std::vector<double> freqs2 = {107e6,118e6,129e6,140e6,151e6};
+     std::vector<float> phases2 = {1.1030484,0.15728503,0.74086594,0.48109314,0.37910408};
+
+// 6 traps
+//    std::vector<float> amps2 = {amp0+0.041/1.5,amp0-0.013/1.5,amp0-0.01/1.5,amp0-0.015/1.5,amp0+0.012/1.5,amp0+0.017/1.5};
+//    std::vector<double> freqs2 = {102.2964e6 - 0.05e6,107.5968e6 - 0.05e6,123.4980e6 - 0.05e6,128.7984e6 - 0.05e6,144.6996e6,150e6};
+//    std::vector<double> freqs2 = {102.2964e6,107.5968e6,123.4980e6,128.7984e6,144.6996e6,150e6};
+
+//    std::vector<float> phases2 = {1.1030484,0.57133858,0.15728503,0.881126,0.74086594,0.81601378};    
     
     
     float amps_sum = std::accumulate(amps.begin(), amps.end(), 0.0f);
