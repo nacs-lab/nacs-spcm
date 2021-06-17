@@ -30,12 +30,7 @@ public:
     //bool seqDone(uint64_t) const;
 
     //bool stop();
-
-    void run(int fd, const std::function<int(int)> &cb);
-    void run()
-    {
-        run(-1, [] (int) {return 0;});
-    }
+    void run();
     private:
             //struct QueueItem {
             //    const SeqCache::Entry *entry;
@@ -49,6 +44,7 @@ public:
             //QueueItem popSeq();
     //void seqRunner();
     bool recvMore(zmq::message_t&);
+public:
     Config m_conf;
     zmq::context_t m_zmqctx;
     zmq::socket_t m_zmqsock;

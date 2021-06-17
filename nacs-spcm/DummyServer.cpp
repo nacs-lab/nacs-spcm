@@ -4,7 +4,10 @@
 
 #include <nacs-utils/zmq_utils.h>
 #include <nacs-utils/fd_utils.h>
+#include <nacs-utils/processor.h>
 #include <nacs-utils/timer.h>
+
+#include <llvm/Support/Host.h>
 
 #include <system_error>
 #include <thread>
@@ -21,6 +24,7 @@ NACS_EXPORT() DummyServer::DummyServer(Config conf) :
     m_zmqctx(),
     m_zmqsock(m_zmqctx, ZMQ_ROUTER)
 {
+    std::cout << m_conf.listen << std::endl;
     m_zmqsock.bind(m_conf.listen);
     m_serv_id = getTime();
     std::cout << "Server ID: " << m_serv_id << std::endl;
@@ -34,11 +38,22 @@ NACS_EXPORT() DummyServer::DummyServer(Config conf) :
 
     //bool stop();
 
+inline std::string join_feature_strs(const std::vector<std::string> &strs)
+{
+    size_t nstr = strs.size();
+    if (!nstr)
+        return std::string("");
+    std::string str = strs[0];
+    for (size_t i = 1; i < nstr; i++)
+        str += ',' + strs[i];
+    return str;
+}
+
 inline bool DummyServer::recvMore(zmq::message_t &msg) {
     return ZMQ::recv_more(m_zmqsock, msg);
 }
 
-NACS_EXPORT() void DummyServer::run(int fd, const std::function<int(int)> &cb)
+NACS_EXPORT() void DummyServer::run()
 {
     uint64_t seqcnt = 0;
     zmq::message_t empty(0);
@@ -60,6 +75,7 @@ NACS_EXPORT() void DummyServer::run(int fd, const std::function<int(int)> &cb)
         else if (ZMQ::match(msg, "req_client_id")) {
             uint64_t client_id;
             client_id = getTime();
+            std::cout << "client id: " << client_id << std::endl;
             ZMQ::send_addr(m_zmqsock, addr, empty);
             //ZMQ::send_more(m_zmqsock, ZMQ::bits_msg(m_serv_id));
             ZMQ::send(m_zmqsock, ZMQ::bits_msg(client_id));
@@ -71,9 +87,15 @@ NACS_EXPORT() void DummyServer::run(int fd, const std::function<int(int)> &cb)
         else if (ZMQ::match(msg, "req_triple")) {
             // TODO: reply correctly
             ZMQ::send_addr(m_zmqsock, addr, empty);
-            ZMQ::send_more(m_zmqsock, ZMQ::str_msg("triple"));
-            ZMQ::send_more(m_zmqsock, ZMQ::str_msg("cpu"));
-            ZMQ::send(m_zmqsock, ZMQ::str_msg("features"));
+            auto triple = llvm::sys::getProcessTriple();
+            ZMQ::send_more(m_zmqsock, ZMQ::str_msg(triple.data()));
+            auto &host_info = CPUInfo::get_host();
+            auto res = host_info.get_llvm_target(LLVM_VERSION_MAJOR);
+            ZMQ::send_more(m_zmqsock, ZMQ::str_msg(res.first.data()));
+            // make feature string from vector
+            auto features = res.second;
+            auto feature_str = join_feature_strs(features);
+            ZMQ::send(m_zmqsock, ZMQ::str_msg(feature_str.data()));
         }
         else if (ZMQ::match(msg, "run_seq")) {
             // TODO read out info to check protocol on client side

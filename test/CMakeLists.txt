@@ -76,3 +76,6 @@ target_link_libraries(test-params nacs-spcm)
 
 add_executable(test_config test_Config.cpp)
 target_link_libraries(test_config nacs-spcm yaml-cpp)
+
+add_executable(test_dummyServer test_DummyServer.cpp)
+target_link_libraries(test_dummyServer nacs-spcm yaml-cpp zmq)
