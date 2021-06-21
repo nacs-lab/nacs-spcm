@@ -416,14 +416,14 @@ cmd_out:
             m_end_triggered.store(m_end_trigger_waiting, std::memory_order_relaxed);
             m_end_trigger_waiting = m_end_trigger_pending;
             if (m_end_trigger_pending) {
-                // set_end_trigger(out); TODO FIX THIS!
+                set_end_trigger(out);
             }
         }
     }
     else if (unlikely(m_end_trigger_pending)) {
         m_end_trigger_waiting = m_end_trigger_pending;
         m_end_trigger_pending = 0;
-        // set_end_trigger(out); TODO FIX THIS!
+        set_end_trigger(out);
     }
     // calculate actual output.
     // For testing purposes. At the moment keep the output simple.

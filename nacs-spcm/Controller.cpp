@@ -45,25 +45,34 @@ inline bool Controller::checkRequest()
 }
 NACS_EXPORT() void Controller::startWorker()
 {
-    ensureInit();
     if (workerRunning())
         return;
-    for (int i = 0; i < n_phys_chn; ++i) {
-        (*m_stm_mngrs[i]).start_streams();
-        (*m_stm_mngrs[i]).start_worker();
+    {
+        std::lock_guard<std::mutex> locker(m_worker_lock);
+        ensureInit();
+        initChnsAndBuffer();
+        for (int i = 0; i < n_phys_chn; ++i) {
+            (*m_stm_mngrs[m_out_chns[i]]).start_streams();
+            (*m_stm_mngrs[m_out_chns[i]]).start_worker();
+        }
+        m_worker_req.store(WorkerRequest::None, std::memory_order_relaxed);
+        m_worker = std::thread(&Controller::workerFunc, this);
     }
-    m_worker = std::thread(&Controller::workerFunc, this);
 }
 NACS_EXPORT() void Controller::stopWorker()
 {
     if (!workerRunning())
         return;
     m_worker_req.store(WorkerRequest::Stop, std::memory_order_relaxed);
-    for (int i = 0; i < n_phys_chn; ++i) {
-        (*m_stm_mngrs[i]).stop_streams();
-        (*m_stm_mngrs[i]).stop_worker();
+    {
+        std::lock_guard<std::mutex> locker(m_worker_lock);
+        for (int i = 0; i < n_phys_chn; ++i) {
+            (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
+            (*m_stm_mngrs[m_out_chns[i]]).stop_worker();
+        }
+        stopCard();
+        m_worker.join();
     }
-    m_worker.join();
 }
 NACS_EXPORT() void Controller::runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait){
     uint32_t nwrote;
@@ -92,9 +101,9 @@ NACS_EXPORT() void Controller::runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait
 
 void Controller::init()
 {
-    hdl.ch_enable(CHANNEL0); // only one channel activated
-    hdl.enable_out(0, true);
-    hdl.set_amp(0, 2500);
+    //hdl.ch_enable(CHANNEL0); // only one channel activated
+    //hdl.enable_out(0, true);
+    //hdl.set_amp(0, 2500);
     hdl.set_param(SPC_CLOCKMODE, SPC_CM_INTPLL);
     hdl.set_param(SPC_CARDMODE, SPC_REP_FIFO_SINGLE); // set the FIFO single replay mode
     hdl.write_setup();
@@ -115,7 +124,7 @@ void Controller::init()
     printf("max_dac: %d\n", max_dac);
 
     int64_t rate = int64_t(625e6);
-    hdl.set_param(SPC_CLOCKMODE, SPC_CM_INTPLL);
+    // hdl.set_param(SPC_CLOCKMODE, SPC_CM_INTPLL);
     // hdl.set_param(SPC_CLOCKMODE, SPC_CM_EXTREFCLOCK);
     // hdl.set_param(SPC_REFERENCECLOCK, 100 * 1000 * 1000);
 
@@ -134,16 +143,71 @@ void Controller::init()
     hdl.set_param(SPC_TRIG_CH_ANDMASK1, 0);
 
     // Enable output (since M4i).
-    hdl.set_param(SPC_ENABLEOUT0, 1);
-    hdl.set_param(SPC_FILTER0, 0);
+    //hdl.set_param(SPC_ENABLEOUT0, 1);
+    //hdl.set_param(SPC_FILTER0, 0);
 
     // Define transfer buffer
+    //buff_ptr = (int16_t*)mapAnonPage(2 * buff_sz_nele, Prot::RW);
+    //buff_pos = 0;
+    //hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 4096 * 32,
+    //                   (void*)buff_ptr, 0, 2 * buff_sz_nele);
+//hdl.check_error();
+    m_initialized = true;
+}
+
+void Controller::initChnsAndBuffer()
+{
+    // initialize channels and buffers based on m_out_chns
+    if (DMA_started)
+        stopCard();
+    uint8_t chn_bits = 0;
+    for (int i = 0; i < n_phys_chn; i++) {
+        if (m_out_chns[i] == 0) {
+            chn_bits = chn_bits | CHANNEL0;
+            hdl.enable_out(0, true);
+            hdl.set_amp(0, 2500);
+            hdl.set_param(SPC_FILTER0, 0);
+        }
+        else if (m_out_chns[i] == 1) {
+            chn_bits = chn_bits | CHANNEL1;
+            hdl.enable_out(1, true);
+            hdl.set_amp(1, 2500);
+            hdl.set_param(SPC_FILTER1, 0);
+        }
+        else if (m_out_chns[i] == 2) {
+            chn_bits = chn_bits | CHANNEL2;
+            hdl.enable_out(2, true);
+            hdl.set_amp(2, 2500);
+            hdl.set_param(SPC_FILTER2, 0);
+        }
+        else if (m_out_chns[i] == 3) {
+            chn_bits = chn_bits | CHANNEL3;
+            hdl.enable_out(3, true);
+            hdl.set_amp(3, 2500);
+            hdl.set_param(SPC_FILTER3, 0);
+        }
+    }
+    hdl.ch_enable(chn_bits);
+    hdl.write_setup();
+
     buff_ptr = (int16_t*)mapAnonPage(2 * buff_sz_nele, Prot::RW);
     buff_pos = 0;
+    // TODO: Buffer size?
     hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 4096 * 32,
                      (void*)buff_ptr, 0, 2 * buff_sz_nele);
     hdl.check_error();
 }
+
+void Controller::stopCard()
+{
+    // stop DMA transfer and card.
+    hdl.cmd(M2CMD_DATA_STOPDMA);
+    hdl.check_error();
+    hdl.cmd(M2CMD_CARD_STOP);
+    hdl.check_error();
+    DMA_started = false;
+}
+
 NACS_EXPORT() void Controller::force_trigger()
 {
     std::cout << "calling force trigger" << std::endl;
@@ -188,7 +252,7 @@ void Controller::workerFunc()
         size_t min_sz = 8 * 1024ll * 1024ll * 1024ll; // cannot be this large..
         std::vector<const int16_t*> ptrs(n_phys_chn, nullptr);
         for (int i = 0; i < n_phys_chn; ++i) {
-            ptrs[i] = (*m_stm_mngrs[i]).get_output(sz);
+            ptrs[i] = (*m_stm_mngrs[m_out_chns[i]]).get_output(sz);
             //std::cout << "sz: " << sz << std::endl;
             if (sz < 4096 / 2 / n_phys_chn) {
                 // data not ready
@@ -258,7 +322,7 @@ void Controller::workerFunc()
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
         hdl.check_error();
         for (int i = 0; i < n_phys_chn; ++i) {
-            (*m_stm_mngrs[i]).consume_output(count / 2 / n_phys_chn);
+            (*m_stm_mngrs[m_out_chns[i]]).consume_output(count / 2 / n_phys_chn);
         }
         if (!DMA_started)
         {

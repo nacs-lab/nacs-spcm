@@ -406,7 +406,7 @@ NACS_EXPORT() void SeqCache::TotSequence::addPulse(uint32_t enabled, uint32_t id
                   uint8_t phys_chn, uint32_t chn, void (*fnptr)(void))
 {
     //bool res = false;
-    if (phys_chn >= seqs.size()) {
+    while (phys_chn >= seqs.size()) {
         seqs.emplace_back(&values, &types, true);
         //res = true;
     }

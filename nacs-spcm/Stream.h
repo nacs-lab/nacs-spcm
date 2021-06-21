@@ -241,14 +241,14 @@ public:
         }
     }
     // RELATED TO TRIGGER. MIGHT NOT BE NEEDED
-    inline uint32_t get_end_id()
-    {
-        return ++m_end_trigger_cnt;
-    }
-    inline uint32_t get_start_id()
-    {
-        return ++m_start_trigger_cnt;
-    }
+    //inline uint32_t get_end_id()
+    //{
+    //    return ++m_end_trigger_cnt;
+    //}
+    //inline uint32_t get_start_id()
+    //{
+    //    return ++m_start_trigger_cnt;
+    //}
     inline bool slow_mode() const
     {
         return m_slow_mode.load(std::memory_order_relaxed);
@@ -349,8 +349,8 @@ private:
     Cmd *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr; //location to write commands to
     size_t m_cmd_wrote = 0;
     size_t m_cmd_max_write = 0;
-    uint32_t m_end_trigger_cnt{0};
-    uint32_t m_start_trigger_cnt{0};
+    //uint32_t m_end_trigger_cnt{0};
+    //uint32_t m_start_trigger_cnt{0};
 
     DataPipe<Cmd> m_commands;
     DataPipe<int16_t> m_output;

@@ -27,6 +27,9 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
     // go through pulses, add them to cmd_vector and then sort.
     std::vector<uint32_t> active_chns;
     std::vector<Cmd> cmds;
+    if (pulses.size() == 0) {
+        return cmds;
+    }
     cmds.reserve(pulses.size());
     int64_t t;
     uint32_t chn;

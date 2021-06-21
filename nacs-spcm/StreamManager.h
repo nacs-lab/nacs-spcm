@@ -168,6 +168,20 @@ public:
     {
         return m_output.read_size(sz);
     }
+    inline void set_start_trigger(uint32_t v, uint64_t t)
+    {
+        for (int i = 0; i < m_n_streams; i++) {
+            (*m_streams[i]).set_start_trigger(v, t);
+        }
+    }
+    inline uint32_t get_end_triggered()
+    {
+        uint32_t min_end_triggered = UINT_MAX;
+        for (int i = 0; i < m_n_streams; i++) {
+            min_end_triggered = std::min(min_end_triggered, (*m_streams[i]).end_triggered());
+        }
+        return min_end_triggered;
+    }
     inline size_t copy_cmds(Cmd *cmds, size_t sz)
     {
         if (!probe_cmd_input())
