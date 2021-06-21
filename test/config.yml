@@ -1,0 +1,6 @@
+#
+
+listen: tcp//*:8888
+amp: 2
+sample_rate_mhz: 625
+trig_delay_ms: 15
