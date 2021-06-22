@@ -9,7 +9,8 @@ set(nacs_spcm_HDRS
   DummyServer.h
   SeqCache.h
   IDataCache.h
-  Sequence.h)
+  Sequence.h
+  Server.h)
 set(nacs_spcm_SRCS
   spcm.cpp
   data_stream.cpp
@@ -20,7 +21,8 @@ set(nacs_spcm_SRCS
   DummyServer.cpp
   SeqCache.cpp
   IDataCache.cpp
-  Sequence.cpp)
+  Sequence.cpp
+  Server.cpp)
 set(nacs_spcm_LINKS ${SLEEF_LIBRARIES} ${SPCM_LIBRARIES} ${DEPS_LIBRARIES})
 set_source_files_properties(data_stream.cpp Stream.cpp StreamManager.cpp Controller.cpp SeqCache.cpp IDataCache.cpp Sequence.cpp Server.cpp
   PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")

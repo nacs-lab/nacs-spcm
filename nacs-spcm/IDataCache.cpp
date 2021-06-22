@@ -11,7 +11,7 @@ static inline size_t IDataEntrySize(const T &entry)
     return 16 + entry->second.m_data.size() * 8;
 }
 
-NACS_EXPORT() bool IDataCache::get(uint64_t client_id, uint64_t data_id, uint8_t *in_ptr, size_t in_sz, Entry* &entry) {
+NACS_EXPORT() bool IDataCache::get(uint64_t client_id, uint64_t data_id, const uint8_t *in_ptr, size_t in_sz, Entry* &entry) {
     if (get(client_id, data_id, entry)){
         return true;
     }

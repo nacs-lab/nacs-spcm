@@ -39,7 +39,7 @@ public:
     {
     }
     //bool store(std::string name, uint64_t* start, size_t sz);
-    bool get(uint64_t client_id, uint64_t data_id, uint8_t *in_ptr, size_t sz, Entry* &entry);
+    bool get(uint64_t client_id, uint64_t data_id, const uint8_t *in_ptr, size_t sz, Entry* &entry);
     bool get(uint64_t client_id, uint64_t data_id, Entry* & entry);
     void unref(const Entry &entry) const;
     bool hasData(uint64_t client_id, uint64_t data_id);

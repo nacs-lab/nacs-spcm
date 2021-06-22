@@ -21,7 +21,7 @@ class SeqCache {
 public:
     struct TotSequence {
     public:
-        TotSequence(SeqCache& cache, uint64_t client_id, uint8_t* &msg_bytes, uint32_t &sz);
+        TotSequence(SeqCache& cache, uint64_t client_id, const uint8_t* &msg_bytes, uint32_t &sz);
         TotSequence(TotSequence&&) = default;
         uint64_t obj_id;
         uint32_t nconsts;
@@ -65,9 +65,9 @@ public:
     };
 
     SeqCache(size_t szlim);
-    bool getAndFill(uint64_t client_id, uint64_t seq_id, uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry, bool is_seq_sent);
-    bool getAndFill(uint64_t client_id, uint64_t seq_id, uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry);
-    bool get(uint64_t client_id, uint64_t seq_id, uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry);
+    bool getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry, bool is_seq_sent);
+    bool getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry);
+    bool get(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry);
     void unref(const Entry &entry) const;
     bool hasSeq(uint64_t client_id, uint64_t seq_id);
 

@@ -11,7 +11,7 @@ static inline size_t entrySize(const T &entry)
     return 16 + entry->second.m_seq.code_len; // use code_len as a proxy
 }
 
-static inline void bypassData(uint8_t* &msg_bytes, uint32_t &sz) {
+static inline void bypassData(const uint8_t* &msg_bytes, uint32_t &sz) {
     // use this function to go through the IData
     // [n_interp_data: 4B][[ID: 8B][name: NUL-term-string][0:1B] / ([1:1B] [len: 4B][[data: 8B] x len]) x ninter_data]
     uint32_t n_interp_data;
@@ -46,7 +46,7 @@ m_szlim(szlim)
 {
 }
 
-NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry, bool is_seq_sent){
+NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry, bool is_seq_sent){
     if (is_seq_sent) {
         return getAndFill(client_id, seq_id, msg_bytes, sz, entry);
     }
@@ -67,7 +67,7 @@ NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, uin
     return true;
 }
 
-NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry){
+NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry){
     // This version is called if seq is sent!
     if (get(client_id, seq_id, entry)){
         // now fill in value
@@ -196,7 +196,7 @@ NACS_EXPORT() bool SeqCache::hasSeq(uint64_t client_id, uint64_t seq_id) {
     return m_cache.count(this_key) >= 1;
 }
 
-NACS_EXPORT() SeqCache::TotSequence::TotSequence(SeqCache& cache, uint64_t client_id, uint8_t* &msg_bytes, uint32_t &sz) :
+NACS_EXPORT() SeqCache::TotSequence::TotSequence(SeqCache& cache, uint64_t client_id, const uint8_t* &msg_bytes, uint32_t &sz) :
 m_cache(cache)
 {
     // [n_interp_data: 4B][[ID: 8B][name: NUL-term-string][0:1B] / ([1:1B] [len: 4B][[data: 8B] x len]) x ninter_data][objfile_size: 4B][object_file: objfile_size][value_array_name: NUL-term-string]
@@ -393,7 +393,7 @@ m_cache(cache)
     m_cache.m_engine.reset_dyld();
 }
 
-NACS_EXPORT() Sequence& SeqCache::TotSequence::getSeq(uint32_t idx){
+NACS_EXPORT() Sequence& SeqCache::TotSequence::getSeq(uint32_t idx) {
     if (idx >= seqs.size()) {
         // idx is not found, return invalid sequence
         return invalid_seq;

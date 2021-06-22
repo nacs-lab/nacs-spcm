@@ -100,11 +100,11 @@ namespace Spcm{
           {
               return m_stm_mngrs[idx]->copy_cmds(cmds, sz);
           }
-          inline bool try_add_cmd(uint32_t idx, Cmd &cmd)
+          inline bool try_add_cmd(uint32_t idx, Cmd cmd)
           {
               return m_stm_mngrs[idx]->try_add_cmd(cmd);
           }
-          inline void add_cmd(uint32_t idx, Cmd &cmd)
+          inline void add_cmd(uint32_t idx, Cmd cmd)
           {
               m_stm_mngrs[idx]->add_cmd(cmd);
           }
@@ -125,6 +125,16 @@ namespace Spcm{
           }
           void force_trigger();
           void runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait=true);
+          bool waitPending() {
+              return false;
+          }
+          inline uint32_t get_end_triggered() {
+              uint32_t min_end_triggered = UINT_MAX;
+              for (int i = 0; i < n_phys_chn; i++) {
+                  min_end_triggered = std::min(min_end_triggered, (*(m_stm_mngrs[m_out_chns[i]])).get_end_triggered());
+              }
+              return min_end_triggered;
+          }
       private:
           enum class WorkerRequest : uint8_t {
               None = 0,
