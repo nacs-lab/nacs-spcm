@@ -5,6 +5,7 @@
 
 #include "Controller.h"
 #include "Config.h"
+#include "DummyController.h"
 #include "SeqCache.h"
 
 #include <zmq.hpp>
@@ -56,7 +57,7 @@ public:
         zmq::context_t m_zmqctx;
         zmq::socket_t m_zmqsock;
         const int m_evfd;
-        Controller m_ctrl;
+    DummyController m_ctrl;
     SeqCache m_cache;
         std::atomic<uint64_t> m_seqfin{0};
         mutable std::mutex m_seqlock;

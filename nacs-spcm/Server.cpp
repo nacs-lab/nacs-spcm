@@ -4,7 +4,10 @@
 
 #include <nacs-utils/zmq_utils.h>
 #include <nacs-utils/fd_utils.h>
+#include <nacs-utils/processor.h>
 #include <nacs-utils/timer.h>
+
+#include <llvm/Support/Host.h>
 
 #include <system_error>
 #include <thread>
@@ -110,7 +113,7 @@ NACS_INTERNAL void Server::seqRunner()
             uint8_t phys_chn_idx = outChns[i];
             std::vector<Cmd> preSend;
             if (entry.start_trigger) {
-                preSend.push_back(Cmd::getTriggerStart(0, entry.start_trigger));
+                preSend.push_back(Cmd::getTriggerStart(0, 0, entry.start_trigger));
             }
             auto &tot_seq = entry.entry->m_seq;
             auto &this_seq = tot_seq.getSeq(phys_chn_idx);
@@ -134,7 +137,7 @@ NACS_INTERNAL void Server::seqRunner()
             if (!m_running)
                 return;
             m_cache.unref(*entry.entry);
-            m_ctrl.add_cmd(phys_chn_idx, Cmd::getTriggerEnd(0, fin_id));
+            m_ctrl.add_cmd(phys_chn_idx, Cmd::getTriggerEnd(0, 0, fin_id));
             m_ctrl.flush_cmd(phys_chn_idx);
             while (m_ctrl.get_end_triggered() < fin_id && controllerRunning() && m_running)
                 std::this_thread::sleep_for(1ms);
@@ -142,6 +145,17 @@ NACS_INTERNAL void Server::seqRunner()
             writeEvent(m_evfd);
         }
     }
+}
+
+inline std::string join_feature_strs(const std::vector<std::string> &strs)
+{
+    size_t nstr = strs.size();
+    if (!nstr)
+        return std::string("");
+    std::string str = strs[0];
+    for (size_t i = 1; i < nstr; i++)
+        str += ',' + strs[i];
+    return str;
 }
 
 inline bool Server::recvMore(zmq::message_t &msg) {
@@ -171,12 +185,30 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &tr
             send_reply(addr, ZMQ::bits_msg(false));
             goto out;
         }
-        else if (ZMQ::match(msg, "allocate_id")) {
+        else if (ZMQ::match(msg, "req_client_id")) {
             uint64_t client_id;
             client_id = getTime();
+            std::cout << "client id: " << client_id << std::endl;
             ZMQ::send_addr(m_zmqsock, addr, empty);
-            ZMQ::send_more(m_zmqsock, ZMQ::bits_msg(m_serv_id));
+            //ZMQ::send_more(m_zmqsock, ZMQ::bits_msg(m_serv_id));
             ZMQ::send(m_zmqsock, ZMQ::bits_msg(client_id));
+        }
+        else if (ZMQ::match(msg, "req_server_id")) {
+            ZMQ::send_addr(m_zmqsock,addr, empty);
+            ZMQ::send(m_zmqsock, ZMQ::bits_msg(m_serv_id));
+        }
+        else if (ZMQ::match(msg, "req_triple")) {
+            // TODO: reply correctly
+            ZMQ::send_addr(m_zmqsock, addr, empty);
+            auto triple = llvm::sys::getProcessTriple();
+            ZMQ::send_more(m_zmqsock, ZMQ::str_msg(triple.data()));
+            auto &host_info = CPUInfo::get_host();
+            auto res = host_info.get_llvm_target(LLVM_VERSION_MAJOR);
+            ZMQ::send_more(m_zmqsock, ZMQ::str_msg(res.first.data()));
+            // make feature string from vector
+            auto features = res.second;
+            auto feature_str = join_feature_strs(features);
+            ZMQ::send(m_zmqsock, ZMQ::str_msg(feature_str.data()));
         }
         else if (ZMQ::match(msg, "run_seq")) {
             // WORK OUT INITIALIZATION LOGIC

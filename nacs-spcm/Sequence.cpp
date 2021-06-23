@@ -54,7 +54,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
             active_chns.push_back(chn);
         }
         cmds.push_back({
-                .t = t * 625 / (32e6),
+                .t = t * 625 / (32e6), // 625e6/32 / 1e12
                     .t_client = t,
                     .id = pulses[i].id,
                     ._op = pulses[i].functype,
