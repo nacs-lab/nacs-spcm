@@ -10,7 +10,7 @@ using namespace NaCs;
 
 namespace Spcm {
 
-enum class Type {
+enum class Type : uint8_t {
     Bool = 1,
     Int32 = 2,
     Float64 = 3,
@@ -25,13 +25,13 @@ union Value {
 
 struct Sequence {
 public:
-    Sequence(Value** values, std::vector<Type> * types, bool is_valid);
+    Sequence(Value* values, std::vector<Type> types, bool is_valid);
     Sequence(Sequence&&) = default;
     //uint64_t obj_id;
     //uint32_t nconsts;
     //uint32_t nvalues;
-    Value** m_values {nullptr}; // refers to value array held by parent TotSequence
-    std::vector<Type> *m_types {nullptr}; // refers to type array held by parent TotSequence
+    Value* m_values {nullptr}; // refers to value array held by parent TotSequence
+    std::vector<Type> m_types; // refers to type array held by parent TotSequence
     //uint32_t code_len;
     bool m_is_valid{false};
     operator bool() const

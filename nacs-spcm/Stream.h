@@ -83,13 +83,13 @@ public:
     {
         return Cmd{t, t_client, id, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::ResetAll, 0};
     }
-    static Cmd getTriggerEnd(int64_t t = 0, int64_t t_client = 0, uint32_t id = 0)
+    static Cmd getTriggerEnd(int64_t t = 0, int64_t t_client = 0, uint32_t id = 0, uint32_t trigger_id = 0)
     {
-        return Cmd{t, t_client, id, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::TriggerEnd, 0};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::TriggerEnd, trigger_id};
     }
-    static Cmd getTriggerStart(int64_t t = 0, int64_t t_client = 0, uint32_t id = 0)
+    static Cmd getTriggerStart(int64_t t = 0, int64_t t_client = 0, uint32_t id = 0, uint32_t trigger_id = 0)
     {
-        return Cmd{t, t_client, id, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::TriggerStart, 0};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::TriggerStart, trigger_id};
     }
     static Cmd getAmpSet(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double amp)
     {

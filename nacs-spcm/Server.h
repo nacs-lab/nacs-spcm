@@ -66,7 +66,7 @@ public:
         bool m_running{false};
         uint64_t m_serv_id;
         //std::vector<uint64_t> m_client_ids;
-    std::vector<uint8_t> init_out_chn{1,1};
+    //std::vector<uint8_t> init_out_chn = {1};
     };
 
 }

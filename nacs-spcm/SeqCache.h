@@ -45,7 +45,7 @@ public:
         void addPulse(uint32_t enabled, uint32_t id, uint32_t t_start,
                   uint32_t len, uint32_t endvalue, uint8_t functype,
                   uint8_t phys_chn, uint32_t chn, void (*fnptr)(void));
-        Sequence invalid_seq{nullptr, nullptr, false};
+        //Sequence invalid_seq{nullptr, nullptr, false};
         friend class SeqCache;
     };
     struct Entry {

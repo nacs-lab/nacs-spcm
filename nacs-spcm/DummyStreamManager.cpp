@@ -62,7 +62,7 @@ inline void DummyStreamManagerBase::actual_send_cmds(uint32_t stream_idx, Cmd *c
     // actual distribution to stream_idx
     size_t copied_sz;
     Cmd *this_cmd = cmd;
-    std::cout << "Sz: " << sz << std::endl;
+    //std::cout << "Sz: " << sz << std::endl;
     while (sz > 0) {
         copied_sz = m_streams[stream_idx]->copy_cmds(this_cmd, sz);
         sz -= copied_sz;
@@ -218,7 +218,7 @@ NACS_EXPORT() void DummyStreamManagerBase::distribute_cmds()
                 // std::cout << "Sending " << sz_to_send << " commands starting from " << first_cmd << std::endl;
                 sz_to_send = 1;
                 first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
-                std::cout << "First cmd is now: " << *first_cmd << " at address " << first_cmd << std::endl;
+                //std::cout << "First cmd is now: " << *first_cmd << " at address " << first_cmd << std::endl;
                 t = cmd->t;
                 //std:: cout << "Now t is: " << t << std::endl;
             }

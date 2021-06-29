@@ -31,6 +31,7 @@ public:
 
     //bool stop();
     void run();
+    void run(int trigger_fd, const std::function<int(int)> &trigger_cb);
     private:
             //struct QueueItem {
             //    const SeqCache::Entry *entry;
@@ -58,6 +59,7 @@ public:
     //bool m_running{false};
         uint64_t m_serv_id;
         //std::vector<uint64_t> m_client_ids;
+    uint64_t trigger_counter = 0;
     };
 
 }

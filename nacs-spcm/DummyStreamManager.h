@@ -156,7 +156,7 @@ private:
     Cmd *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr;
     size_t m_cmd_wrote = 0;
     size_t m_cmd_max_write = 0;
-
+public:
     uint8_t stream_manager_id = 0;
 };
 
@@ -204,12 +204,12 @@ private:
         //for (int i = 0; i < sz; i++) {
         //    std::cout << i << ": " << ptr[i] << std::endl;
         //}
-        printf("StreamManager worker started\n");
+        printf("StreamManager worker %i started\n", stream_manager_id);
         while(likely(!m_stop.load(std::memory_order_relaxed))) {
-            //std::cout << "here" << std::endl;
+            //printf("here\n");
             generate_page();
         }
-        printf("StreamManager worker stopped\n");
+        printf("StreamManager worker %i stopped\n", stream_manager_id);
     }
 
     std::thread m_worker{};

@@ -271,14 +271,14 @@ cmd_out:
     // At this point we have a nullptr if out of commands or in the future, or it's an actual command
     // related to amp, phase, freq
     if (unlikely(m_end_trigger_waiting)) {
-        auto cur_end_trigger = end_trigger();
-        if (!cur_end_trigger) {
+        // auto cur_end_trigger = end_trigger();
+        // if (!cur_end_trigger) {
             m_end_triggered.store(m_end_trigger_waiting, std::memory_order_relaxed);
             m_end_trigger_waiting = m_end_trigger_pending;
             if (m_end_trigger_pending) {
                 set_end_trigger(nullptr);
             }
-        }
+            //}
     }
     else if (unlikely(m_end_trigger_pending)) {
         m_end_trigger_waiting = m_end_trigger_pending;

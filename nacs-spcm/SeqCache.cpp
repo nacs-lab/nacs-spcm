@@ -85,6 +85,7 @@ NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, con
     if (!seq) {
         return false; // sequence not valid cause it's missing IData
     }
+    printf("types size after getting from cache: %u", seq.getSeq(0).m_types.size());
     auto it = m_cache.emplace(std::piecewise_construct, std::forward_as_tuple(std::move(this_id)), std::forward_as_tuple(std::move(seq))).first;
     m_totalsz += entrySize(it);
     ssize_t age = it->second.age.load(std::memory_order_relaxed);
@@ -97,6 +98,7 @@ NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, con
             new_age = 1;
         }} while (!it->second.age.compare_exchange_weak(age, new_age, std::memory_order_relaxed));
     entry = &(it->second);
+    printf("types size after getting from cache: %u", entry->m_seq.getSeq(0).m_types.size());
     while (m_totalsz > m_szlim) {
         if (!ejectOldest()) {
             break;
@@ -304,6 +306,14 @@ m_cache(cache)
     memcpy(values, msg_bytes, 8 * nvalues);
     msg_bytes += 8 * nvalues;
     sz -= 8 * nvalues;
+    printf("at address: %p", values);
+    printf("v0: %i\n", values[0].i64);
+    printf("v1: %i\n", values[1].i64);
+    printf("v2: %u\n", values[2].b);
+    printf("v3: %f\n", values[3].f64);
+    printf("v4: %f\n", values[4].f64);
+    printf("v5: %u\n", values[5].b);
+    printf("v6: %i\n", values[6].i64);
 
     // fill in types
     uint8_t type;
@@ -313,6 +323,7 @@ m_cache(cache)
         sz -= 1;
         types.push_back(static_cast<Type>(type));
     };
+    printf("Types at address: %p\n", &types);
 
     // pulses
     uint32_t n_pulses;
@@ -385,6 +396,7 @@ m_cache(cache)
                 .chn = chn_id;
                 .fnptr = fnptr;
                 }); */
+        printf("Adding pulse to output %u with pulse type %u \n", phys_chn, functype);
         addPulse(enabled, pulse_id, t_start, len, end_val,
                  functype, phys_chn, chn_id, fnptr);
         n_pulses--;
@@ -396,7 +408,8 @@ m_cache(cache)
 NACS_EXPORT() Sequence& SeqCache::TotSequence::getSeq(uint32_t idx) {
     if (idx >= seqs.size()) {
         // idx is not found, return invalid sequence
-        return invalid_seq;
+        //return invalid_seq;
+        throw std::runtime_error("sequence not found");
     }
     return seqs[idx];
 }
@@ -407,9 +420,11 @@ NACS_EXPORT() void SeqCache::TotSequence::addPulse(uint32_t enabled, uint32_t id
 {
     //bool res = false;
     while (phys_chn >= seqs.size()) {
-        seqs.emplace_back(&values, &types, true);
-        //res = true;
+        //printf("types size: %u", types.size());
+        seqs.emplace_back(values, types, true);
+//res = true;
     }
+    //printf("types size after: %u", seqs[phys_chn].m_types.size());
     seqs[phys_chn].addPulse(enabled, id, t_start, len, endvalue,
                             functype, phys_chn, chn, fnptr);
     //return res;

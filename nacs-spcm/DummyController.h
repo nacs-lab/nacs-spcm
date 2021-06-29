@@ -19,13 +19,14 @@ using namespace NaCs;
 namespace Spcm{
       class DummyController {
       public:
-          DummyController(std::vector<uint8_t> &out_chns)
+          DummyController(std::vector<uint8_t> out_chns)
           {
               /* StreamManager(uint32_t n_streams, uint32_t max_per_stream,
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false) */
               auto phys_chn = out_chns.size();
+              //printf("phys_chn: %u", phys_chn);
               if (phys_chn != 1 && phys_chn != 2)
               {
                   throw std::runtime_error("Only supports 1 or 2 physical channels");
@@ -39,12 +40,13 @@ namespace Spcm{
                   }
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
-                      m_stm_mngrs.emplace_back(new DummyStreamManager(8, 4, 1, cmd_underflow, cmd_underflow, false, i));
+                      m_stm_mngrs.emplace_back(new DummyStreamManager(8, 4, 1, cmd_underflow, cmd_underflow, false, false, i));
                       max_chns.push_back(32);
                   }
               }
               if (n_phys_chn == 1) {
                   printf("Initial out chns: %u\n", m_out_chns[0]);
+                  printf("StreamManagers: %u\n", m_stm_mngrs.size());
               }
               else if (n_phys_chn == 2) {
                   printf("Initial out chns: %u, %u\n", m_out_chns[0], m_out_chns[1]);
@@ -74,6 +76,7 @@ namespace Spcm{
           // StreamManager commands
           inline void setPhysChn(std::vector<uint8_t> &out_chns) {
               auto phys_chn = out_chns.size();
+              printf("phys_chn: %u", phys_chn);
               if (phys_chn != 1 && phys_chn != 2)
               {
                   throw std::runtime_error("Only supports 1 or 2 physical channels");

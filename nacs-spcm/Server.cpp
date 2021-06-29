@@ -28,7 +28,7 @@ NACS_EXPORT() Server::Server(Config conf)
 m_zmqctx(),
 m_zmqsock(m_zmqctx, ZMQ_ROUTER),
 m_evfd(openEvent(0, EFD_NONBLOCK | EFD_CLOEXEC)),
-m_ctrl(init_out_chn),
+m_ctrl(std::vector<uint8_t>{0,1}),
 m_cache(8 * 1024ll * 1024ll * 1024ll) // pretty arbitrary
 {
     //m_ctrl = Controller(init_out_chn);
@@ -69,6 +69,7 @@ NACS_EXPORT() bool Server::runSeq(uint64_t client_id, uint64_t seq_id, const uin
         return false;
     }
     {
+        printf("Pushing back QueueItem");
         std::lock_guard<std::mutex> locker(m_seqlock);
         m_seque.push_back(QueueItem{entry, seqcnt, start_trigger_id});
     }
@@ -107,25 +108,43 @@ NACS_INTERNAL void Server::seqRunner()
 {
     // this call to popSeq hangs until a sequence (QueueItem) can be popped off
     while (auto entry = popSeq()) {
+        printf("Controller running sequence\n");
         auto fin_id = m_ctrl.get_end_id();
         auto outChns = m_ctrl.getOutChn();
         for (int i = 0; i < outChns.size(); i++) {
             uint8_t phys_chn_idx = outChns[i];
             std::vector<Cmd> preSend;
             if (entry.start_trigger) {
-                preSend.push_back(Cmd::getTriggerStart(0, 0, entry.start_trigger));
+                preSend.push_back(Cmd::getTriggerStart(0, 0, 0, entry.start_trigger));
             }
             auto &tot_seq = entry.entry->m_seq;
+            if (tot_seq.is_valid) {
+                printf("Sequence valid\n");
+            }
+            else {
+                printf("Sequence invalid\n");
+            }
             auto &this_seq = tot_seq.getSeq(phys_chn_idx);
             auto cmds = this_seq.toCmds(preSend);
             // MAKE COMMANDS HERE AT RUNTIME, SORT AND SEND.
-            auto p = &cmds[0];
-            auto sz = cmds.size();
+            auto pPre = &preSend[0];
+            auto szPre = preSend.size();
+            printf("preSend size: %u", szPre);
             uint32_t nwrote;
+            do {
+                nwrote = m_ctrl.copy_cmds(phys_chn_idx, pPre, szPre);
+                pPre += nwrote;
+                szPre -= nwrote;
+            }
+            while (szPre> 0 && (nwrote > 0 || controllerRunning()) && m_running);
+                auto p = &cmds[0];
+                auto sz = cmds.size();
+            printf("cmd size: %u", sz);
             do {
                 nwrote = m_ctrl.copy_cmds(phys_chn_idx, p, sz);
                 p += nwrote;
                 sz -= nwrote;
+                printf("nwrote %u, sz: %u\n", nwrote, sz);
                 if (sz > 0)
                     CPU::pause();
             // We just want to avoid looping without reader and without being able to
@@ -137,13 +156,15 @@ NACS_INTERNAL void Server::seqRunner()
             if (!m_running)
                 return;
             m_cache.unref(*entry.entry);
-            m_ctrl.add_cmd(phys_chn_idx, Cmd::getTriggerEnd(0, 0, fin_id));
+            m_ctrl.add_cmd(phys_chn_idx, Cmd::getTriggerEnd(0, 0, 0, fin_id));
             m_ctrl.flush_cmd(phys_chn_idx);
-            while (m_ctrl.get_end_triggered() < fin_id && controllerRunning() && m_running)
-                std::this_thread::sleep_for(1ms);
+            m_ctrl.distribute_cmds(phys_chn_idx);
+        }
+        while (m_ctrl.get_end_triggered() < fin_id && controllerRunning() && m_running){
+                std::this_thread::sleep_for(100ms);
+            }
             m_seqfin.store(entry.id, std::memory_order_release);
             writeEvent(m_evfd);
-        }
     }
 }
 
@@ -255,6 +276,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &tr
             msg_data += 4;
             msg_sz -= 4;
             uint32_t start_id = (start_trigger && trigger_fd != -1) ? m_ctrl.get_start_id() : 0;
+            //printf("start id: %u\n", start_id);
             // check next bit to see if sequence was sent
             uint8_t data_type;
             //uint8_t *non_const_data = nullptr;
@@ -270,7 +292,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &tr
                 // only data sent. assume sequence is here
                 if (!haveSeq) {
                     // but I don't have the sequence...request a resend
-                    send_reply(addr, ZMQ::bits_msg(uint64_t(0)));
+                    send_reply(addr, ZMQ::str_msg("need_seq"));
                     goto out;
                 }
             }
@@ -279,7 +301,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &tr
             }
             if (!runSeq(this_client_id, this_seq_id, msg_data, msg_sz, seq_sent, id, start_id)) {
                 // this must mean data is missing
-                send_reply(addr, ZMQ::bits_msg(uint64_t(0)));
+                send_reply(addr, ZMQ::str_msg("need_data"));
                 goto out;
             }
             if (start_id)
@@ -294,6 +316,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &tr
                 }
                 std::this_thread::sleep_for(1ms);
             }
+            ZMQ::send_more(m_zmqsock, ZMQ::str_msg("ok"));
             ZMQ::send(m_zmqsock, rpy);
         }
         else if (ZMQ::match(msg, "wait_seq")) {
@@ -311,6 +334,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &tr
                 send_reply(addr, ZMQ::bits_msg(true));
                 goto out;
             }
+            printf("Pushing back wait\n");
             waits.push_back(WaitSeq{std::move(addr), id});
         }
     out:
@@ -323,13 +347,17 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &tr
         {(void*) m_zmqsock, 0, ZMQ_POLLIN, 0},
         {nullptr, m_evfd, ZMQ_POLLIN, 0}
     };
-    if (trigger_fd != -1)
+    if (trigger_fd != -1) {
+        printf("Pushed back trigger poll");
         polls.push_back(zmq::pollitem_t{nullptr, trigger_fd, ZMQ_POLLIN, 0});
+    }
     while (m_running) {
         zmq::poll(polls);
-        auto t = getTime();
+        //auto t = getTime();
+        uint64_t t = 0;
         if (trigger_fd != -1 && polls[2].revents & ZMQ_POLLIN) {
             // trigger event
+            std::cout << "trigger received" << std::endl;
             uint32_t ntrigger = trigger_cb(trigger_fd);
             if (ntrigger > start_triggers.size())
                 ntrigger = start_triggers.size();
@@ -340,6 +368,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &tr
                                  start_triggers.begin() + ntrigger);
         }
         if (polls[1].revents & ZMQ_POLLIN) {
+            printf("SEQUENCE FINISHED!");
             // sequence finish event
             readEvent(m_evfd);
             for (size_t i = 0; i < waits.size(); i++) {
