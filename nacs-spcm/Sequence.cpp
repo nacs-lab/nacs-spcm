@@ -57,7 +57,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
         }
         else
         {
-            len = get_value(pulses[i].len);
+            len = get_value(pulses[i].len) * 625/ (32e6); // convert to AWG time
         }
         final_val = get_value(pulses[i].endvalue);
         printf("v%i: %f\n", i, final_val);

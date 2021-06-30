@@ -33,7 +33,9 @@ constexpr long long int sample_rate = 625ll * 1000000ll;
 constexpr int cycle = 1024/32;
 
 constexpr uint64_t max_phase = uint64_t(sample_rate * 10);
-constexpr double phase_scale = 2 / double(max_phase);
+constexpr double phase_scale = 2 / double(max_phase); // convert from "phase_cnt" which is tracked by state.phase to phase in units of pi radians that compute_single_chn wants.
+constexpr double phase_scale_client = 625e7; // converts from 0 to 1 scale to phase_cnt
+constexpr double freq_scale_client = 10; // converts from real frequency to freq_cnt. 
 constexpr double freq_scale = 0.1 / (sample_rate / 32); // 1 cycle in 32 samples at 625 MHz sampling rate. Converts a frequency at 10 times the real frequency, hence the 0.1.
 constexpr double amp_scale = 6.7465185e9f;
 
@@ -298,10 +300,10 @@ StreamBase::consume_old_cmds(State *states)
             }
             break;
         case CmdType::AmpSet:
-            states[cmd->chn].amp = cmd->final_val; // set amplitude of state
+            states[cmd->chn].amp = cmd->final_val * amp_scale; // set amplitude of state
             break;
         case CmdType::FreqSet:
-            states[cmd->chn].freq = cmd->final_val;
+            states[cmd->chn].freq = cmd->final_val * freq_scale_client;
             break;
         case CmdType::AmpFn:
         case CmdType::AmpVecFn:
@@ -311,10 +313,10 @@ StreamBase::consume_old_cmds(State *states)
                 active_cmds.push_back(new activeCmd(cmd));
                 std::pair<double, double> these_vals;
                 these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
-                states[cmd->chn].amp = these_vals.first + these_vals.second;
+                states[cmd->chn].amp = (these_vals.first + these_vals.second) * amp_scale;
             }
             else {
-                states[cmd->chn].amp = cmd->final_val; // otherwise set to final value.
+                states[cmd->chn].amp = cmd->final_val * amp_scale; // otherwise set to final value.
             }
             break;
         case CmdType::FreqFn:
@@ -324,14 +326,14 @@ StreamBase::consume_old_cmds(State *states)
                 active_cmds.push_back(new activeCmd(cmd));
                 std::pair<double, double> these_vals;
                 these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
-                states[cmd->chn].freq = uint64_t(these_vals.first + these_vals.second);
+                states[cmd->chn].freq = uint64_t(these_vals.first + these_vals.second) * freq_scale_client;
             }
             else {
-                states[cmd->chn].freq = cmd->final_val; // otherwise set to final value.
+                states[cmd->chn].freq = cmd->final_val * freq_scale_client; // otherwise set to final value.
             }
             break;
         case CmdType::Phase:
-            states[cmd->chn].phase = cmd->final_val; // possibly a scale factor needed. COME BACK
+            states[cmd->chn].phase = cmd->final_val * phase_scale_client; // possibly a scale factor needed. COME BACK
             break;
         case CmdType::ModChn:
             if (cmd->chn == Cmd::add_chn) {
@@ -453,12 +455,12 @@ cmd_out:
                     if (this_cmd->t + this_cmd->len > m_cur_t) {
                         std::pair<double, double> these_vals;
                         these_vals = (*it)->eval(m_cur_t - this_cmd->t);
-                        amp = these_vals.first;
-                        damp = these_vals.second;
+                        amp = these_vals.first * amp_scale;
+                        damp = these_vals.second * amp_scale;
                         state.amp = amp + damp;
                     }
                     else {
-                        amp = this_cmd->final_val;
+                        amp = this_cmd->final_val * amp_scale;
                         state.amp = amp;
                         it = active_cmds.erase(it); // no longer active
                         continue;
@@ -468,12 +470,12 @@ cmd_out:
                     if (this_cmd->t + this_cmd->len > m_cur_t) {
                         std::pair<double, double> these_vals;
                         these_vals = (*it)->eval(m_cur_t - this_cmd->t);
-                        freq = uint64_t(these_vals.first);
-                        df = uint64_t(these_vals.second);
+                        freq = uint64_t(these_vals.first) * freq_scale_client;
+                        df = uint64_t(these_vals.second) * freq_scale_client;
                         state.freq = freq + df;
                     }
                     else {
-                        freq = this_cmd->final_val;
+                        freq = this_cmd->final_val * freq_scale_client;
                         state.freq = freq;
                         it = active_cmds.erase(it); // no longer active
                         continue;
@@ -513,7 +515,7 @@ cmd_out:
                 std::cout << (*cmd) << std::endl;
                 if (cmd->op() == CmdType::FreqSet){
                     std::cout << "in freq set" << std::endl;
-                    freq = cmd->final_val;
+                    freq = cmd->final_val * freq_scale_client;
                 }
                 else if (cmd->op() == CmdType::FreqFn || cmd->op() == CmdType::FreqVecFn) {
                     // first time seeing function command
@@ -522,15 +524,15 @@ cmd_out:
                         active_cmds.push_back(new activeCmd(cmd));
                         std::pair<float, float> these_vals;
                         these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
-                        freq = uint64_t(these_vals.first);
-                        df = uint64_t(these_vals.second);
+                        freq = uint64_t(these_vals.first) * freq_scale_client;
+                        df = uint64_t(these_vals.second) * freq_scale_client;
                     }
                     else {
-                        freq = cmd->final_val; // otherwise set to final value.
+                        freq = cmd->final_val * freq_scale_client; // otherwise set to final value.
                     }
                 }
                 else if (cmd->op() == CmdType::AmpSet) {
-                    amp = cmd->final_val;
+                    amp = cmd->final_val * amp_scale;
                 }
                 else if (likely(cmd->op() == CmdType::AmpFn || cmd->op() == CmdType::AmpVecFn)) {
                     // first time seeing function command
@@ -539,15 +541,15 @@ cmd_out:
                         active_cmds.push_back(new activeCmd(cmd));
                         std::pair<double, double> these_vals;
                         these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
-                        amp = these_vals.first;
-                        damp = these_vals.second;
+                        amp = these_vals.first * amp_scale;
+                        damp = these_vals.second * amp_scale;
                     }
                     else {
-                        amp = cmd->final_val; // otherwise set to final value.
+                        amp = cmd->final_val * amp_scale; // otherwise set to final value.
                     }
                 }
                 else if (unlikely(cmd->op() == CmdType::Phase)) {
-                    phase = cmd->final_val; // may need to be changed
+                    phase = cmd->final_val * phase_scale_client; // may need to be changed
                 }
                 else {
                     //encountered a non phase,amp,freq command
