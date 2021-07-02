@@ -26,15 +26,18 @@ NACS_EXPORT() Sequence::Sequence(Value* values, std::vector<Type> types, bool is
 NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
     //printf("at address: %p\n", (*m_values));
     printf("types size: %u", m_types.size());
-    printf("v0: %i\n", m_values[0].i64);
-    printf("v1: %i\n", m_values[1].i64);
+    printf("v0: %li\n", m_values[0].i64);
+    printf("v1: %li\n", m_values[1].i64);
     printf("v2: %u\n", m_values[2].b);
     printf("v3: %f\n", m_values[3].f64);
     printf("v4: %f\n", m_values[4].f64);
     printf("v5: %u\n", m_values[5].b);
-    printf("v6: %i\n", m_values[6].i64);
+    printf("v6: %f\n", m_values[6].f64);
+    printf("v7: %li\n", m_values[7].i64);
+    printf("v8: %f\n", m_values[8].f64);
 
-    printf("types at address: %p\n", m_types);
+
+    //printf("types at address: %p\n", m_types);
 // go through pulses, add them to cmd_vector and then sort.
     std::vector<uint32_t> active_chns;
     std::vector<Cmd> cmds;
@@ -118,14 +121,14 @@ NACS_EXPORT() double Sequence::get_value(uint32_t idx) const
 {
     auto type = m_types[idx];
     auto value = m_values[idx];
-    printf("type: %u\n", type);
+    //printf("type: %u\n", type);
     switch (type) {
     case Type::Bool:
         return value.b;
     case Type::Int32:
         return value.i32;
     case Type::Float64: {
-        printf("getting float\n");
+        //printf("getting float\n");
         return value.f64;
     }
     case Type::Int64:

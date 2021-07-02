@@ -19,7 +19,7 @@ using namespace NaCs;
 namespace Spcm{
       class Controller {
       public:
-          Controller(std::vector<uint8_t> &out_chns)
+          Controller(std::vector<uint8_t> out_chns)
           {
               /* StreamManager(uint32_t n_streams, uint32_t max_per_stream,
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
@@ -39,7 +39,7 @@ namespace Spcm{
                   }
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
-                      m_stm_mngrs.emplace_back(new StreamManager(8, 4, 1, cmd_underflow, cmd_underflow, false));
+                      m_stm_mngrs.emplace_back(new StreamManager(4, 4, 1, cmd_underflow, cmd_underflow, false));
                       max_chns.push_back(32);
                   }
               }
@@ -92,6 +92,7 @@ namespace Spcm{
               return ++m_end_trigger_cnt;
           }
           inline void set_start_trigger(uint32_t v, uint64_t t) {
+              printf("setting start trigger %u for time %lu\n", v, t);
               for (int i = 0; i < n_phys_chn; i++) {
                   m_stm_mngrs[m_out_chns[i]]->set_start_trigger(v,t);
               }
@@ -155,7 +156,8 @@ namespace Spcm{
           std::thread m_worker; // worker for relaying data to card
           int16_t* buff_ptr; // buffer pointer for spcm
           size_t buff_pos; // position for the output buffer
-          uint64_t buff_sz_nele{4 * 1024ll * 1024ll * 1024ll / 2};
+          uint64_t buff_sz_nele{4 * 1024ll * 1024ll}; // 1 channel output latency of 6.71 ms. Software buffer size
+          uint64_t hw_buff_sz_nele{4 * 1024ll * 1024ll}; // 1 channel output latency of 1.67 ms. Hardware buffer size number of elements
           bool DMA_started{false};
 
           NaCs::Spcm::Spcm hdl{"/dev/spcm0"}; //Spcm handle
@@ -171,6 +173,10 @@ namespace Spcm{
           const uint8_t n_card_chn = 4; // number of channels on card. hard coded
           uint32_t m_start_trigger_cnt{0};
           uint32_t m_end_trigger_cnt{0};
+          uint64_t counter = 0;
+          uint64_t not_ready_counter = 0;
+          uint64_t not_counter = 0;
+          uint64_t loop_counter = 0;
       };
 }
 

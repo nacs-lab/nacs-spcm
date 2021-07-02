@@ -307,13 +307,15 @@ m_cache(cache)
     msg_bytes += 8 * nvalues;
     sz -= 8 * nvalues;
     printf("at address: %p", values);
-    printf("v0: %i\n", values[0].i64);
-    printf("v1: %i\n", values[1].i64);
+    printf("v0: %li\n", values[0].i64);
+    printf("v1: %li\n", values[1].i64);
     printf("v2: %u\n", values[2].b);
     printf("v3: %f\n", values[3].f64);
     printf("v4: %f\n", values[4].f64);
     printf("v5: %u\n", values[5].b);
-    printf("v6: %i\n", values[6].i64);
+    printf("v6: %f\n", values[6].f64);
+    printf("v7: %li\n", values[7].i64);
+    printf("v8: %f\n", values[8].f64);
 
     // fill in types
     uint8_t type;

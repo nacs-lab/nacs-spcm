@@ -160,6 +160,10 @@ class StreamManagerBase
 {
     // This class is responsible for passing commands to the various streams and also conveying output.
 public:
+    inline void sync_reader()
+    {
+        m_output.sync_reader();
+    }
     inline const int16_t *get_output(size_t &sz)
     {
         return m_output.get_read_ptr(&sz); // stores into size number of outputs ready, and returns a pointer
@@ -241,8 +245,8 @@ protected:
         : m_n_streams(n_streams),
           m_max_per_stream(max_per_stream),
           chn_map(n_streams, max_per_stream),
-          m_commands((Cmd*)mapAnonPage(24 * 1024ll, Prot::RW), 1024, 1),
-          m_output((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 2 * 1024ll * 1024ll, 32 * 16 * 1024ll)
+          m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 1),
+          m_output((int16_t*)mapAnonPage(2 * 1024ll * 1024ll, Prot::RW), 1 * 1024ll * 1024ll, 1024ll * 1024ll)
     {
         // start streams
         for (int i = 0; i < n_streams; i++) {
@@ -288,7 +292,7 @@ private:
 
     DataPipe<Cmd> m_commands; // command pipe for writers to put in commands
     DataPipe<int16_t> m_output; // pipe for output and hardware to output
-    constexpr static uint32_t output_block_sz = 2048;
+    constexpr static uint32_t output_block_sz = 2048; //2048;
     
     const Cmd *m_cmd_read_ptr = nullptr; // pointer to read commands
     size_t m_cmd_read = 0;
@@ -296,7 +300,8 @@ private:
     Cmd *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr;
     size_t m_cmd_wrote = 0;
     size_t m_cmd_max_write = 0;
-    
+
+    uint64_t stuck_counter = 0;
 };
 
 struct StreamManager : StreamManagerBase {

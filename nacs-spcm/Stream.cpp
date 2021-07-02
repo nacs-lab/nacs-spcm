@@ -255,12 +255,15 @@ inline bool StreamBase::check_start(int64_t t, uint32_t id)
         auto trigger_time =
             m_start_trigger_time.load(std::memory_order_relaxed);
         if (time_offset() + global_time < trigger_time) {
+            printf("not yet after receiving trigger\n");
             goto not_yet;
         }
     }
     m_slow_mode.store(false, std::memory_order_relaxed);
+    printf("Processed trigger\n");
     return true;
 not_yet:
+    //printf("waiting for trigger\n");
     m_slow_mode.store(true, std::memory_order_relaxed);
     return false;
 }
@@ -271,7 +274,7 @@ StreamBase::consume_old_cmds(State *states)
     // consumes old commands (updates the states) and returns a pointer to a currently active command.
     // If only commmands in future or no commands, then return nullptr
     auto cmd = get_cmd();
-    std::cout << "consume_old_cmds called" << std::endl;
+    //std::cout << "consume_old_cmds called" << std::endl;
     if (cmd->t != 0)
         m_cmd_underflow.fetch_add(1, std::memory_order_relaxed);
     do {
@@ -279,6 +282,7 @@ StreamBase::consume_old_cmds(State *states)
             return cmd;
         if (cmd->t > m_cur_t)
             return nullptr; // get_cmd returns something in the future
+        //std::cout << "consume old cmds: " << (*cmd) << std::endl;
         switch (cmd->op()){
         case CmdType::Meta:
             if (cmd->chn == (uint32_t)CmdMeta::Reset) {
@@ -291,6 +295,7 @@ StreamBase::consume_old_cmds(State *states)
                 m_slow_mode.store(false,std::memory_order_relaxed);
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerEnd) {
+                printf("Process trigger end in consume_old_cmds\n");
                 m_end_trigger_pending = cmd->final_val;
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerStart) {
@@ -337,7 +342,8 @@ StreamBase::consume_old_cmds(State *states)
             break;
         case CmdType::ModChn:
             if (cmd->chn == Cmd::add_chn) {
-                states[m_chns] = {0, 0, 0}; // initialize new channel
+                printf("Process add_chn\n");
+                states[m_chns] = {0, (uint64_t) 70e6, 0.1f}; // initialize new channel
                 m_chns++;
             }
             else {
@@ -379,6 +385,7 @@ retry:
                 m_slow_mode.store(false, std::memory_order_relaxed);
             }
             else if (cmd->chn == (uint32_t)CmdMeta::TriggerEnd) {
+                printf("Process trigger end\n");
                 m_end_trigger_pending = cmd->final_val;
             }
             else if (cmd->chn == (uint32_t)CmdMeta::TriggerStart) {
@@ -393,7 +400,8 @@ retry:
         else {
             while (unlikely(cmd->op() == CmdType::ModChn)) {
                 if (cmd->chn == Cmd::add_chn) {
-                    states[m_chns] = {0, 0, 0};
+                    printf("Process add chn\n");
+                    states[m_chns] = {0, (uint64_t) 70e6, 0.1f};
                     m_chns++;
                 }
                 else {
@@ -414,18 +422,18 @@ cmd_out:
     // related to amp, phase, freq
     if (unlikely(m_end_trigger_waiting)) {
         auto cur_end_trigger = end_trigger();
-        if (!cur_end_trigger) {
+        if (cur_end_trigger) {
             m_end_triggered.store(m_end_trigger_waiting, std::memory_order_relaxed);
             m_end_trigger_waiting = m_end_trigger_pending;
             if (m_end_trigger_pending) {
-                set_end_trigger(out);
+                set_end_trigger(out); // out
             }
         }
     }
     else if (unlikely(m_end_trigger_pending)) {
         m_end_trigger_waiting = m_end_trigger_pending;
         m_end_trigger_pending = 0;
-        set_end_trigger(out);
+        set_end_trigger(out); // out
     }
     // calculate actual output.
     // For testing purposes. At the moment keep the output simple.
@@ -583,6 +591,9 @@ cmd_out:
     //if (m_cur_t % uint32_t(1e6) == 0) {
     //  std::cout << "t: " << m_cur_t << std::endl;
     //}
+    if (m_cur_t % 19531250 == 0) {
+        printf("m_cur_t: %lu\n", m_cur_t);
+    }
     __m512i v;
     v = _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,
                               _mm512_cvttps_epi32(v2));

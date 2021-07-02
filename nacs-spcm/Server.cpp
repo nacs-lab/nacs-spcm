@@ -28,7 +28,7 @@ NACS_EXPORT() Server::Server(Config conf)
 m_zmqctx(),
 m_zmqsock(m_zmqctx, ZMQ_ROUTER),
 m_evfd(openEvent(0, EFD_NONBLOCK | EFD_CLOEXEC)),
-m_ctrl(std::vector<uint8_t>{0,1}),
+m_ctrl(std::vector<uint8_t>{0}),
 m_cache(8 * 1024ll * 1024ll * 1024ll) // pretty arbitrary
 {
     //m_ctrl = Controller(init_out_chn);
@@ -162,9 +162,10 @@ NACS_INTERNAL void Server::seqRunner()
         }
         while (m_ctrl.get_end_triggered() < fin_id && controllerRunning() && m_running){
                 std::this_thread::sleep_for(100ms);
-            }
-            m_seqfin.store(entry.id, std::memory_order_release);
-            writeEvent(m_evfd);
+        }
+        printf("Sequence finished!");
+        m_seqfin.store(entry.id, std::memory_order_release);
+        writeEvent(m_evfd);
     }
 }
 

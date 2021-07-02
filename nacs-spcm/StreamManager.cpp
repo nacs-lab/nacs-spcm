@@ -179,6 +179,7 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
             sz_to_send = 0;
             if (cmd->chn == Cmd::add_chn) {
                 // if add channel command
+                printf("Process add channel in stream manager\n");
                 uint32_t stream_num;
                 if(chn_map.addChn(cmd->final_val, stream_num)) // final_val encodes the real channel number
                 {
@@ -254,6 +255,12 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
             m_output.sync_writer();
         }
         CPU::pause();
+        // if (stuck_counter % 10000000 == 0) {
+        //     printf("Stream Manager stuck: %lu, sz: %u, ptr: %p\n", stuck_counter, sz_to_write, out_ptr);
+        //     printf("Write buff location: %p", m_output.get_write_buff(&sz_to_write));
+        //     printf(" sz: %u\n", sz_to_write);
+        // }
+        // stuck_counter++;
     }
     //std::cout << "can write" << std::endl;
     // wait for input streams to be ready
@@ -269,7 +276,7 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
         }
         else {
             CPU::pause();
-            (*m_streams[stream_idx]).sync_reader();
+            //(*m_streams[stream_idx]).sync_reader();
         }
     }
     //std::cout << "stream ready" << std::endl;

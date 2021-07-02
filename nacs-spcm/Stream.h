@@ -49,7 +49,7 @@ enum class CmdMeta : uint32_t
 // Note freq, amp, and phase are already integers in the command struct
 // amp is normalized to (2^(31) -1) * pi = 6.7465185e9f
 // freq is 10 times the actual frequency
-// phase_scale is 2 / (625e6 * 10). We take the integer phase and multiply it by
+// phase_scale is 2 / (625e6 * 10). We take the integer phase and multiply itby
 // phase_scale to get the actual phase in units of pi. 625e6 * 10 is the max possible frequency.
 
 constexpr uint64_t t_serv_to_client = 32/(625e6) * 1e12; // converts to client time standard which is in ps.
@@ -302,8 +302,8 @@ protected:
         m_step_t(step_t),
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
-        m_commands((Cmd*)mapAnonPage(24 * 1024ll, Prot::RW), 1024, 1),
-        m_output((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 2 * 1024ll * 1024ll, 32 * 16 * 1024ll),
+        m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 1),
+        m_output((int16_t*)mapAnonPage(2 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll, 1024ll * 1024ll),
         m_stream_num(stream_num)
     {
     }
@@ -327,7 +327,7 @@ private:
     const Cmd *consume_old_cmds(State * states);
     bool check_start(int64_t t, uint32_t id);
     void clear_underflow();
-    constexpr static uint32_t output_block_sz = 2048; // units of int16_t. 32 of these per _m512
+    constexpr static uint32_t output_block_sz = 2048; //2048; // units of int16_t. 32 of these per _m512
     // Members accessed by worker threads
 protected:
     std::atomic_bool m_stop{false};

@@ -5,8 +5,12 @@
 
 #include <iostream>
 #include <nacs-utils/log.h>
+#include <chrono>
+#include <thread>
 
 using namespace NaCs;
+
+using namespace std::chrono_literals;
 
 namespace Spcm {
 // TIME TRACKING STUFF
@@ -188,12 +192,14 @@ void Controller::initChnsAndBuffer()
         }
     }
     hdl.ch_enable(chn_bits);
+    // set up hardware buffer
+    hdl.set_param(SPC_DATA_OUTBUFSIZE, 2 * hw_buff_sz_nele);
     hdl.write_setup();
 
     buff_ptr = (int16_t*)mapAnonPage(2 * buff_sz_nele, Prot::RW);
     buff_pos = 0;
     // TODO: Buffer size?
-    hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 4096 * 32,
+    hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 32 * 4096,
                      (void*)buff_ptr, 0, 2 * buff_sz_nele);
     hdl.check_error();
 }
@@ -242,42 +248,64 @@ void Controller::workerFunc()
     // set_fifo_sched();
 
     std::lock_guard<std::mutex> locker(m_worker_lock);
-
+    //printf("size of size_t: %u", sizeof(size_t));
     // TIMING STUFF
     bool first_avail = true;
     while (checkRequest()) {
         //std::cout << "working" << std::endl;
         // relay data from StreamManager to card
-        size_t sz;
-        size_t min_sz = 8 * 1024ll * 1024ll * 1024ll; // cannot be this large..
+    retry:
+        //min_sz = 8 * 1024ll * 1024ll * 1024ll;
         std::vector<const int16_t*> ptrs(n_phys_chn, nullptr);
-        for (int i = 0; i < n_phys_chn; ++i) {
+        size_t sz;
+        size_t min_sz = 8 * 1024ll * 1024ll * 1024ll; // cannot be this large.
+        for (int i = 0; i < n_phys_chn; ++i)
+        {
             ptrs[i] = (*m_stm_mngrs[m_out_chns[i]]).get_output(sz);
             //std::cout << "sz: " << sz << std::endl;
             if (sz < 4096 / 2 / n_phys_chn) {
                 // data not ready
+                //if (sz > 0)
+                //     (*m_stm_mngrs[m_out_chns[i]]).sync_reader();
                 CPU::pause();
-                continue;
+                //toCont = true;
+                goto retry;
             }
             if (sz < min_sz) {
                 min_sz = sz;
             }
         }
+        
         //std::cout << "stream manager ready" << std::endl;
-        min_sz = min_sz & ~(size_t)2047; // make it chunks of 2048
+        min_sz = min_sz & ~(uint64_t)2047; // make it chunks of 2048
         //read out available number of bytes
-        uint64_t count = 0;
+        uint64_t count,card_count = 0;
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &count);
         hdl.check_error();
+        // if (counter % 1000 == 0 && counter < 20001)
+        //     printf("%lu check avail: %lu\n",counter, count);
+        // else if (counter % 100000 == 0)
+        //     printf("%lu check avail: %lu\n", counter, count);
+        // counter++;
         if (first_avail)
         {
             std::cout << "first avail: " << count << std::endl;
             first_avail = false;
         }
+        count = count & ~(uint64_t)4095;
         card_avail.store(count, std::memory_order_relaxed); // Not a huge deal if this is wrong...
-        count = std::min(count, uint64_t(sz * 2 * n_phys_chn)); // count is number of bytes we can fill. need to account for number of physical channels. 
-        if (!count)
+        count = std::min(count, uint64_t(min_sz * 2 * n_phys_chn)); // count is number of bytes we can fill. need to account for number of physical channels.
+        if (DMA_started && !count) {
+            uint64_t pos;
+            hdl.get_param(SPC_DATA_AVAIL_USER_POS, &pos);
+            if (not_counter % 100 == 0 && not_counter < 1001) {
+                printf("Count min not reached %u, count %lu, avail: %lu, min_sz: %u, loc: %p, pos: %lu\n", not_counter, count, check_avail(), min_sz, ptrs[0], pos);
+            }
+            else if (not_counter % 10000000 == 0)
+                printf("Count min not reached %u, count %lu, avail: %lu, min_sz: %u, loc: %p, pos: %lu\n", not_counter, count, check_avail(), min_sz, ptrs[0], pos);
+            not_counter++;
             continue;
+        }
         if (count & 1)
             abort();
         int16_t* curr_ptr;
@@ -288,9 +316,9 @@ void Controller::workerFunc()
                 curr_ptr = buff_ptr + buff_pos;
                 // count/2 number of int16_t, each advance advances 512 bytes, so 32 int_16
                 //std::cout << "writing" << std::endl;
-                _mm512_stream_si512((__m512i*)curr_ptr, *(__m512i*) ptrs[1]);
+                _mm512_stream_si512((__m512i*)curr_ptr, *(__m512i*) ptrs[0]);
                 buff_pos += 64/2;
-                ptrs[1] += 64/2;
+                ptrs[0] += 64/2;
                 if (buff_pos >= buff_sz_nele) {
                     buff_pos = 0;
                 }
@@ -301,16 +329,16 @@ void Controller::workerFunc()
                 curr_ptr = buff_ptr + buff_pos;
                 curr_ptr2 = curr_ptr + 32;
                 __m512i out1, out2, data1, data2;
-                data1 = *(__m512i*)ptrs[1];
-                data2 = *(__m512i*)ptrs[2];
+                data1 = *(__m512i*)ptrs[0];
+                data2 = *(__m512i*)ptrs[1];
                 out1 = _mm512_mask_permutex2var_epi16(data1, 0xFFFFFFFF,
                                                       (__m512i) interweave_idx1, data2);
                 out2 = _mm512_mask_permutex2var_epi16(data1, 0xFFFFFFFF,
                                                       (__m512i) interweave_idx2, data2);
                 _mm512_stream_si512((__m512i*)curr_ptr, out1);
                 _mm512_stream_si512((__m512i*)curr_ptr2, out2);
+                ptrs[0] += 32;
                 ptrs[1] += 32;
-                ptrs[2] += 32;
                 buff_pos += 64;
                 if (buff_pos >= buff_sz_nele) {
                     buff_pos = 0;
@@ -324,13 +352,15 @@ void Controller::workerFunc()
         for (int i = 0; i < n_phys_chn; ++i) {
             (*m_stm_mngrs[m_out_chns[i]]).consume_output(count / 2 / n_phys_chn);
         }
-        if (!DMA_started)
+        if (!DMA_started && check_avail() < 1000)
         {
             //startDMA(0);
             hdl.cmd(M2CMD_DATA_STARTDMA | M2CMD_DATA_WAITDMA);
             hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);
-            //hdl.cmd(M2CMD_CARD_START | M2CMD_CARD_ENABLETRIGGER);
-            //hdl.force_trigger();
+            hdl.cmd(M2CMD_CARD_START | M2CMD_CARD_ENABLETRIGGER);
+            printf("force trigger at count %lu\n", count);
+            std::this_thread::sleep_for(1ms);
+            hdl.force_trigger();
             hdl.check_error();
             DMA_started = true;
         }
