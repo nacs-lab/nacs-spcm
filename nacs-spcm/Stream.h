@@ -327,7 +327,7 @@ private:
     const Cmd *consume_old_cmds(State * states);
     bool check_start(int64_t t, uint32_t id);
     void clear_underflow();
-    constexpr static uint32_t output_block_sz = 2048; //2048; // units of int16_t. 32 of these per _m512
+    constexpr static uint32_t output_block_sz = 32768; //2048; // units of int16_t. 32 of these per _m512
     // Members accessed by worker threads
 protected:
     std::atomic_bool m_stop{false};

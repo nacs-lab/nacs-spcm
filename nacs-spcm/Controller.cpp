@@ -199,7 +199,7 @@ void Controller::initChnsAndBuffer()
     buff_ptr = (int16_t*)mapAnonPage(2 * buff_sz_nele, Prot::RW);
     buff_pos = 0;
     // TODO: Buffer size?
-    hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 32 * 4096,
+    hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, notif_size,
                      (void*)buff_ptr, 0, 2 * buff_sz_nele);
     hdl.check_error();
 }
@@ -246,11 +246,50 @@ __attribute__((target("avx512f,avx512bw"), flatten))
 void Controller::workerFunc()
 {
     // set_fifo_sched();
-
+    int32_t lSerialNumber;
+    hdl.get_param(SPC_PCISERIALNO, &lSerialNumber);
+    printf("Serial number: %05d\n", lSerialNumber);
+    uint64_t initial_clock = cycleclock();
+    struct DebugInfo {
+        const DebugInfo& operator= (const DebugInfo &di) {
+            for (int i = 0; i < di.avails.size(); i++) {
+                avails.push_back(di.avails[i]);
+            }
+            for (int i = 0; i < di.clocks_before.size(); i++) {
+                clocks_before.push_back(di.clocks_before[i]);
+            }
+            for (int i = 0; i < di.can_write_amts.size(); i++) {
+                can_write_amts.push_back(di.can_write_amts[i]);
+            }
+            for (int i = 0; i < di.clocks.size(); i++) {
+                clocks.push_back(di.clocks[i]);
+            }
+            return *this;
+        }
+        std::vector <uint64_t>avails;
+        std::vector <double> clocks_before;
+        std::vector <uint64_t> can_write_amts;
+        std::vector <double> clocks;
+    };
     std::lock_guard<std::mutex> locker(m_worker_lock);
     //printf("size of size_t: %u", sizeof(size_t));
     // TIMING STUFF
     bool first_avail = true;
+    uint32_t cons_count = 0;
+    uint32_t mem_size = 100000;
+    uint32_t mem_idx = 0;
+    std::vector <uint64_t> avails;
+    std::vector <double> clocks_before;
+    std::vector <uint64_t> can_write_amts;
+    std::vector <double> clocks;
+    std::vector <double> fill_clocks;
+    uint64_t prev_max, max = 0;
+    uint64_t nfills = 0;
+    avails.resize(mem_size);
+    clocks_before.resize(mem_size);
+    can_write_amts.resize(mem_size);
+    clocks.resize(mem_size);
+    std::vector<DebugInfo> full_infos;
     while (checkRequest()) {
         //std::cout << "working" << std::endl;
         // relay data from StreamManager to card
@@ -263,7 +302,7 @@ void Controller::workerFunc()
         {
             ptrs[i] = (*m_stm_mngrs[m_out_chns[i]]).get_output(sz);
             //std::cout << "sz: " << sz << std::endl;
-            if (sz < 4096 / 2 / n_phys_chn) {
+            if (sz < notif_size / 2 / n_phys_chn) { // 4096
                 // data not ready
                 //if (sz > 0)
                 //     (*m_stm_mngrs[m_out_chns[i]]).sync_reader();
@@ -277,11 +316,13 @@ void Controller::workerFunc()
         }
         
         //std::cout << "stream manager ready" << std::endl;
-        min_sz = min_sz & ~(uint64_t)2047; // make it chunks of 2048
+        min_sz = min_sz & ~(uint64_t)(notif_size / 2 - 1); // make it chunks of 2048
         //read out available number of bytes
         uint64_t count,card_count = 0;
-        hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &count);
+        clocks_before[mem_idx] = (cycleclock() - initial_clock) / (3e9);
+        hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &card_count);
         hdl.check_error();
+        clocks[mem_idx] = (cycleclock() - initial_clock)/(3e9);
         // if (counter % 1000 == 0 && counter < 20001)
         //     printf("%lu check avail: %lu\n",counter, count);
         // else if (counter % 100000 == 0)
@@ -292,11 +333,81 @@ void Controller::workerFunc()
             std::cout << "first avail: " << count << std::endl;
             first_avail = false;
         }
-        count = count & ~(uint64_t)4095;
+        count = card_count & ~(uint64_t)(notif_size - 1);
+        if (card_count >= max && card_count != 4 * 1024ll * 1024ll) {
+            prev_max = max;
+            max = card_count;
+        }
         card_avail.store(count, std::memory_order_relaxed); // Not a huge deal if this is wrong...
         count = std::min(count, uint64_t(min_sz * 2 * n_phys_chn)); // count is number of bytes we can fill. need to account for number of physical channels.
+        // log availability and how much i am trying to write
+        avails[mem_idx] = card_count;
+        can_write_amts[mem_idx] = min_sz * 2;
+        if (card_count == 4 * 1024ll * 1024ll) {
+            nfills++;
+            fill_clocks.push_back((cycleclock() - initial_clock)/(3e9));
+            DebugInfo di;
+            uint32_t samples = 20;
+            uint32_t mem_idx_to_use = mem_idx;
+            for (uint32_t i = 0; i < samples; i++) {
+                di.avails.push_back(avails[mem_idx_to_use]);
+                di.clocks_before.push_back(clocks_before[mem_idx_to_use]);
+                di.can_write_amts.push_back(can_write_amts[mem_idx_to_use]);
+                di.clocks.push_back(clocks[mem_idx_to_use]);
+                if(mem_idx_to_use == 0) {
+                    mem_idx_to_use = mem_size - 1;
+                }
+                else {
+                    mem_idx_to_use--;
+                }
+            }
+            full_infos.push_back(di);
+            printf("stored full info with size %u\n", full_infos[nfills - 1].avails.size());
+        }
+        mem_idx++;
+        if (mem_idx >= mem_size)
+        {
+            mem_idx = 0;
+        }
+        if (cons_count == mem_size - 50) {
+            // print and throw error
+            uint32_t tot_to_print = 50;
+            uint32_t printed = 0;
+            uint32_t mem_idx_now = mem_idx;
+            for (; mem_idx < mem_size; mem_idx++) {
+                printf("print: %u, avail: %lu, can_write: %lu, clock before %f, clock: %f\n", printed, avails[mem_idx], can_write_amts[mem_idx], clocks_before[mem_idx], clocks[mem_idx]);
+                printf("prev_max: %lu, max: %lu\n", prev_max, max);
+                printed++;
+                if (printed == tot_to_print) {
+                    goto done;
+                }
+            }
+            mem_idx = 0;
+            for (; mem_idx <= mem_idx_now; mem_idx++) {
+                printf("print: %u, avail: %lu, can_write: %lu, clock_before: %f, clock: %f\n", printed, avails[mem_idx], can_write_amts[mem_idx], clocks_before[mem_idx], clocks[mem_idx]);
+                printf("prev_max: %lu, max: %lu\n", prev_max, max);
+                printed++;
+                if (printed == tot_to_print) {
+                    break;
+                }
+            }
+        done:
+            //throw std::runtime_error("card output has failed");
+            printf("nfills:%lu\n", nfills);
+            for (uint32_t i = 0; i < fill_clocks.size(); i++)
+            {
+                printf("fill clock %u, value: %f\n", i, fill_clocks[i]);
+                for (uint32_t j = 0; j < full_infos[i].avails.size(); j++) {
+                    printf("avail: %lu, can_write: %lu, clock_before: %f, clock: %f\n", full_infos[i].avails[j], full_infos[i].can_write_amts[j], full_infos[i].clocks_before[j], full_infos[i].clocks[j]);
+                }
+            }
+            printf("\n");
+            mem_idx = mem_idx_now;
+            cons_count = 0;
+        }
         if (DMA_started && !count) {
             uint64_t pos;
+            cons_count++;
             hdl.get_param(SPC_DATA_AVAIL_USER_POS, &pos);
             if (not_counter % 100 == 0 && not_counter < 1001) {
                 printf("Count min not reached %u, count %lu, avail: %lu, min_sz: %u, loc: %p, pos: %lu\n", not_counter, count, check_avail(), min_sz, ptrs[0], pos);
@@ -305,6 +416,9 @@ void Controller::workerFunc()
                 printf("Count min not reached %u, count %lu, avail: %lu, min_sz: %u, loc: %p, pos: %lu\n", not_counter, count, check_avail(), min_sz, ptrs[0], pos);
             not_counter++;
             continue;
+        }
+        else {
+            cons_count = 0;
         }
         if (count & 1)
             abort();
@@ -363,6 +477,9 @@ void Controller::workerFunc()
             hdl.force_trigger();
             hdl.check_error();
             DMA_started = true;
+            prev_max = 0;
+            max = 0;
+            nfills = 0;
         }
         CPU::wake();
     }

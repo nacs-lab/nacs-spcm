@@ -14,7 +14,8 @@ set(nacs_spcm_HDRS
   IDataCache.h
   Sequence.h
   Server.h
-  Trigger.h)
+  Trigger.h
+  clock.h)
 set(nacs_spcm_SRCS
   spcm.cpp
   data_stream.cpp
