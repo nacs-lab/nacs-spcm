@@ -13,6 +13,7 @@ set(nacs_spcm_HDRS
   SeqCache.h
   IDataCache.h
   Sequence.h
+  SerialPort.h
   Server.h
   Trigger.h
   clock.h)
@@ -30,6 +31,7 @@ set(nacs_spcm_SRCS
   SeqCache.cpp
   IDataCache.cpp
   Sequence.cpp
+  SerialPort.cpp
   Server.cpp
   Trigger.cpp)
 set(nacs_spcm_LINKS ${SLEEF_LIBRARIES} ${SPCM_LIBRARIES} ${DEPS_LIBRARIES})

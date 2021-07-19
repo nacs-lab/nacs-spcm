@@ -1,6 +1,7 @@
 //
 
 #include "Trigger.h"
+#include "SerialPort.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -29,6 +30,23 @@ NACS_EXPORT() Trigger::Trigger(const char *name)
             if (res <= 0)
                 return 0;
             return res;
+        };
+    }
+    else if (strncmp(name, "/dev/tty", strlen("/dev/tty")) == 0) {
+        Serial::Options options;
+        options.baud_rate = B9600;
+        options.char_size = CS8;
+        fd = Serial::open(name, options);
+        if (fd < 0)
+            throw std::system_error(-fd, std::generic_category(), "Error opening trigger stream");
+        cb = [] (int fd) {
+            unsigned char buff[8];
+            int res = read(fd, buff, 8);
+            if (res <= 0)
+                return (int64_t) 0;
+            int64_t val;
+            memcpy(&val, buff, 8);
+            return val;
         };
     }
     else {
