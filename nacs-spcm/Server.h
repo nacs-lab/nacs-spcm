@@ -29,21 +29,22 @@ public:
     bool startController();
     bool controllerRunning() const;
 
-    bool runSeq(uint64_t client_id, uint64_t seq_id, const uint8_t *data, uint32_t &sz, bool is_seq_sent, uint64_t seqcnt, uint32_t start_trigger_id);
+    bool runSeq(uint64_t client_id, uint64_t seq_id, const uint8_t *data, uint32_t &sz, bool is_seq_sent, uint64_t seqcnt, uint32_t start_trigger_id, bool is_first_seq);
     bool seqDone(uint64_t) const;
 
     bool stop();
 
-    void run(int fd, const std::function<int(int)> &cb);
+    void run(int fd, const std::function<std::pair<uint32_t, int64_t>(int)> &cb);
     void run()
     {
-        run(-1, [] (int) {return 0;});
+        run(-1, [] (int) {return std::make_pair(0, 0);});
     }
     private:
             struct QueueItem {
                 SeqCache::Entry *entry;
                 uint64_t id;
                 uint32_t start_trigger;
+                bool is_first_seq;
                 operator bool() const
                 {
                     return entry != nullptr;

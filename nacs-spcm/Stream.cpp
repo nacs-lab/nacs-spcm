@@ -251,11 +251,11 @@ inline bool StreamBase::check_start(int64_t t, uint32_t id)
     if (m_start_trigger.load(std::memory_order_acquire) < id)
         goto not_yet;
     {
-        auto global_time = uint64_t(m_step_t * m_output_cnt);
+        auto global_time = m_output_cnt;
         auto trigger_time =
             m_start_trigger_time.load(std::memory_order_relaxed);
         if (time_offset() + global_time < trigger_time) {
-            printf("not yet after receiving trigger\n");
+            //printf("not yet after receiving trigger\n");
             goto not_yet;
         }
     }
@@ -343,7 +343,7 @@ StreamBase::consume_old_cmds(State *states)
         case CmdType::ModChn:
             if (cmd->chn == Cmd::add_chn) {
                 printf("Process add_chn\n");
-                states[m_chns] = {0, (uint64_t) 70e6, 0.1f}; // initialize new channel
+                states[m_chns] = {0, 0, 0.0f}; // initialize new channel
                 m_chns++;
             }
             else {
@@ -401,7 +401,7 @@ retry:
             while (unlikely(cmd->op() == CmdType::ModChn)) {
                 if (cmd->chn == Cmd::add_chn) {
                     printf("Process add chn\n");
-                    states[m_chns] = {0, (uint64_t) 70e6, 0.1f};
+                    states[m_chns] = {0, 0, 0.0f};
                     m_chns++;
                 }
                 else {

@@ -28,25 +28,35 @@ NACS_EXPORT() Trigger::Trigger(const char *name)
             char buff[16];
             int res = read(fd, buff, 16);
             if (res <= 0)
-                return 0;
-            return res;
+                return std::make_pair(0, 0);
+            return std::make_pair(res, 0);
         };
     }
     else if (strncmp(name, "/dev/tty", strlen("/dev/tty")) == 0) {
         Serial::Options options;
-        options.baud_rate = B9600;
+        options.baud_rate = B115200;
         options.char_size = CS8;
         fd = Serial::open(name, options);
         if (fd < 0)
             throw std::system_error(-fd, std::generic_category(), "Error opening trigger stream");
         cb = [] (int fd) {
             unsigned char buff[8];
+            uint32_t nchunks = 0;
             int res = read(fd, buff, 8);
             if (res <= 0)
-                return (int64_t) 0;
+                return std::make_pair(nchunks,(int64_t) 0);
             int64_t val;
             memcpy(&val, buff, 8);
-            return val;
+            nchunks++;
+            while (read(fd,buff, 8) > 0)
+            {
+                nchunks++;
+            }
+            //for (int i = 0; i < 8; i++) {
+            //    printf("%X ", buff[i]);
+            //}
+            //printf("trigger val: %lli\n", val);
+            return std::make_pair(nchunks, val);
         };
     }
     else {

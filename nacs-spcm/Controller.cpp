@@ -127,7 +127,7 @@ void Controller::init()
         max_dac--;
     printf("max_dac: %d\n", max_dac);
 
-    int64_t rate = int64_t(625e6);
+    int64_t rate = m_conf.sample_rate;//int64_t(625e6);
     // hdl.set_param(SPC_CLOCKMODE, SPC_CM_INTPLL);
     // hdl.set_param(SPC_CLOCKMODE, SPC_CM_EXTREFCLOCK);
     // hdl.set_param(SPC_REFERENCECLOCK, 100 * 1000 * 1000);
@@ -146,6 +146,7 @@ void Controller::init()
     hdl.set_param(SPC_TRIG_CH_ANDMASK0, 0);
     hdl.set_param(SPC_TRIG_CH_ANDMASK1, 0);
 
+    hdl.set_param(SPCM_X2_MODE, SPCM_XMODE_TRIGOUT);
     // Enable output (since M4i).
     //hdl.set_param(SPC_ENABLEOUT0, 1);
     //hdl.set_param(SPC_FILTER0, 0);

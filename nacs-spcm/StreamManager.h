@@ -160,6 +160,13 @@ class StreamManagerBase
 {
     // This class is responsible for passing commands to the various streams and also conveying output.
 public:
+    inline void reset()
+    {
+        for (int i = 0; i < m_n_streams; i++) {
+            (*m_streams[i]).add_cmd(Cmd::getResetAll());
+        }
+        chn_map.reset();
+    }
     inline void sync_reader()
     {
         m_output.sync_reader();

@@ -62,16 +62,18 @@ template<typename T> inline void StreamManagerBase::sort_cmd_chn(T begin, T end)
 
 inline void StreamManagerBase::actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz)
 {
+    printf("calling actual_send_cmds\n");
     // actual distribution to stream_idx
     size_t copied_sz;
     Cmd *this_cmd = cmd;
     std::cout << "Sz: " << sz << std::endl;
     while (sz > 0) {
+        printf("In while loop, sz: %u, this_cmd: %p\n", sz, this_cmd);
         copied_sz = m_streams[stream_idx]->copy_cmds(this_cmd, sz);
         sz -= copied_sz;
         //std::cout << "Sz after: " << sz << std::endl;
         std::cout << "Sent " << *this_cmd << " to Stream" << stream_idx << std::endl;
-        this_cmd = cmd + copied_sz;
+        this_cmd = this_cmd + copied_sz;
     }
 }
 

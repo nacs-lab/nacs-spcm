@@ -28,7 +28,7 @@ NACS_EXPORT() Server::Server(Config conf)
 m_zmqctx(),
 m_zmqsock(m_zmqctx, ZMQ_ROUTER),
 m_evfd(openEvent(0, EFD_NONBLOCK | EFD_CLOEXEC)),
-m_ctrl(std::vector<uint8_t>{0}),
+m_ctrl(m_conf, std::vector<uint8_t>{0}),
 m_cache(8 * 1024ll * 1024ll * 1024ll) // pretty arbitrary
 {
     //m_ctrl = Controller(init_out_chn);
@@ -62,7 +62,7 @@ NACS_EXPORT() bool Server::stop()
     return true;
 }
 
-NACS_EXPORT() bool Server::runSeq(uint64_t client_id, uint64_t seq_id, const uint8_t *data, uint32_t &sz, bool is_seq_sent, uint64_t seqcnt, uint32_t start_trigger_id)
+NACS_EXPORT() bool Server::runSeq(uint64_t client_id, uint64_t seq_id, const uint8_t *data, uint32_t &sz, bool is_seq_sent, uint64_t seqcnt, uint32_t start_trigger_id, bool is_first_seq)
 {
     SeqCache::Entry* entry;
     if (!m_cache.getAndFill(client_id, seq_id, data, sz, entry, is_seq_sent)) {
@@ -71,7 +71,7 @@ NACS_EXPORT() bool Server::runSeq(uint64_t client_id, uint64_t seq_id, const uin
     {
         printf("Pushing back QueueItem");
         std::lock_guard<std::mutex> locker(m_seqlock);
-        m_seque.push_back(QueueItem{entry, seqcnt, start_trigger_id});
+        m_seque.push_back(QueueItem{entry, seqcnt, start_trigger_id, is_first_seq});
     }
     // This is a little racy, in principle we need to wait
     // until some data has been pushed to the controller.
@@ -109,6 +109,10 @@ NACS_INTERNAL void Server::seqRunner()
     // this call to popSeq hangs until a sequence (QueueItem) can be popped off
     while (auto entry = popSeq()) {
         printf("Controller running sequence\n");
+        // do reset now if this is a first sequence.
+        if (entry.is_first_seq) {
+            // m_ctrl.resetStmManagers();
+        }
         auto fin_id = m_ctrl.get_end_id();
         auto outChns = m_ctrl.getOutChn();
         for (int i = 0; i < outChns.size(); i++) {
@@ -184,7 +188,7 @@ inline bool Server::recvMore(zmq::message_t &msg) {
     return ZMQ::recv_more(m_zmqsock, msg);
 }
 
-NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &trigger_cb) {
+NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uint32_t, int64_t>(int)> &trigger_cb) {
     uint64_t seqcnt = 0;
     m_running = true;
     std::thread worker(&Server::seqRunner, this);
@@ -256,11 +260,12 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &tr
                 goto out;
             }
             // 8 bytes server_id, 8 bytes client_id, 8 bytes seq_id, 1 byte
-            uint64_t this_serv_id, this_client_id, this_seq_id, is_start_seq;
+            uint64_t this_serv_id, this_client_id, this_seq_id;
+            bool is_first_seq;
             memcpy(&this_serv_id, msg.data(), 8);
             memcpy(&this_client_id, msg.data() + 8, 8);
             memcpy(&this_seq_id, msg.data() + 16, 8);
-            memcpy(&is_start_seq, msg.data() + 24, 1);
+            memcpy(&is_first_seq, msg.data() + 24, 1);
             auto id = ++seqcnt;
             // check cache before looking at next message.
             bool haveSeq = m_cache.hasSeq(this_client_id, this_seq_id);
@@ -300,7 +305,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &tr
             else if (data_type == 1) {
                 seq_sent = true;
             }
-            if (!runSeq(this_client_id, this_seq_id, msg_data, msg_sz, seq_sent, id, start_id)) {
+            if (!runSeq(this_client_id, this_seq_id, msg_data, msg_sz, seq_sent, id, start_id, is_first_seq)) {
                 // this must mean data is missing
                 send_reply(addr, ZMQ::str_msg("need_data"));
                 goto out;
@@ -355,16 +360,19 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<int(int)> &tr
     while (m_running) {
         zmq::poll(polls);
         //auto t = getTime();
-        uint64_t t = 0;
+        //uint64_t t = 0;
         if (trigger_fd != -1 && polls[2].revents & ZMQ_POLLIN) {
             // trigger event
             std::cout << "trigger received" << std::endl;
-            uint32_t ntrigger = trigger_cb(trigger_fd);
+            auto trig_pair = trigger_cb(trigger_fd);
+            uint32_t ntrigger = trig_pair.first;
+            uint64_t t = trig_pair.second * m_conf.clock_factor / 32; // in units of arduino reads. Convert to time units used by Stream
+            //printf("ntriggers: %u, time: %lu, time_for_trigger: %lu", ntrigger, t, t + m_conf.trig_delay);
             if (ntrigger > start_triggers.size())
                 ntrigger = start_triggers.size();
             if (ntrigger > 0)
                 m_ctrl.set_start_trigger(start_triggers[ntrigger - 1],
-                                         t + m_conf.trig_delay);
+                                         t + m_conf.trig_delay); // trig delay is in units of stream times already
             start_triggers.erase(start_triggers.begin(),
                                  start_triggers.begin() + ntrigger);
         }

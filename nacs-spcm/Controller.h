@@ -13,6 +13,7 @@
 #include <atomic>
 #include <mutex>
 
+#include <nacs-spcm/Config.h>
 #include <nacs-spcm/spcm.h>
 #include <nacs-spcm/Stream.h>
 #include <nacs-spcm/StreamManager.h>
@@ -21,7 +22,8 @@ using namespace NaCs;
 namespace Spcm{
       class Controller {
       public:
-          Controller(std::vector<uint8_t> out_chns)
+          Controller(Config &conf, std::vector<uint8_t> out_chns)
+              : m_conf(conf)
           {
               /* StreamManager(uint32_t n_streams, uint32_t max_per_stream,
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
@@ -85,6 +87,11 @@ namespace Spcm{
                   m_out_chns = out_chns;
                   // TODO: Restart worker?? HANDLE CARD COMMANDS (inside of stopWorker?)
                   startWorker();
+              }
+          }
+          inline void resetStmManagers() {
+              for (int i = 0; i < n_phys_chn; i++) {
+                  m_stm_mngrs[m_out_chns[i]]->reset();
               }
           }
           inline uint32_t get_start_id() {
@@ -151,15 +158,15 @@ namespace Spcm{
           void startDMA(uint64_t sz);
           std::vector<std::unique_ptr<StreamManager>> m_stm_mngrs;
           std::vector<uint32_t> max_chns;
-          //Config &m_conf;
+          Config &m_conf;
 
           bool m_initialized{false};
 
           std::thread m_worker; // worker for relaying data to card
           int16_t* buff_ptr; // buffer pointer for spcm
           size_t buff_pos; // position for the output buffer
-          uint64_t buff_sz_nele{2 * 1024ll * 1024ll}; // 1 channel output latency of 6.71 ms. Software buffer size
-          uint64_t hw_buff_sz_nele{1 * 1024ll * 1024ll}; // 1 channel output latency of 1.67 ms. Hardware buffer size number of elements
+          uint64_t buff_sz_nele{4 * 1024ll * 1024ll}; // factor of 4 1 channel output latency of 6.71 ms. Software buffer size
+          uint64_t hw_buff_sz_nele{2 * 1024ll * 1024ll}; // 1 channel output latency of 1.67 ms. Hardware buffer size number of elements
           bool DMA_started{false};
 
           NaCs::Spcm::Spcm hdl{"/dev/spcm0"}; //Spcm handle

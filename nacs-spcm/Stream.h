@@ -176,11 +176,14 @@ struct activeCmd {
     activeCmd(const Cmd* cmd) : m_cmd(cmd) {
         if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn) {
 // only precalculate and store if it's vector input. If not calculate in real time.
+            printf("In active cmd constructor\n");
             std::vector<int64_t> ts;
             ts.reserve(static_cast<size_t>(std::ceil(cmd->len)));
             for (uint32_t i = 0; i < (cmd->len + 1); i++)
                 ts.push_back(i * t_serv_to_client); // convert to t_client
+            printf("About to convert function, fnptr at: %p\n", cmd->fnptr);
             vals = ((std::vector<float>(*)(std::vector<int64_t>))(cmd->fnptr))(ts);
+            printf("after calculating vals\n");
         }
     }
     std::pair<double,double> eval(int64_t t); // called with server t convention

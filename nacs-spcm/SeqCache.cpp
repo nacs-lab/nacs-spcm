@@ -306,7 +306,7 @@ m_cache(cache)
     memcpy(values, msg_bytes, 8 * nvalues);
     msg_bytes += 8 * nvalues;
     sz -= 8 * nvalues;
-    printf("at address: %p", values);
+    /*printf("at address: %p", values);
     printf("v0: %li\n", values[0].i64);
     printf("v1: %li\n", values[1].i64);
     printf("v2: %u\n", values[2].b);
@@ -316,7 +316,7 @@ m_cache(cache)
     printf("v6: %f\n", values[6].f64);
     printf("v7: %li\n", values[7].i64);
     printf("v8: %f\n", values[8].f64);
-
+    */
     // fill in types
     uint8_t type;
     for (int i = 0; i < nvalues; i++) {
@@ -325,7 +325,7 @@ m_cache(cache)
         sz -= 1;
         types.push_back(static_cast<Type>(type));
     };
-    printf("Types at address: %p\n", &types);
+    //printf("Types at address: %p\n", &types);
 
     // pulses
     uint32_t n_pulses;

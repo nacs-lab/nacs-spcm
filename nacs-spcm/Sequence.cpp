@@ -25,7 +25,7 @@ NACS_EXPORT() Sequence::Sequence(Value* values, std::vector<Type> types, bool is
 
 NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
     //printf("at address: %p\n", (*m_values));
-    printf("types size: %u", m_types.size());
+    /*printf("types size: %u", m_types.size());
     printf("v0: %li\n", m_values[0].i64);
     printf("v1: %li\n", m_values[1].i64);
     printf("v2: %u\n", m_values[2].b);
@@ -35,7 +35,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
     printf("v6: %f\n", m_values[6].f64);
     printf("v7: %li\n", m_values[7].i64);
     printf("v8: %f\n", m_values[8].f64);
-
+    */
 
     //printf("types at address: %p\n", m_types);
 // go through pulses, add them to cmd_vector and then sort.
@@ -63,7 +63,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
             len = get_value(pulses[i].len) * 625/ (32e6); // convert to AWG time
         }
         final_val = get_value(pulses[i].endvalue);
-        printf("v%i: %f\n", i, final_val);
+        //printf("v%i: %f\n", i, final_val);
         chn = pulses[i].chn;
         auto it = active_chns.begin();
         for (; it != active_chns.end(); ++it) {
@@ -95,6 +95,10 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
             return false;
         return p1.id < p2.id;
     });
+    printf("Now printing cmds");
+    for (int i = 0; i < cmds.size(); i++) {
+        std::cout << cmds[i] << std::endl;
+    }
     return cmds;
 }
 

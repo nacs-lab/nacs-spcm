@@ -12,7 +12,7 @@ namespace Spcm {
 struct Trigger {
     Trigger(const char *name);
     int fd;
-    std::function<int64_t(int)> cb;
+    std::function<std::pair<uint32_t, int64_t>(int)> cb;
 };
 
 }
