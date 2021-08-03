@@ -111,7 +111,7 @@ NACS_INTERNAL void Server::seqRunner()
         printf("Controller running sequence\n");
         // do reset now if this is a first sequence.
         if (entry.is_first_seq) {
-            // m_ctrl.resetStmManagers();
+            m_ctrl.resetStmManagers();
         }
         auto fin_id = m_ctrl.get_end_id();
         auto outChns = m_ctrl.getOutChn();
@@ -210,6 +210,24 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
         if (!recvMore(msg)) {
             send_reply(addr, ZMQ::bits_msg(false));
             goto out;
+        }
+        else if (ZMQ::match(msg, "set_out_config")) {
+            // [nchns: 4B][out_chn_num: 1B x nchns]
+            // expected to be sorted. 
+            if (!recvMore(msg)) {
+                send_reply(addr, ZMQ::bits_msg(uint64_t(0)));
+                goto out;
+            }
+            uint32_t n_out;
+            memcpy(&n_out, msg.data(), 4);
+            std::vector<uint8_t> out_chns;
+            for (uint32_t i = 0; i < n_out; i++) {
+                uint8_t this_out;
+                memcpy(&this_out, msg.data() + 4 + i, 1);
+                out_chns.push_back(this_out);
+            }
+            m_ctrl.setPhysChn(out_chns);
+            send_reply(addr, ZMQ::str_msg("ok"));
         }
         else if (ZMQ::match(msg, "req_client_id")) {
             uint64_t client_id;

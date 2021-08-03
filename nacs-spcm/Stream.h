@@ -172,9 +172,13 @@ std::ostream &operator<<(std::ostream &stm, const std::vector<Cmd> &cmds); //pri
 struct activeCmd {
 // structure to keep track of commands that span longer times
     const Cmd* m_cmd;
-    std::vector<float> vals; // precalculated values
+    //std::vector<float> vals; // precalculated values
     activeCmd(const Cmd* cmd) : m_cmd(cmd) {
+        ramp_func = cmd->fnptr;
         if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn) {
+            is_vec = true;
+        }
+        /*if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn) {
 // only precalculate and store if it's vector input. If not calculate in real time.
             printf("In active cmd constructor\n");
             std::vector<int64_t> ts;
@@ -184,9 +188,15 @@ struct activeCmd {
             printf("About to convert function, fnptr at: %p\n", cmd->fnptr);
             vals = ((std::vector<float>(*)(std::vector<int64_t>))(cmd->fnptr))(ts);
             printf("after calculating vals\n");
-        }
+            }*/
     }
     std::pair<double,double> eval(int64_t t); // called with server t convention
+    int64_t time_base = 0; // in server times
+    int64_t nsteps = 0;
+    double buffer[8] __attribute__((aligned(64)));
+    bool is_vec = false;
+    void (*ramp_func)(void) = nullptr;
+    double times [8] __attribute((aligned(64))) = {0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875};
 };
 
 class StreamBase

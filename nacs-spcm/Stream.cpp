@@ -167,11 +167,11 @@ NACS_EXPORT() std::ostream &operator<<(std::ostream &stm, const std::vector<Cmd>
         stm << cmd << std::endl;
     return stm;
 }
-
+__attribute__((target("avx512f,avx512dq")))
 std::pair<double, double> activeCmd::eval(int64_t t) {
     // t is time from beginning of pulse
     double val, dval;
-    if (m_cmd->op() == CmdType::AmpVecFn || m_cmd->op() == CmdType::FreqVecFn) {
+    /*if (m_cmd->op() == CmdType::AmpVecFn || m_cmd->op() == CmdType::FreqVecFn) {
         // assume all values are precalculated
         val = vals[t];
         dval = vals[t + 1] - vals[t];
@@ -189,6 +189,66 @@ std::pair<double, double> activeCmd::eval(int64_t t) {
     else {
         val = 0;
         dval = 0; // default behavior
+        }*/
+    if (is_vec) {
+        if (time_base == t && nsteps > 1) {
+            nsteps--;
+            time_base++;
+            val = buffer[7 - nsteps];
+            dval = buffer[8 - nsteps] - val;
+        }
+        else if (time_base == t && nsteps == 1) {
+            //nsteps--;
+            time_base++;
+            val = buffer[7];
+            // calculate next batch
+            auto ts __attribute__((aligned(64))) = (double(time_base) + _mm512_load_pd(times) * 8) * t_serv_to_client;
+            auto func = (void (*)(double*, const double*))ramp_func;
+            func(buffer, (const double*)&ts);
+            nsteps = 8;
+            dval = buffer[0] - val;
+        }
+        else {
+            // just recalculate. Probably won't hit this branch at all except for the very first calculation
+            auto ts __attribute__((aligned(64))) = (double(t) + _mm512_load_pd(times) * 8) * t_serv_to_client;
+            auto func = (void (*)(double*, const double*))ramp_func;
+            func(buffer, (const double*)&ts);
+            nsteps = 7;
+            time_base = t + 1;
+            val = buffer[0];
+            dval = buffer[1] - val;
+        }
+    }
+    else {
+        // scalar version
+        if (time_base == t && nsteps == 2) {
+            // previous value had been calculated and is in position 1 in the buffer.
+            nsteps--;
+            time_base++;
+            val = buffer[1];
+            auto func = (double (*)(double))ramp_func;
+            buffer[0] = func(double(time_base) * t_serv_to_client);
+            dval = buffer[0] - val;
+        }
+        else if (time_base == t && nsteps == 1) {
+            // previous value is in position 0 in the buffer and has been calculated.
+            nsteps++;
+            time_base++;
+            val = buffer[0];
+            auto func = (double (*)(double))ramp_func;
+            buffer[1] = func(double(time_base) * t_serv_to_client);
+            dval = buffer[1] - val;
+        }
+        else {
+            // need to recalculate
+            nsteps = 2;
+            auto func = (double (*)(double))ramp_func;
+            buffer[0] = func(double(t) * t_serv_to_client);
+            time_base = t + 1;
+            buffer[1] = func(double(time_base) * t_serv_to_client);
+            val = buffer[0];
+            dval = buffer[1] - val;
+        }
     }
     return std::make_pair(val, dval);
 }

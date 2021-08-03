@@ -41,8 +41,10 @@ inline bool Controller::checkRequest()
     auto req = m_worker_req.load(std::memory_order_relaxed);
     if (likely(req == WorkerRequest::None))
         return true;
-    if (req == WorkerRequest::Stop)
+    if (req == WorkerRequest::Stop) {
+        stopCard();
         return false;
+    }
     // Unlock request
     tryUnlock();
     return true;
@@ -74,7 +76,7 @@ NACS_EXPORT() void Controller::stopWorker()
             (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
             (*m_stm_mngrs[m_out_chns[i]]).stop_worker();
         }
-        stopCard();
+        //stopCard();
         m_worker.join();
     }
 }
@@ -194,19 +196,26 @@ void Controller::initChnsAndBuffer()
     }
     hdl.ch_enable(chn_bits);
     // set up hardware buffer
-    hdl.set_param(SPC_DATA_OUTBUFSIZE, 2 * hw_buff_sz_nele);
+    hdl.set_param(SPC_DATA_OUTBUFSIZE, 2 * hw_buff_sz_nele * n_phys_chn);
     hdl.write_setup();
 
-    buff_ptr = (int16_t*)mapAnonPage(2 * buff_sz_nele, Prot::RW);
+    uint32_t active_chns;
+    uint32_t ch_count;
+    hdl.get_param(SPC_CHENABLE, &active_chns);
+    hdl.get_param(SPC_CHCOUNT, &ch_count);
+    printf("Activated channels bitmask is: 0x%08x\n", active_chns);
+    printf("Number of activated channels: %d\n", ch_count);
+    buff_ptr = (int16_t*)mapAnonPage(2 * buff_sz_nele * n_phys_chn, Prot::RW);
     buff_pos = 0;
     // TODO: Buffer size?
     hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, notif_size,
-                     (void*)buff_ptr, 0, 2 * buff_sz_nele);
+                     (void*)buff_ptr, 0, 2 * buff_sz_nele * n_phys_chn);
     hdl.check_error();
 }
 
 void Controller::stopCard()
 {
+    printf("Stopping card\n");
     // stop DMA transfer and card.
     hdl.cmd(M2CMD_DATA_STOPDMA);
     hdl.check_error();
@@ -317,13 +326,13 @@ void Controller::workerFunc()
         }
         
         //std::cout << "stream manager ready" << std::endl;
-        min_sz = min_sz & ~(uint64_t)(notif_size / 2 - 1); // make it chunks of 2048
+        min_sz = min_sz & ~(uint64_t)(notif_size / 2 / n_phys_chn - 1); // make it chunks of 2048
         //read out available number of bytes
         uint64_t count,card_count = 0;
-        clocks_before[mem_idx] = (cycleclock() - initial_clock) / (3e9);
+        //clocks_before[mem_idx] = (cycleclock() - initial_clock) / (3e9);
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &card_count);
         hdl.check_error();
-        clocks[mem_idx] = (cycleclock() - initial_clock)/(3e9);
+        //clocks[mem_idx] = (cycleclock() - initial_clock)/(3e9);
         // if (counter % 1000 == 0 && counter < 20001)
         //     printf("%lu check avail: %lu\n",counter, count);
         // else if (counter % 100000 == 0)
@@ -335,16 +344,16 @@ void Controller::workerFunc()
             first_avail = false;
         }
         count = card_count & ~(uint64_t)(notif_size - 1);
-        if (card_count >= max && card_count != 4 * 1024ll * 1024ll) {
+        if (card_count >= max && card_count != 4 * 1024ll * 1024ll * 1024ll) {
             prev_max = max;
             max = card_count;
         }
         card_avail.store(count, std::memory_order_relaxed); // Not a huge deal if this is wrong...
         count = std::min(count, uint64_t(min_sz * 2 * n_phys_chn)); // count is number of bytes we can fill. need to account for number of physical channels.
         // log availability and how much i am trying to write
-        avails[mem_idx] = card_count;
-        can_write_amts[mem_idx] = min_sz * 2;
-        if (card_count == 4 * 1024ll * 1024ll) {
+        //avails[mem_idx] = card_count;
+        //can_write_amts[mem_idx] = min_sz * 2;
+        /*if (card_count == 4 * 1024ll * 1024ll * 1024ll) {
             nfills++;
             fill_clocks.push_back((cycleclock() - initial_clock)/(3e9));
             DebugInfo di;
@@ -406,16 +415,17 @@ void Controller::workerFunc()
             mem_idx = mem_idx_now;
             cons_count = 0;
         }
+        */
         if (DMA_started && !count) {
-            uint64_t pos;
-            cons_count++;
-            hdl.get_param(SPC_DATA_AVAIL_USER_POS, &pos);
-            if (not_counter % 100 == 0 && not_counter < 1001) {
-                printf("Count min not reached %u, count %lu, avail: %lu, min_sz: %u, loc: %p, pos: %lu\n", not_counter, count, check_avail(), min_sz, ptrs[0], pos);
-            }
-            else if (not_counter % 10000000 == 0)
-                printf("Count min not reached %u, count %lu, avail: %lu, min_sz: %u, loc: %p, pos: %lu\n", not_counter, count, check_avail(), min_sz, ptrs[0], pos);
-            not_counter++;
+            //uint64_t pos;
+            //cons_count++;
+            //hdl.get_param(SPC_DATA_AVAIL_USER_POS, &pos);
+            //if (not_counter % 100 == 0 && not_counter < 1001) {
+            //    printf("Count min not reached %u, count %lu, avail: %lu, min_sz: %u, loc: %p, pos: %lu\n", not_counter, count, check_avail(), min_sz, ptrs[0], pos);
+            //}
+            //else if (not_counter % 10000000 == 0)
+            //    printf("Count min not reached %u, count %lu, avail: %lu, min_sz: %u, loc: %p, pos: %lu\n", not_counter, count, check_avail(), min_sz, ptrs[0], pos);
+            //not_counter++;
             continue;
         }
         else {
@@ -455,7 +465,7 @@ void Controller::workerFunc()
                 ptrs[0] += 32;
                 ptrs[1] += 32;
                 buff_pos += 64;
-                if (buff_pos >= buff_sz_nele) {
+                if (buff_pos >= buff_sz_nele * 2) {
                     buff_pos = 0;
                 }
             }
