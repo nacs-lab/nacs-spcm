@@ -51,9 +51,13 @@ inline bool Controller::checkRequest()
 }
 NACS_EXPORT() void Controller::startWorker()
 {
-    if (workerRunning())
+    if (workerRunning()) {
+        printf("worker already running\n");
         return;
+    }
+    printf("Now trying to acquire lock\n");
     {
+        printf("Starting card\n");
         std::lock_guard<std::mutex> locker(m_worker_lock);
         ensureInit();
         initChnsAndBuffer();
@@ -70,15 +74,18 @@ NACS_EXPORT() void Controller::stopWorker()
     if (!workerRunning())
         return;
     m_worker_req.store(WorkerRequest::Stop, std::memory_order_relaxed);
+    printf("Now trying to acquire lock in stopWorker\n");
     {
         std::lock_guard<std::mutex> locker(m_worker_lock);
         for (int i = 0; i < n_phys_chn; ++i) {
+            printf("Stopping stream %u\n", m_out_chns[i]);
             (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
             (*m_stm_mngrs[m_out_chns[i]]).stop_worker();
         }
         //stopCard();
         m_worker.join();
     }
+    printf("StopWorker finished\n");
 }
 NACS_EXPORT() void Controller::runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait){
     uint32_t nwrote;
@@ -222,6 +229,7 @@ void Controller::stopCard()
     hdl.cmd(M2CMD_CARD_STOP);
     hdl.check_error();
     DMA_started = false;
+    printf("Card stop finished\n");
 }
 
 NACS_EXPORT() void Controller::force_trigger()
@@ -494,5 +502,6 @@ void Controller::workerFunc()
         }
         CPU::wake();
     }
+    printf("Worker finishing\n");
 }
 }

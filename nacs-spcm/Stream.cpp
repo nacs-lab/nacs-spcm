@@ -673,6 +673,9 @@ NACS_EXPORT() void StreamBase::generate_page(State *states)
             m_output.sync_writer();
         }
         CPU::pause();
+        if (unlikely(m_stop.load(std::memory_order_relaxed))){
+            return;
+        }
     }
     //std::cout << "ready to write" << std::endl;
     // Now ready to write to output. Write in output_block_sz chunks

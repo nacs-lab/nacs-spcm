@@ -263,6 +263,9 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
         //     printf(" sz: %u\n", sz_to_write);
         // }
         // stuck_counter++;
+        if (unlikely(m_stop.load(std::memory_order_relaxed))) {
+            return;
+        }
     }
     //std::cout << "can write" << std::endl;
     // wait for input streams to be ready
@@ -279,6 +282,9 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
         else {
             CPU::pause();
             //(*m_streams[stream_idx]).sync_reader();
+        }
+        if (unlikely(m_stop.load(std::memory_order_relaxed))) {
+            return;
         }
     }
     //std::cout << "stream ready" << std::endl;

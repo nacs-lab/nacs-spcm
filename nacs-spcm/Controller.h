@@ -92,7 +92,9 @@ namespace Spcm{
                   stopWorker();
                   m_out_chns = out_chns;
                   // TODO: Restart worker?? HANDLE CARD COMMANDS (inside of stopWorker?)
+                  printf("Calling startWorker\n");
                   startWorker();
+                  printf("After startWorker\n");
               }
           }
           inline void resetStmManagers() {
