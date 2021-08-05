@@ -294,9 +294,13 @@ void Controller::workerFunc()
     // TIMING STUFF
     bool first_avail = true;
     uint32_t cons_count = 0;
-    uint32_t mem_size = 100000;
+    uint32_t mem_size = 1000;
+    uint64_t query_counter = 0;
+    uint64_t tot_counter = 0;
+    uint64_t first_non_notif_idx;
+    uint64_t first_below_notif_idx;
     uint32_t mem_idx = 0;
-    std::vector <uint64_t> avails;
+    std::vector <int64_t> avails;
     std::vector <double> clocks_before;
     std::vector <uint64_t> can_write_amts;
     std::vector <double> clocks;
@@ -308,6 +312,17 @@ void Controller::workerFunc()
     can_write_amts.resize(mem_size);
     clocks.resize(mem_size);
     std::vector<DebugInfo> full_infos;
+    uint32_t non_notif_size = 0;
+    uint32_t below_notif_size = 0;
+    std::vector <uint64_t> hist_counts;
+    uint32_t nbins = 32;
+    hist_counts.resize(nbins);
+    std::fill(hist_counts.begin(), hist_counts.end(), 0);
+    std::fill(avails.begin(), avails.end(), 0);
+    uint32_t bin_sz = 2 * buff_sz_nele * n_phys_chn / nbins;
+    uint32_t non_notif, below_notif;
+    bool first_non_notif = true;
+    bool first_below_notif = true;
     while (checkRequest()) {
         //std::cout << "working" << std::endl;
         // relay data from StreamManager to card
@@ -332,7 +347,6 @@ void Controller::workerFunc()
                 min_sz = sz;
             }
         }
-        
         //std::cout << "stream manager ready" << std::endl;
         min_sz = min_sz & ~(uint64_t)(notif_size / 2 / n_phys_chn - 1); // make it chunks of 2048
         //read out available number of bytes
@@ -340,6 +354,49 @@ void Controller::workerFunc()
         //clocks_before[mem_idx] = (cycleclock() - initial_clock) / (3e9);
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &card_count);
         hdl.check_error();
+        tot_counter++;
+        //record and then increase query counter
+        if (card_count == 0) {
+            if (avails[query_counter % mem_size] >= 0) {
+                query_counter++;
+                avails[query_counter % mem_size] = -1;
+            }
+            else {
+                avails[query_counter % mem_size] = avails[query_counter % mem_size] - 1;
+            }
+        }
+        else if (card_count == 4096) {
+            if (avails[query_counter % mem_size] > 2 * buff_sz_nele * n_phys_chn) {
+                avails[query_counter % mem_size] = avails[query_counter % mem_size] + 1;
+            }
+            else {
+                query_counter++;
+                avails[query_counter % mem_size] = 2 * buff_sz_nele * n_phys_chn + 1;
+            }
+        }
+        else {
+            query_counter++;
+            avails[query_counter % mem_size] = card_count;
+        }
+        clocks[query_counter % mem_size] = (cycleclock() - initial_clock) / (3e9);
+        if (card_count % notif_size != 0) {
+            if (first_non_notif) {
+                first_non_notif_idx = tot_counter;
+                non_notif = card_count;
+                first_non_notif = false;
+            }
+            non_notif_size++;
+        }
+        if (card_count != 0 && card_count < notif_size) {
+            if (first_below_notif) {
+                first_below_notif_idx = tot_counter;
+                below_notif = card_count;
+                first_below_notif = false;
+            }
+            below_notif_size++;
+        }
+        // build histogram
+        hist_counts[card_count / bin_sz] = hist_counts[card_count / bin_sz] + 1;
         //clocks[mem_idx] = (cycleclock() - initial_clock)/(3e9);
         // if (counter % 1000 == 0 && counter < 20001)
         //     printf("%lu check avail: %lu\n",counter, count);
@@ -351,6 +408,7 @@ void Controller::workerFunc()
             std::cout << "first avail: " << count << std::endl;
             first_avail = false;
         }
+        
         count = card_count & ~(uint64_t)(notif_size - 1);
         if (card_count >= max && card_count != 4 * 1024ll * 1024ll * 1024ll) {
             prev_max = max;
@@ -426,7 +484,39 @@ void Controller::workerFunc()
         */
         if (DMA_started && !count) {
             //uint64_t pos;
-            //cons_count++;
+            cons_count++;
+            if (cons_count % 100000 == 0) {
+                // failure detected and print histogram
+                for (uint32_t i = 0; i < nbins; i++) {
+                    printf("Bin %u, counts: %lu\n", i, hist_counts[i]);
+                }
+                printf("Notif size: %lu, Non notif count: %lu, non notif: %u, below_notif: %lu\n", notif_size, non_notif_size, non_notif, below_notif_size);
+                printf("Tot Count: %lu, first_non_notif count: %lu, first_non_notif_val: %lu\n", tot_counter, first_non_notif_idx, non_notif);
+                printf("First below notif count: %lu, first below notif: %lu\n", first_below_notif_idx, below_notif);
+// print avails data before failure
+                for (uint32_t i = (query_counter % mem_size) + 1; i < mem_size; i++) {
+                    if (avails[i] < 0) {
+                        printf("Sample: %u, Number of Cons Zeros: %li, Last Clock: %lf\n", i, -avails[i], clocks[i]);
+                    }
+                    else if (avails[i] > 2 * buff_sz_nele * n_phys_chn) {
+                        printf("Sample: %u, Number of Cons 4096: %li, Last Clock: %lf\n", i, avails[i] - 2 * buff_sz_nele * n_phys_chn, clocks[i]);
+                    }
+                    else {
+                        printf("Sample: %u, Value: %li, Clock: %lf\n", i, avails[i], clocks[i]);
+                    }
+                }
+                for (uint32_t i = 0; i < (query_counter % mem_size) + 1; i++) {
+                    if (avails[i] < 0) {
+                        printf("Sample: %u, Number of Cons Zeros: %li, Last Clock: %lf\n", i, -avails[i], clocks[i]);
+                    }
+                    else if (avails[i] > 2 * buff_sz_nele * n_phys_chn) {
+                        printf("Sample: %u, Number of Cons 4096: %li, Last Clock: %lf\n", i, avails[i] - 2 * buff_sz_nele * n_phys_chn, clocks[i]);
+                    }
+                    else {
+                        printf("Sample: %u, Value: %li, Clock: %lf\n", i, avails[i], clocks[i]);
+                    }
+                }
+            }
             //hdl.get_param(SPC_DATA_AVAIL_USER_POS, &pos);
             //if (not_counter % 100 == 0 && not_counter < 1001) {
             //    printf("Count min not reached %u, count %lu, avail: %lu, min_sz: %u, loc: %p, pos: %lu\n", not_counter, count, check_avail(), min_sz, ptrs[0], pos);
@@ -480,6 +570,9 @@ void Controller::workerFunc()
         }
         // NO SUPPORT FOR MORE THAN 2 PHYS OUTPUTS AT THE MOMENT
         //std::cout << "done writing" << std::endl;
+        if (count % notif_size != 0) {
+            throw std::runtime_error("Writing count that is not multiple of notif size");
+        }
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
         hdl.check_error();
         for (int i = 0; i < n_phys_chn; ++i) {
