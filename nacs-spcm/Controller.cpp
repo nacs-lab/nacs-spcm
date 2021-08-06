@@ -338,6 +338,10 @@ void Controller::workerFunc()
         //read out available number of bytes
         uint64_t count,card_count = 0;
         //clocks_before[mem_idx] = (cycleclock() - initial_clock) / (3e9);
+        if (DMA_started) {
+            hdl.cmd(M2CMD_DATA_WAITDMA);
+            hdl.check_error();
+        }
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &card_count);
         hdl.check_error();
         //clocks[mem_idx] = (cycleclock() - initial_clock)/(3e9);
