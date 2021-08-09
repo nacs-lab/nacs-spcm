@@ -156,7 +156,9 @@ void Controller::init()
     hdl.set_param(SPC_TRIG_CH_ANDMASK1, 0);
 
     hdl.set_param(SPCM_X2_MODE, SPCM_XMODE_TRIGOUT);
-    // Enable output (since M4i).
+
+    hdl.set_param(SPC_TIMEOUT, 1000);
+// Enable output (since M4i).
     //hdl.set_param(SPC_ENABLEOUT0, 1);
     //hdl.set_param(SPC_FILTER0, 0);
 
@@ -324,6 +326,7 @@ void Controller::workerFunc()
     bool first_non_notif = true;
     bool first_below_notif = true;
     while (checkRequest()) {
+        //printf("here");
         //std::cout << "working" << std::endl;
         // relay data from StreamManager to card
     retry:
@@ -341,6 +344,7 @@ void Controller::workerFunc()
                 //     (*m_stm_mngrs[m_out_chns[i]]).sync_reader();
                 CPU::pause();
                 //toCont = true;
+                //printf("here");
                 goto retry;
             }
             if (sz < min_sz) {
@@ -352,8 +356,19 @@ void Controller::workerFunc()
         //read out available number of bytes
         uint64_t count,card_count = 0;
         //clocks_before[mem_idx] = (cycleclock() - initial_clock) / (3e9);
-        if (DMA_started) {
-            hdl.cmd(M2CMD_DATA_WAITDMA);
+        bool card_ready = false;
+        if (DMA_started && !card_ready) {
+            hdl.check_error();
+            //if (tot_counter % 100 == 0)
+            //printf("DMA wait\n");
+            if (hdl.cmd(M2CMD_DATA_WAITDMA) == ERR_TIMEOUT) {
+                printf("Timeout occured. Trying again\n");
+                continue;
+            }
+            hdl.check_error();
+            //if (tot_counter % 100 == 0)
+            //printf("DMA done\n");
+            card_ready = true;
         }
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &card_count);
         hdl.check_error();
@@ -588,13 +603,14 @@ void Controller::workerFunc()
             hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);
             hdl.cmd(M2CMD_CARD_START | M2CMD_CARD_ENABLETRIGGER);
             printf("force trigger at count %lu\n", count);
-            std::this_thread::sleep_for(1ms);
+            //std::this_thread::sleep_for(1ms);
             hdl.force_trigger();
             hdl.check_error();
             DMA_started = true;
             prev_max = 0;
             max = 0;
             nfills = 0;
+            printf("DMA_started\n");
         }
         CPU::wake();
     }
