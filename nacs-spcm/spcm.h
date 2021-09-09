@@ -252,9 +252,11 @@ public:
         get_param(SPC_PCIEXTFEATURES, &res);
         return res;
     }
-    void cmd(int32_t cmd)
+    uint32_t cmd(int32_t cmd)
     {
-        set_param(SPC_M2CMD, cmd);
+        uint32_t res;
+        res = set_param(SPC_M2CMD, cmd);
+        return res;
     }
     void reset()
     {

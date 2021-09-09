@@ -229,8 +229,12 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
                 //std:: cout << "Now t is: " << t << std::endl;
             }
             else {
-                sz_to_send++; // keep on collecting commands
+                if (!first_cmd) {
+                    // should enter this branch only if previous command was meta command at same time
+                    first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
                 }
+                sz_to_send++; // keep on collecting commands
+            }
             //sz_to_send++;
             // send_cmds(&var_cmd, 1);
         }

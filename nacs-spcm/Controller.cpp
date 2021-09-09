@@ -156,7 +156,9 @@ void Controller::init()
     hdl.set_param(SPC_TRIG_CH_ANDMASK1, 0);
 
     hdl.set_param(SPCM_X2_MODE, SPCM_XMODE_TRIGOUT);
-    // Enable output (since M4i).
+
+    hdl.set_param(SPC_TIMEOUT, 1000); // 1 s time out
+// Enable output (since M4i).
     //hdl.set_param(SPC_ENABLEOUT0, 1);
     //hdl.set_param(SPC_FILTER0, 0);
 
@@ -339,7 +341,10 @@ void Controller::workerFunc()
         uint64_t count,card_count = 0;
         //clocks_before[mem_idx] = (cycleclock() - initial_clock) / (3e9);
         if (DMA_started) {
-            hdl.cmd(M2CMD_DATA_WAITDMA);
+            if (hdl.cmd(M2CMD_DATA_WAITDMA) == ERR_TIMEOUT)
+            {
+                printf("WAITDMA timeout\n");
+            }
             hdl.check_error();
         }
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &card_count);
@@ -496,7 +501,7 @@ void Controller::workerFunc()
             hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);
             hdl.cmd(M2CMD_CARD_START | M2CMD_CARD_ENABLETRIGGER);
             printf("force trigger at count %lu\n", count);
-            std::this_thread::sleep_for(1ms);
+            //std::this_thread::sleep_for(1ms);
             hdl.force_trigger();
             hdl.check_error();
             DMA_started = true;

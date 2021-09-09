@@ -173,8 +173,8 @@ namespace Spcm{
           std::thread m_worker; // worker for relaying data to card
           int16_t* buff_ptr; // buffer pointer for spcm
           size_t buff_pos; // position for the output buffer
-          uint64_t buff_sz_nele{1 * 1024ll * 1024ll}; //4 factor of 4 1 channel output latency of 6.71 ms. Software buffer size
-          uint64_t hw_buff_sz_nele{1 * 1024ll * 1024ll}; //2 1 channel output latency of 1.67 ms. Hardware buffer size number of elements
+          uint64_t buff_sz_nele{2 * 1024ll * 1024ll / 2}; //4 factor of 4 1 channel output latency of 6.71 ms. Software buffer size
+          uint64_t hw_buff_sz_nele{2 * 1024ll * 1024ll}; //2 1 channel output latency of 1.67 ms. Hardware buffer size number of elements
           bool DMA_started{false};
 
           NaCs::Spcm::Spcm hdl{"/dev/spcm0"}; //Spcm handle
