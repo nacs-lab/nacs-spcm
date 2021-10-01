@@ -35,7 +35,7 @@ constexpr int cycle = 1024/32;
 constexpr uint64_t max_phase = uint64_t(sample_rate * 10);
 constexpr double phase_scale = 2 / double(max_phase); // convert from "phase_cnt" which is tracked by state.phase to phase in units of pi radians that compute_single_chn wants.
 constexpr double phase_scale_client = 625e7; // converts from 0 to 1 scale to phase_cnt
-constexpr double freq_scale_client = 10; // converts from real frequency to freq_cnt. 
+constexpr double freq_scale_client = 10; // converts from real frequency to freq_cnt.
 constexpr double freq_scale = 0.1 / (sample_rate / 32); // 1 cycle in 32 samples at 625 MHz sampling rate. Converts a frequency at 10 times the real frequency, hence the 0.1.
 constexpr double amp_scale = 6.7465185e9f;
 
@@ -320,7 +320,7 @@ inline bool StreamBase::check_start(int64_t t, uint32_t id)
         }
     }
     m_slow_mode.store(false, std::memory_order_relaxed);
-    printf("Processed trigger\n");
+    //printf("Processed trigger\n");
     return true;
 not_yet:
     //printf("waiting for trigger\n");
@@ -355,7 +355,7 @@ StreamBase::consume_old_cmds(State *states)
                 m_slow_mode.store(false,std::memory_order_relaxed);
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerEnd) {
-                printf("Process trigger end in consume_old_cmds\n");
+                //printf("Process trigger end in consume_old_cmds\n");
                 m_end_trigger_pending = cmd->final_val;
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerStart) {
@@ -402,7 +402,7 @@ StreamBase::consume_old_cmds(State *states)
             break;
         case CmdType::ModChn:
             if (cmd->chn == Cmd::add_chn) {
-                printf("Process add_chn\n");
+                //printf("Process add_chn\n");
                 states[m_chns] = {0, 0, 0.0f}; // initialize new channel
                 m_chns++;
             }
@@ -445,7 +445,7 @@ retry:
                 m_slow_mode.store(false, std::memory_order_relaxed);
             }
             else if (cmd->chn == (uint32_t)CmdMeta::TriggerEnd) {
-                printf("Process trigger end\n");
+                //printf("Process trigger end\n");
                 m_end_trigger_pending = cmd->final_val;
             }
             else if (cmd->chn == (uint32_t)CmdMeta::TriggerStart) {
@@ -460,7 +460,7 @@ retry:
         else {
             while (unlikely(cmd->op() == CmdType::ModChn)) {
                 if (cmd->chn == Cmd::add_chn) {
-                    printf("Process add chn\n");
+                    //printf("Process add chn\n");
                     states[m_chns] = {0, 0, 0.0f};
                     m_chns++;
                 }
@@ -580,9 +580,9 @@ cmd_out:
         }
         else {
             do {
-                std::cout << (*cmd) << std::endl;
+                //std::cout << (*cmd) << std::endl;
                 if (cmd->op() == CmdType::FreqSet){
-                    std::cout << "in freq set" << std::endl;
+                    //std::cout << "in freq set" << std::endl;
                     freq = cmd->final_val * freq_scale_client;
                 }
                 else if (cmd->op() == CmdType::FreqFn || cmd->op() == CmdType::FreqVecFn) {
@@ -651,8 +651,8 @@ cmd_out:
     //if (m_cur_t % uint32_t(1e6) == 0) {
     //  std::cout << "t: " << m_cur_t << std::endl;
     //}
-    if (m_cur_t % 19531250 == 0) {
-        printf("m_cur_t: %lu\n", m_cur_t);
+    if (m_output_cnt % 19531250 == 0) { // 19531250
+        printf("m_output_cnt: %lu\n", m_output_cnt);
     }
     __m512i v;
     v = _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,

@@ -144,6 +144,7 @@ public:
         for (int i = stream_cnt; i < (stream_cnt * m_max_per_chn); i++) {
             chn_map[i] = UINT_MAX;
         }
+        tot_chns = 0;
     }
 
     std::vector<uint32_t> chn_map; // vector of size m_max_per_chn * stream_cnt. entry is chnid
@@ -237,7 +238,7 @@ public:
     inline void start_streams() {
         for (int i = 0; i < m_n_streams; i++) {
             (*m_streams[i]).start_worker();
-            std::cout << "Started Stream: " << i << std::endl;
+            //std::cout << "Started Stream: " << i << std::endl;
         }
     }
     inline void stop_streams() {
@@ -252,7 +253,7 @@ protected:
         : m_n_streams(n_streams),
           m_max_per_stream(max_per_stream),
           chn_map(n_streams, max_per_stream),
-          m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 1),
+          m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
           m_output((int16_t*)mapAnonPage(1 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll / 2, 1024ll * 1024ll / 2)
     {
         // start streams

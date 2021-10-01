@@ -239,7 +239,7 @@ public:
         while(!try_add_cmd(cmd)){
             CPU::pause();
         }
-        std::cout << "added: " << cmd << std::endl;
+        //std::cout << "added: " << cmd << std::endl;
         //std::cout << "Command Added!" << std::endl;
     }
     inline void flush_cmd()
@@ -315,7 +315,7 @@ protected:
         m_step_t(step_t),
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
-        m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 1),
+        m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
         m_output((int16_t*)mapAnonPage(1 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll / 2, 1024ll * 1024ll / 2),
         m_stream_num(stream_num)
     {

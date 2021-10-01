@@ -19,6 +19,7 @@ namespace Spcm {
 
 class SeqCache {
 public:
+    //const static Sequence invalid_seq{nullptr, std::vector<Type>(), false};
     struct TotSequence {
     public:
         TotSequence(SeqCache& cache, uint64_t client_id, const uint8_t* &msg_bytes, uint32_t &sz);
@@ -42,6 +43,7 @@ public:
         std::vector<Type> types;
         SeqCache& m_cache;
     private:
+        //Sequence invalid_seq{nullptr, std::vector<Type>(), false};
         void addPulse(uint32_t enabled, uint32_t id, uint32_t t_start,
                   uint32_t len, uint32_t endvalue, uint8_t functype,
                   uint8_t phys_chn, uint32_t chn, void (*fnptr)(void));
@@ -71,7 +73,10 @@ public:
     void unref(const Entry &entry) const;
     bool hasSeq(uint64_t client_id, uint64_t seq_id);
 
+    //const static Sequence invalid_seq{nullptr, std::vector<Type>(), false};
+
 private:
+    //Sequence invalid_seq{nullptr, std::vector<Type>(), false};
     bool ejectOldest();
     bool get(uint64_t client_id, uint64_t seq_id, Entry* &entry);
     //const double m_tstep;

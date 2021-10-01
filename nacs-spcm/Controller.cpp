@@ -52,12 +52,12 @@ inline bool Controller::checkRequest()
 NACS_EXPORT() void Controller::startWorker()
 {
     if (workerRunning()) {
-        printf("worker already running\n");
+        //printf("worker already running\n");
         return;
     }
-    printf("Now trying to acquire lock\n");
+    //printf("Now trying to acquire lock\n");
     {
-        printf("Starting card\n");
+        //printf("Starting card\n");
         std::lock_guard<std::mutex> locker(m_worker_lock);
         ensureInit();
         initChnsAndBuffer();
@@ -74,11 +74,11 @@ NACS_EXPORT() void Controller::stopWorker()
     if (!workerRunning())
         return;
     m_worker_req.store(WorkerRequest::Stop, std::memory_order_relaxed);
-    printf("Now trying to acquire lock in stopWorker\n");
+    //printf("Now trying to acquire lock in stopWorker\n");
     {
         std::lock_guard<std::mutex> locker(m_worker_lock);
         for (int i = 0; i < n_phys_chn; ++i) {
-            printf("Stopping stream %u\n", m_out_chns[i]);
+            //printf("Stopping stream %u\n", m_out_chns[i]);
             (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
             (*m_stm_mngrs[m_out_chns[i]]).stop_worker();
         }
@@ -95,9 +95,9 @@ NACS_EXPORT() void Controller::runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait
         sz -= nwrote;
     } while (sz > 0);
     flush_cmd(idx);
-    std::cout << "now distributing" << std::endl;
+    //std::cout << "now distributing" << std::endl;
     distribute_cmds(idx);
-    std::cout << "after command distribution" << std::endl;
+    //std::cout << "after command distribution" << std::endl;
     bool wasRunning = workerRunning();
     if (!wasRunning)
         startWorker();
@@ -176,6 +176,7 @@ void Controller::initChnsAndBuffer()
     // initialize channels and buffers based on m_out_chns
     if (DMA_started)
         stopCard();
+    //first_start.store(false, std::memory_order_relaxed);
     uint8_t chn_bits = 0;
     for (int i = 0; i < n_phys_chn; i++) {
         if (m_out_chns[i] == 0) {
@@ -213,7 +214,7 @@ void Controller::initChnsAndBuffer()
     hdl.get_param(SPC_CHENABLE, &active_chns);
     hdl.get_param(SPC_CHCOUNT, &ch_count);
     printf("Activated channels bitmask is: 0x%08x\n", active_chns);
-    printf("Number of activated channels: %d\n", ch_count);
+    //printf("Number of activated channels: %d\n", ch_count);
     buff_ptr = (int16_t*)mapAnonPage(2 * buff_sz_nele * n_phys_chn, Prot::RW);
     buff_pos = 0;
     // TODO: Buffer size?
@@ -266,11 +267,11 @@ __attribute__((target("avx512f,avx512bw"), flatten))
 void Controller::workerFunc()
 {
     // set_fifo_sched();
-    int32_t lSerialNumber;
-    hdl.get_param(SPC_PCISERIALNO, &lSerialNumber);
-    printf("Serial number: %05d\n", lSerialNumber);
-    uint64_t initial_clock = cycleclock();
-    struct DebugInfo {
+    //int32_t lSerialNumber;
+    //hdl.get_param(SPC_PCISERIALNO, &lSerialNumber);
+    //printf("Serial number: %05d\n", lSerialNumber);
+    //uint64_t initial_clock = cycleclock();
+    /*struct DebugInfo {
         const DebugInfo& operator= (const DebugInfo &di) {
             for (int i = 0; i < di.avails.size(); i++) {
                 avails.push_back(di.avails[i]);
@@ -290,26 +291,26 @@ void Controller::workerFunc()
         std::vector <double> clocks_before;
         std::vector <uint64_t> can_write_amts;
         std::vector <double> clocks;
-    };
+        };*/
     std::lock_guard<std::mutex> locker(m_worker_lock);
     //printf("size of size_t: %u", sizeof(size_t));
     // TIMING STUFF
-    bool first_avail = true;
-    uint32_t cons_count = 0;
-    uint32_t mem_size = 100000;
-    uint32_t mem_idx = 0;
-    std::vector <uint64_t> avails;
-    std::vector <double> clocks_before;
-    std::vector <uint64_t> can_write_amts;
-    std::vector <double> clocks;
-    std::vector <double> fill_clocks;
-    uint64_t prev_max, max = 0;
-    uint64_t nfills = 0;
-    avails.resize(mem_size);
-    clocks_before.resize(mem_size);
-    can_write_amts.resize(mem_size);
-    clocks.resize(mem_size);
-    std::vector<DebugInfo> full_infos;
+    //bool first_avail = true;
+    //uint32_t cons_count = 0;
+    //uint32_t mem_size = 100000;
+    //uint32_t mem_idx = 0;
+    //std::vector <uint64_t> avails;
+    //std::vector <double> clocks_before;
+    //std::vector <uint64_t> can_write_amts;
+    //std::vector <double> clocks;
+    //std::vector <double> fill_clocks;
+    //uint64_t prev_max, max = 0;
+    //uint64_t nfills = 0;
+    //avails.resize(mem_size);
+    //clocks_before.resize(mem_size);
+    //can_write_amts.resize(mem_size);
+    //clocks.resize(mem_size);
+    //std::vector<DebugInfo> full_infos;
     while (checkRequest()) {
         //std::cout << "working" << std::endl;
         // relay data from StreamManager to card
@@ -355,16 +356,16 @@ void Controller::workerFunc()
         // else if (counter % 100000 == 0)
         //     printf("%lu check avail: %lu\n", counter, count);
         // counter++;
-        if (first_avail)
-        {
-            std::cout << "first avail: " << count << std::endl;
-            first_avail = false;
-        }
+        //if (first_avail)
+        //{
+            //std::cout << "first avail: " << count << std::endl;
+        //    first_avail = false;
+        //}
         count = card_count & ~(uint64_t)(notif_size - 1);
-        if (card_count >= max && card_count != 4 * 1024ll * 1024ll * 1024ll) {
-            prev_max = max;
-            max = card_count;
-        }
+        //if (card_count >= max && card_count != 4 * 1024ll * 1024ll * 1024ll) {
+        //    prev_max = max;
+        //    max = card_count;
+        //}
         card_avail.store(count, std::memory_order_relaxed); // Not a huge deal if this is wrong...
         count = std::min(count, uint64_t(min_sz * 2 * n_phys_chn)); // count is number of bytes we can fill. need to account for number of physical channels.
         // log availability and how much i am trying to write
@@ -446,18 +447,15 @@ void Controller::workerFunc()
             continue;
         }
         else {
-            cons_count = 0;
+            //cons_count = 0;
         }
         if (count & 1)
             abort();
         int16_t* curr_ptr;
         int16_t* curr_ptr2;
-        //std::cout << "storing data" << std::endl;
         if (n_phys_chn == 1) {
             for(int i = 0; i < (count / 2); i += 64/2) {
                 curr_ptr = buff_ptr + buff_pos;
-                // count/2 number of int16_t, each advance advances 512 bytes, so 32 int_16
-                //std::cout << "writing" << std::endl;
                 _mm512_stream_si512((__m512i*)curr_ptr, *(__m512i*) ptrs[0]);
                 buff_pos += 64/2;
                 ptrs[0] += 64/2;
@@ -488,12 +486,14 @@ void Controller::workerFunc()
             }
         }
         // NO SUPPORT FOR MORE THAN 2 PHYS OUTPUTS AT THE MOMENT
-        //std::cout << "done writing" << std::endl;
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
         hdl.check_error();
         for (int i = 0; i < n_phys_chn; ++i) {
             (*m_stm_mngrs[m_out_chns[i]]).consume_output(count / 2 / n_phys_chn);
         }
+        //if (!DMA_started) {
+        //    printf("card avail: %lu \n", check_avail());
+        //}
         if (!DMA_started && check_avail() < 1000)
         {
             //startDMA(0);
@@ -505,9 +505,9 @@ void Controller::workerFunc()
             hdl.force_trigger();
             hdl.check_error();
             DMA_started = true;
-            prev_max = 0;
-            max = 0;
-            nfills = 0;
+            //prev_max = 0;
+            //max = 0;
+            //nfills = 0; 
         }
         CPU::wake();
     }

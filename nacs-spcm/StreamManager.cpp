@@ -62,17 +62,17 @@ template<typename T> inline void StreamManagerBase::sort_cmd_chn(T begin, T end)
 
 inline void StreamManagerBase::actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz)
 {
-    printf("calling actual_send_cmds\n");
+    //printf("calling actual_send_cmds\n");
     // actual distribution to stream_idx
     size_t copied_sz;
     Cmd *this_cmd = cmd;
-    std::cout << "Sz: " << sz << std::endl;
+    //std::cout << "Sz: " << sz << std::endl;
     while (sz > 0) {
-        printf("In while loop, sz: %u, this_cmd: %p\n", sz, this_cmd);
+        //printf("In while loop, sz: %u, this_cmd: %p\n", sz, this_cmd);
         copied_sz = m_streams[stream_idx]->copy_cmds(this_cmd, sz);
         sz -= copied_sz;
         //std::cout << "Sz after: " << sz << std::endl;
-        std::cout << "Sent " << *this_cmd << " to Stream" << stream_idx << std::endl;
+        //std::cout << "Sent " << *this_cmd << " to Stream" << stream_idx << std::endl;
         this_cmd = this_cmd + copied_sz;
     }
 }
@@ -124,6 +124,7 @@ inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
             }*/
         std::vector<uint32_t> stream_num, stream_pos;
         for (int i = 0; i < sz; ++i){
+            //printf("cmd chn: %u\n", cmd[i].chn);
             std::pair<uint32_t, uint32_t> this_stream_info = chn_map.ChnToStream(cmd[i].chn);
             stream_num.push_back(this_stream_info.first);
             stream_pos.push_back(this_stream_info.second);
@@ -181,7 +182,7 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
             sz_to_send = 0;
             if (cmd->chn == Cmd::add_chn) {
                 // if add channel command
-                printf("Process add channel in stream manager\n");
+                //printf("Process add channel in stream manager\n");
                 uint32_t stream_num;
                 if(chn_map.addChn(cmd->final_val, stream_num)) // final_val encodes the real channel number
                 {
@@ -245,6 +246,10 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
     //std::cout << "sending commands final" << std::endl;
     send_cmds(first_cmd, sz_to_send);
     //std::cout << "done with command distribution" << std::endl;
+    // flush all commands to streams
+    for (uint32_t i = 0; i < m_n_streams ; i++) {
+        m_streams[i]->flush_cmd();
+    }
 }
 __attribute__((target("avx512f,avx512bw"), flatten))
 NACS_EXPORT() void StreamManagerBase::generate_page()

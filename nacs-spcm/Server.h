@@ -65,7 +65,8 @@ public:
         std::condition_variable m_seqcv;
         std::vector<QueueItem> m_seque;
         bool m_running{false};
-        uint64_t m_serv_id;
+    uint64_t m_serv_id;
+    bool first_start{false};
         //std::vector<uint64_t> m_client_ids;
     //std::vector<uint8_t> init_out_chn = {1};
     };
