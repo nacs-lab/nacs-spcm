@@ -512,7 +512,7 @@ cmd_out:
         int64_t phase = state.phase;
         double amp = state.amp;
         uint64_t freq = state.freq;
-        uint64_t df = 0;
+        int64_t df = 0;
         double damp = 0;
         // check active commands
         auto it = active_cmds.begin();
@@ -539,8 +539,8 @@ cmd_out:
                         std::pair<double, double> these_vals;
                         these_vals = (*it)->eval(m_cur_t - this_cmd->t);
                         freq = uint64_t(these_vals.first) * freq_scale_client;
-                        df = uint64_t(these_vals.second) * freq_scale_client;
-                        state.freq = freq + df;
+                        df = int64_t(these_vals.second) * freq_scale_client;
+                        state.freq = (uint64_t)((int64_t) freq + df);
                     }
                     else {
                         freq = this_cmd->final_val * freq_scale_client;
@@ -571,7 +571,7 @@ cmd_out:
             std::cout << "df type: " << typeid(df).name() << std::endl;
             std::cout << "state phase: " <<typeid(state.phase).name() << std::endl;
             }*/
-            phase = phase + freq * 32 + df * 32 / 2;
+            phase = phase + (int64_t) (freq * 32) + df * 32 / 2;
             //if (freq != 0) {
             //std::cout << "phase type after: " << typeid(phase).name() << std::endl;
             //}
@@ -593,7 +593,7 @@ cmd_out:
                         std::pair<float, float> these_vals;
                         these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                         freq = uint64_t(these_vals.first) * freq_scale_client;
-                        df = uint64_t(these_vals.second) * freq_scale_client;
+                        df = int64_t(these_vals.second) * freq_scale_client;
                     }
                     else {
                         freq = cmd->final_val * freq_scale_client; // otherwise set to final value.
@@ -628,13 +628,13 @@ cmd_out:
             } while (cmd && cmd->chn == i);
             if (damp != 0)
             {
-                std::cout << "damp: " << damp << std::endl;
+                //std::cout << "damp: " << damp << std::endl;
             }
             compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), amp, damp);
-            phase = phase + freq * 32 + df * 32 / 2;
+            phase = phase + int64_t(freq * 32) + df * 32 / 2;
             //test_compute_single_chn(out1freq, out2freq, freq, df);
             state.amp = amp + damp;
-            state.freq = freq + df;
+            state.freq = (uint64_t)((int64_t) freq + df);
         }
         // deal with phase wraparound
         if (phase > 0)
