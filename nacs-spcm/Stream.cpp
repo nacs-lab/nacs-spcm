@@ -318,6 +318,9 @@ inline bool StreamBase::check_start(int64_t t, uint32_t id)
             //printf("not yet after receiving trigger\n");
             goto not_yet;
         }
+        else if (time_offset() + global_time > trigger_time) {
+            printf("Noticed trigger too late\n");
+        }
     }
     m_slow_mode.store(false, std::memory_order_relaxed);
     //printf("Processed trigger\n");

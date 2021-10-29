@@ -289,6 +289,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             memcpy(&this_client_id, msg.data() + 8, 8);
             memcpy(&this_seq_id, msg.data() + 16, 8);
             memcpy(&is_first_seq, msg.data() + 24, 1);
+            printf("Seq id %lu \n", this_seq_id);
             auto id = ++seqcnt;
             // check cache before looking at next message.
             bool haveSeq = m_cache.hasSeq(this_client_id, this_seq_id);

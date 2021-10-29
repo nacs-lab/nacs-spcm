@@ -48,8 +48,12 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
     int64_t t;
     uint32_t chn;
     double len, final_val;
+    //printf("pulses sz: %u\n", pulses.size());
     for (int i = 0; i < pulses.size(); i++) {
-        if (pulses[i].enabled != uint32_t(-1) && !get_enabled(pulses[i].enabled))
+        /*if (pulses[i].enabled != uint32_t(-1)) {
+            printf("pulses[%i].enabled: array_idx: %u, val: %d, raw_val: %f", i, pulses[i].enabled, get_enabled(pulses[i].enabled), get_value(pulses[i].enabled));
+            }*/
+        if (pulses[i].enabled != uint32_t(-1) && get_value(pulses[i].enabled) == 0)
         {
             continue;
         }
@@ -95,10 +99,10 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
             return false;
         return p1.id < p2.id;
     });
-    //printf("Now printing cmds\n");
-    //for (int i = 0; i < cmds.size(); i++) {
-    //    std::cout << cmds[i] << std::endl;
-    //}
+    printf("Now printing cmds\n");
+    for (int i = 0; i < cmds.size(); i++) {
+        std::cout << cmds[i] << std::endl;
+    }
     return cmds;
 }
 
@@ -127,14 +131,15 @@ NACS_EXPORT() double Sequence::get_value(uint32_t idx) const
     auto value = m_values[idx];
     //printf("type: %u\n", type);
     switch (type) {
-    case Type::Bool:
+    case Type::Bool: {
+        //printf("getting boolean\n");
         return value.b;
+    }
     case Type::Int32:
         return value.i32;
-    case Type::Float64: {
+    case Type::Float64:
         //printf("getting float\n");
         return value.f64;
-    }
     case Type::Int64:
         return (double)value.i64;
     default:
@@ -151,6 +156,7 @@ NACS_EXPORT() int64_t Sequence::get_time(uint32_t idx) const
 NACS_EXPORT() bool Sequence::get_enabled(uint32_t idx) const
 {
     //assert((*m_types)[idx] == Type::Bool);
+    //printf("Type of enabled v: %d\n", m_types[idx]);
     return m_values[idx].b;
 }
 
