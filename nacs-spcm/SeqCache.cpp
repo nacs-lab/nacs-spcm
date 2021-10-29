@@ -1,6 +1,7 @@
 //
 
 #include "SeqCache.h"
+#include <fstream>
 
 using namespace NaCs;
 
@@ -64,6 +65,7 @@ NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, con
     memcpy(&n_non_const, msg_bytes, 4);
     msg_bytes += 4;
     sz -= 4;
+    //printf("n_non_consts: %u, consts: %u\b", n_non_const, (*entry).m_seq.nconsts);
     memcpy((*entry).m_seq.values + (*entry).m_seq.nconsts, msg_bytes, 8 * n_non_const);
     msg_bytes += 8 * n_non_const;
     sz -= 8 * n_non_const;
@@ -280,7 +282,36 @@ m_cache(cache)
         }
         return 0;
     };
-    obj_id = m_cache.m_engine.load((char*)msg_bytes, obj_file_sz, resolver);
+
+    // LLVM requires the location of the start of the object file to be 2 bytes aligned
+    // See https://github.com/llvm/llvm-project/blob/22bd75be7074c49209890182f4d69d7ab1d2d972/llvm/lib/Object/ELFObjectFile.cpp#L75
+    // We cannot rely on zmq necessarily having this, so we explicitly check the address.
+    // If it is not aligned, we copy over to a uint32_t std::vector which will respect
+    // the alignment of uint32_t, which will be at least 2 bytes aligned.
+    if ((uintptr_t) msg_bytes % 2 == 0) {
+        obj_id = m_cache.m_engine.load((char*) msg_bytes, obj_file_sz, resolver);
+    }
+    else {
+        std::vector<uint32_t> buff(obj_file_sz / 4 + 1);
+        memcpy(buff.data(), (char*) msg_bytes, obj_file_sz);
+        obj_id = m_cache.m_engine.load((char*) buff.data(), obj_file_sz, resolver);
+    }
+    //llvm::MemoryBufferRef buff(llvm::StringRef((char*) msg_bytes, obj_file_sz), "");
+    //auto obj = llvm::object::ObjectFile::createObjectFile(buff);
+    //if (!obj) {
+    //    llvm::dbgs() << obj.takeError();
+    //    obj_id = 0;
+    //}
+    //printf("obj_id: %lu\n", obj_id);
+    //if (obj_id == 0) {
+        //std::string errstr;
+        //errstr = m_cache.m_engine.error_string();
+        //printf("obj_id err: %s\n", m_cache.m_engine.error_string().c_str());
+    //   }*/
+    // save obj file to a file
+    //std::ofstream myFile ("obj_file.o", std::ios::out | std::ios::binary);
+    //myFile.write((char*)msg_bytes, obj_file_sz);
+    //myFile.close();
     msg_bytes += obj_file_sz;
     sz -= obj_file_sz;
     code_len += obj_file_sz;
@@ -292,7 +323,7 @@ m_cache(cache)
     sz -= str_size;
     code_len += str_size;
     values = (Value*) m_cache.m_engine.get_symbol(val_array_name);
-
+    //printf("val array name: %s\n", val_array_name.c_str());
     //nconsts
     memcpy(&nconsts, msg_bytes, 4);
     msg_bytes += 4;
@@ -305,21 +336,27 @@ m_cache(cache)
     sz -= 4;
     code_len += 4;
 
+    //printf("nconsts: %u, nvalues: %u\n", nconsts, nvalues);
+    //printf("sz: %u\n", sz);
     //load in values to value array
-    memcpy(values, msg_bytes, 8 * nvalues);
+    double temp[nvalues];
+    memcpy(temp, msg_bytes, 8 * nvalues);
+    //printf("successful copy into temp\n");
+    //printf("location of values: %p\n", values);
+    memcpy(values, temp, 8 * nvalues);
+    //memcpy(values, msg_bytes, 8 * nvalues);
     msg_bytes += 8 * nvalues;
     sz -= 8 * nvalues;
-    /*printf("at address: %p", values);
-    printf("v0: %li\n", values[0].i64);
-    printf("v1: %li\n", values[1].i64);
-    printf("v2: %u\n", values[2].b);
-    printf("v3: %f\n", values[3].f64);
-    printf("v4: %f\n", values[4].f64);
-    printf("v5: %u\n", values[5].b);
-    printf("v6: %f\n", values[6].f64);
-    printf("v7: %li\n", values[7].i64);
-    printf("v8: %f\n", values[8].f64);
-    */
+    //printf("at address: %p", values);
+    //printf("v0: %li\n", values[0].i64);
+    //printf("v1: %li\n", values[1].i64);
+    //printf("v2: %u\n", values[2].b);
+    //printf("v3: %f\n", values[3].b);
+    //printf("v4: %f\n", values[4].f64);
+    //printf("v5: %u\n", values[5].b);
+    //printf("v6: %f\n", values[6].f64);
+    //printf("v7: %li\n", values[7].i64);
+    //printf("v8: %f\n", values[8].f64);
     // fill in types
     uint8_t type;
     for (int i = 0; i < nvalues; i++) {
@@ -329,6 +366,7 @@ m_cache(cache)
         types.push_back(static_cast<Type>(type));
     };
     //printf("Types at address: %p\n", &types);
+    //printf("Type of value 3: %d\n", types[3]);
 
     // pulses
     uint32_t n_pulses;
