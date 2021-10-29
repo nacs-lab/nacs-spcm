@@ -37,7 +37,7 @@ constexpr double phase_scale = 2 / double(max_phase); // convert from "phase_cnt
 constexpr double phase_scale_client = 625e7; // converts from 0 to 1 scale to phase_cnt
 constexpr double freq_scale_client = 10; // converts from real frequency to freq_cnt.
 constexpr double freq_scale = 0.1 / (sample_rate / 32); // 1 cycle in 32 samples at 625 MHz sampling rate. Converts a frequency at 10 times the real frequency, hence the 0.1.
-constexpr double amp_scale = 6.7465185e9f;
+constexpr double amp_scale = 6.7465185e9f / 8;
 
 //__m512 is a vector type that can hold 16 32 bit floats
 static constexpr __m512 tidxs = {0.0, 0.0625, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375,
@@ -565,6 +565,13 @@ cmd_out:
                 //Log::log("Amp: %f\n", amp);
                 //std::cout << "damp: " << damp << std::endl;
             }
+            // Prevent amp from exceeding amp_scale at the lowest level possible
+            if (amp > amp_scale) {
+                amp = amp_scale;
+            }
+            if (amp + damp > amp_scale) {
+                damp = 0;
+            }
             compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), amp, damp);
             /*if (freq != 0) {
                 std::cout << "int64_t " <<typeid(int64_t(2)).name() << std::endl;
@@ -632,6 +639,12 @@ cmd_out:
             if (damp != 0)
             {
                 //std::cout << "damp: " << damp << std::endl;
+            }
+            if (amp > amp_scale) {
+                amp = amp_scale;
+            }
+            if (amp + damp > amp_scale) {
+                damp = 0;
             }
             compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), amp, damp);
             phase = phase + int64_t(freq * 32) + df * 32 / 2;
