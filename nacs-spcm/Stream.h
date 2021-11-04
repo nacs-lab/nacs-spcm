@@ -316,7 +316,7 @@ protected:
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
         m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
-        m_output((int16_t*)mapAnonPage(1 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll / 2, 1024ll * 1024ll / 2),
+        m_output((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 4 * 1024ll * 1024ll / 2, 4 * 1024ll * 1024ll / 2),
         m_stream_num(stream_num)
     {
     }

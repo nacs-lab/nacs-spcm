@@ -123,11 +123,13 @@ inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
             actual_send_cmds(stream_idx, cmd, loc);
             }*/
         std::vector<uint32_t> stream_num, stream_pos;
+        stream_num.reserve(sz);
+        //stream_pos.reserve(sz);
         for (int i = 0; i < sz; ++i){
             //printf("cmd chn: %u\n", cmd[i].chn);
             std::pair<uint32_t, uint32_t> this_stream_info = chn_map.ChnToStream(cmd[i].chn);
             stream_num.push_back(this_stream_info.first);
-            stream_pos.push_back(this_stream_info.second);
+            //stream_pos.push_back(this_stream_info.second);
             (*(cmd + i)).chn = this_stream_info.second;
         }
         int counter = 0;

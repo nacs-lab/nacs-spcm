@@ -254,7 +254,7 @@ protected:
           m_max_per_stream(max_per_stream),
           chn_map(n_streams, max_per_stream),
           m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
-          m_output((int16_t*)mapAnonPage(1 * 1024ll * 1024ll, Prot::RW), 1024ll * 1024ll / 2, 1024ll * 1024ll / 2)
+          m_output((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 4 * 1024ll * 1024ll / 2, 4 * 1024ll * 1024ll / 2)
     {
         // start streams
         for (int i = 0; i < n_streams; i++) {
