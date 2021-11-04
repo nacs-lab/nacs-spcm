@@ -254,7 +254,7 @@ protected:
           m_max_per_stream(max_per_stream),
           chn_map(n_streams, max_per_stream),
           m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
-          m_output((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 4 * 1024ll * 1024ll / 2, 4 * 1024ll * 1024ll / 2)
+          m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2)
     {
         // start streams
         for (int i = 0; i < n_streams; i++) {
@@ -298,10 +298,11 @@ private:
     int64_t m_cur_t = 0; // current time for output
     uint64_t m_output_cnt = 0; // output count, units of output_block_sz
 
+    uint64_t output_buf_sz = 4 * 1024ll * 1024ll; // in bytes. Let Streams below it throttle the filling of this buffer.
     DataPipe<Cmd> m_commands; // command pipe for writers to put in commands
     DataPipe<int16_t> m_output; // pipe for output and hardware to output
-    constexpr static uint32_t output_block_sz = 32768; //2048;
-    
+    constexpr static uint32_t output_block_sz = 2048 * 16; //32768; //2048;
+
     const Cmd *m_cmd_read_ptr = nullptr; // pointer to read commands
     size_t m_cmd_read = 0;
     size_t m_cmd_max_read = 0;

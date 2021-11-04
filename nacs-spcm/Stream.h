@@ -316,7 +316,7 @@ protected:
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
         m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
-        m_output((int16_t*)mapAnonPage(4 * 1024ll * 1024ll, Prot::RW), 4 * 1024ll * 1024ll / 2, 4 * 1024ll * 1024ll / 2),
+        m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2),
         m_stream_num(stream_num)
     {
     }
@@ -340,7 +340,7 @@ private:
     const Cmd *consume_old_cmds(State * states);
     bool check_start(int64_t t, uint32_t id);
     void clear_underflow();
-    constexpr static uint32_t output_block_sz = 32768; //2048; // units of int16_t. 32 of these per _m512
+    constexpr static uint32_t output_block_sz = 2048 * 16;//32768; //2048; // units of int16_t. 32 of these per _m512
     // Members accessed by worker threads
 protected:
     std::atomic_bool m_stop{false};
@@ -365,6 +365,9 @@ private:
     //uint32_t m_end_trigger_cnt{0};
     //uint32_t m_start_trigger_cnt{0};
 
+    uint64_t output_buf_sz = 4 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
+    uint64_t wait_buf_sz = 2 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
+    bool wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     DataPipe<Cmd> m_commands;
     DataPipe<int16_t> m_output;
     std::vector<activeCmd*> active_cmds;
