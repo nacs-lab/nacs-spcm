@@ -246,6 +246,15 @@ public:
             (*m_streams[i]).stop_worker();
         }
     }
+    inline bool is_wait_for_seq() {
+        for (int i = 0; i < m_n_streams; i++) {
+            if (!(*m_streams[i]).is_wait_for_seq())
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 protected:
     StreamManagerBase(uint32_t n_streams, uint32_t max_per_stream,
                       double step_t, std::atomic<uint64_t> &cmd_underflow,
@@ -298,7 +307,8 @@ private:
     int64_t m_cur_t = 0; // current time for output
     uint64_t m_output_cnt = 0; // output count, units of output_block_sz
 
-    uint64_t output_buf_sz = 4 * 1024ll * 1024ll; // in bytes. Let Streams below it throttle the filling of this buffer.
+    uint64_t output_buf_sz = 512 * 1024ll * 1024ll; // in bytes. Let Streams below it throttle the filling of this buffer.
+    uint64_t wait_buf_sz = 2 * 1024ll * 1024ll;
     DataPipe<Cmd> m_commands; // command pipe for writers to put in commands
     DataPipe<int16_t> m_output; // pipe for output and hardware to output
     constexpr static uint32_t output_block_sz = 2048 * 16; //32768; //2048;

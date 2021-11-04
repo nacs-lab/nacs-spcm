@@ -359,12 +359,14 @@ StreamBase::consume_old_cmds(State *states)
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerEnd) {
                 //printf("Process trigger end in consume_old_cmds\n");
+                wait_for_seq = true;
                 m_end_trigger_pending = cmd->final_val;
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerStart) {
                 if (!check_start(cmd->t, cmd->final_val)) {
                     return nullptr;
                 }
+                wait_for_seq = false;
             }
             break;
         case CmdType::AmpSet:
@@ -450,12 +452,14 @@ retry:
             else if (cmd->chn == (uint32_t)CmdMeta::TriggerEnd) {
                 //printf("Process trigger end\n");
                 m_end_trigger_pending = cmd->final_val;
+                wait_for_seq = true;
             }
             else if (cmd->chn == (uint32_t)CmdMeta::TriggerStart) {
                 if (!check_start(cmd->t, cmd->final_val)){
                     cmd = nullptr;
                     goto cmd_out;
                 }
+                wait_for_seq = false;
             }
             cmd_next();
             goto retry; // keep on going if it's a meta command
@@ -683,7 +687,11 @@ NACS_EXPORT() void StreamBase::generate_page(State *states)
         size_t sz_to_write;
         out_ptr = m_output.get_write_ptr(&sz_to_write);
         if (sz_to_write >= output_block_sz) {
-            break;
+            // If we are not waiting for a sequence, i.e. we are processing a sequence, or we are waiting
+            // and the reader is less than wait_buf_sz bytes behind, we break out and generate data
+            if (!wait_for_seq || m_output.check_reader(wait_buf_sz/2)) {
+                break;
+            }
         }
         if (sz_to_write > 0) {
             m_output.sync_writer();

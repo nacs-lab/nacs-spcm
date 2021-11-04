@@ -262,7 +262,9 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
         size_t sz_to_write;
         out_ptr = m_output.get_write_ptr(&sz_to_write);
         if (sz_to_write >= output_block_sz) {
-            break;
+            if (!is_wait_for_seq() || m_output.check_reader(wait_buf_sz/2)) {
+                break;
+            }
         }
         if (sz_to_write > 0) {
             m_output.sync_writer();

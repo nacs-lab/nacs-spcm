@@ -43,7 +43,7 @@ namespace Spcm{
                   }
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
-                      m_stm_mngrs.emplace_back(new StreamManager(6, 4, 1, cmd_underflow, cmd_underflow, false));
+                      m_stm_mngrs.emplace_back(new StreamManager(4, 4, 1, cmd_underflow, cmd_underflow, false));
                       max_chns.push_back(16);
                   }
               }
