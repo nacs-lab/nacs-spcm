@@ -12,18 +12,28 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <chrono>
 
 #include <nacs-spcm/Config.h>
 #include <nacs-spcm/spcm.h>
 #include <nacs-spcm/Stream.h>
 #include <nacs-spcm/StreamManager.h>
+//#include <nacs-spcm/Server.h>
 
 using namespace NaCs;
+
 namespace Spcm{
+      class Server;
+
       class Controller {
       public:
-          Controller(Config &conf, std::vector<uint8_t> out_chns)
-              : m_conf(conf)
+          struct TrigInfo {
+              uint64_t trigger_t = 0;
+              uint64_t len = 0;
+          };
+          Controller(Server &serv, Config &conf, std::vector<uint8_t> out_chns)
+              : m_serv(serv),
+                m_conf(conf)
           {
               /* StreamManager(uint32_t n_streams, uint32_t max_per_stream,
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
@@ -43,7 +53,7 @@ namespace Spcm{
                   }
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
-                      m_stm_mngrs.emplace_back(new StreamManager(6, 4, 1, cmd_underflow, cmd_underflow, false));
+                      m_stm_mngrs.emplace_back(new StreamManager(*this, 6, 4, 1, cmd_underflow, cmd_underflow, false));
                       max_chns.push_back(16);
                   }
               }
@@ -83,6 +93,7 @@ namespace Spcm{
                   throw std::runtime_error("Only supports 1 or 2 physical channels");
               }
               else {
+                  reqWait();
                   stopWorker();
                   // TODO: Restart worker?? HANDLE CARD COMMANDS (inside of stopWorker?)
                   //for (int i = 0; i < n_card_chn; i++) {
@@ -101,6 +112,36 @@ namespace Spcm{
                   //printf("After startWorker\n");
               }
           }
+          inline void restartCard(bool from_worker) {
+              reqWait(); // stop sequences from proceeding
+              if (!from_worker)
+                  stopWorker();
+              else {
+                  for (int i = 0; i < n_phys_chn; ++i) {
+                      //printf("Stopping stream %u\n", m_out_chns[i]);
+                      (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
+                      (*m_stm_mngrs[m_out_chns[i]]).stop_worker();
+                  }
+              }
+              stopCard();
+              resetStmManagers();
+              m_output_cnt = 0;
+              n_restarts++; // Incrementing this is the key for letting all players know of a card restart.
+              printf("Attempting card restart %u...\n", n_restarts);
+              std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+              if (!from_worker) {
+                  startWorker();
+              }
+              else {
+                  ensureInit();
+                  initChnsAndBuffer();
+                  for (int i = 0; i < n_phys_chn; ++i) {
+                      (*m_stm_mngrs[m_out_chns[i]]).start_streams();
+                      (*m_stm_mngrs[m_out_chns[i]]).start_worker();
+                  }
+              }
+              printf("Done with card restart\n");
+          }
           inline void startDataTransfer() {
               first_start.store(true, std::memory_order_relaxed);
           }
@@ -117,8 +158,11 @@ namespace Spcm{
           }
           inline void set_start_trigger(uint32_t v, uint64_t t) {
               //printf("setting start trigger %u for time %lu\n", v, t);
+              TrigInfo &info = m_trig_map[v];
+              info.trigger_t = t;
+              printf("Setting trigger %u time to %lu\n", v, t);
               for (int i = 0; i < n_phys_chn; i++) {
-                  m_stm_mngrs[m_out_chns[i]]->set_start_trigger(v,t);
+                  m_stm_mngrs[m_out_chns[i]]->set_start_trigger(v,t); // may not be useful, but can keep here.
               }
           }
           inline uint32_t copy_cmds(uint32_t idx, Cmd *cmds, uint32_t sz)
@@ -148,10 +192,43 @@ namespace Spcm{
           {
               return card_avail.load(std::memory_order_relaxed);
           }
+          inline bool check_error()
+          {
+              try {
+                  hdl.check_error();
+              }
+              catch (const NaCs::Spcm::Error &err) {
+                  if (err.code == ERR_FIFOHWOVERRUN) {
+                      // buffer overrun
+                      return true;
+                  }
+                  else {
+                      // for non buffer overrun, for now, do not handle and just throw
+                      // TODO add code maybe to deal with all waiters on the server before exiting
+                      throw;
+                  }
+              }
+              return false;
+          }
           void force_trigger();
           void runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait=true);
-          bool waitPending() {
-              return false;
+          inline void reqWait()
+          {
+              m_wait_req.store(true, std::memory_order_relaxed);
+          }
+          inline bool reqRestart(uint32_t trig_id)
+          {
+              if (trig_id == restart_id)
+              {
+                  // restart already requested
+                  return false;
+              }
+              restart_id = trig_id;
+              m_worker_req.store(WorkerRequest::RestartCard, std::memory_order_relaxed);
+              return true;
+          }
+          inline bool waitPending() const {
+              return m_wait_req.load(std::memory_order_relaxed);
           }
           inline uint32_t get_end_triggered() {
               uint32_t min_end_triggered = UINT_MAX;
@@ -160,11 +237,36 @@ namespace Spcm{
               }
               return min_end_triggered;
           }
+          inline bool get_end_triggered(uint32_t v) {
+              TrigInfo &info = m_trig_map[v];
+              if (m_output_cnt >= info.trigger_t + info.len) {
+                  m_trig_map.erase(v);
+                  return true;
+              }
+              return false;
+          }
+          inline uint32_t get_restarts() {
+              return n_restarts;
+          }
+          inline uint32_t add_restarts(uint32_t n = 1) {
+              n_restarts = n_restarts + n;
+              return n_restarts;
+          }
+          inline void set_len(uint32_t v, uint64_t n) {
+              printf("Setting trigger %u length to %lu\n", v, n);
+              TrigInfo &info = m_trig_map[v];
+              info.len = n;
+          }
+          inline void set_trig_to_now(uint32_t v, uint64_t delay) {
+              TrigInfo &info = m_trig_map[v];
+              info.trigger_t = m_output_cnt + delay;
+          }
       private:
           enum class WorkerRequest : uint8_t {
               None = 0,
               Stop,
               Unlock,
+              RestartCard
           };
           void init();
           bool checkRequest();
@@ -204,7 +306,13 @@ namespace Spcm{
           uint64_t not_counter = 0;
           uint64_t loop_counter = 0;
           uint64_t notif_size = 4096 * 16; // in bytes
+
+          uint32_t n_restarts = 0;
+          Server &m_serv;
+          std::atomic<bool> m_wait_req{true};
+          uint64_t m_output_cnt = 0;
+          std::map<uint32_t, TrigInfo> m_trig_map;
+          uint32_t restart_id = 0; // keeps track of start_trigger that requested a restart (for triggers that are noticed too late)
       };
 }
-
 #endif

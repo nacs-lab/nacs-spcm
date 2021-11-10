@@ -1,6 +1,7 @@
 //Written by Kenneth Wang in Oct 2020
 
 #include "Stream.h"
+#include "StreamManager.h"
 
 #include <nacs-spcm/spcm.h>
 #include <nacs-utils/log.h>
@@ -253,6 +254,10 @@ std::pair<double, double> activeCmd::eval(int64_t t) {
     return std::make_pair(val, dval);
 }
 
+inline void StreamBase::reqRestart(uint32_t id) {
+    auto res = m_stm_mngr.reqRestart(id);
+}
+
 NACS_INLINE void StreamBase::clear_underflow()
 {
     m_cmd_underflow.store(0, std::memory_order_relaxed);
@@ -320,6 +325,8 @@ inline bool StreamBase::check_start(int64_t t, uint32_t id)
         }
         else if (time_offset() + global_time > trigger_time) {
             printf("Noticed trigger too late\n");
+            // request card restart which will also notify the client of the bad sequence.
+            reqRestart(id);
         }
     }
     m_slow_mode.store(false, std::memory_order_relaxed);
@@ -421,6 +428,15 @@ StreamBase::consume_old_cmds(State *states)
     } while((cmd = get_cmd())); // keep on going until there are no more commands or one reaches the present
     return nullptr;
 }
+
+NACS_EXPORT() void StreamBase::consume_all_cmds()
+{
+    // This function consumes all commands in the command buffer.
+    while(get_cmd()) {
+        cmd_next();
+    }
+}
+
 __attribute__((target("avx512f,avx512bw"), flatten))
 NACS_EXPORT() void StreamBase::step(int16_t *out, State *states)
 {

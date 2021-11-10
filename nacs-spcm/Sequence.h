@@ -4,6 +4,7 @@
 #define _NACS_SPCM_SEQ_H
 
 #include "Stream.h"
+#include <algorithm>
 //#include "TotSequence.h"
 
 using namespace NaCs;
@@ -38,7 +39,7 @@ public:
     {
           return m_is_valid;
     }
-    std::vector<Cmd> toCmds(std::vector<Cmd> &preSend);
+    std::vector<Cmd> toCmds(std::vector<Cmd> &preSend, int64_t &seq_len);
     void addPulse(uint32_t enabled, uint32_t id, uint32_t t_start,
                   uint32_t len, uint32_t endvalue, uint8_t functype,
                   uint8_t phys_chn, uint32_t chn, void (*fnptr)(void));

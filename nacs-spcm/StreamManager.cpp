@@ -1,6 +1,7 @@
 // Written by Kenneth Wang Oct 2020
 
 #include "StreamManager.h"
+#include "Controller.h"
 
 #include <nacs-utils/mem.h>
 #include <nacs-utils/thread.h>
@@ -16,6 +17,16 @@ NACS_EXPORT() std::ostream &operator<<(std::ostream &stm, ChannelMap cmap) {
     }
     stm << ")" << std::endl;
     return stm;
+}
+
+bool StreamManagerBase::reqRestart(uint32_t trig_id) {
+    if (trig_id == restart_id) {
+        // restart already requested
+        return false;
+    }
+    restart_id = trig_id;
+    m_ctrl.reqRestart(trig_id);
+    return true;
 }
 
 inline const Cmd *StreamManagerBase::get_cmd()

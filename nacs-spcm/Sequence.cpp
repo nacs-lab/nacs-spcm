@@ -23,7 +23,7 @@ NACS_EXPORT() Sequence::Sequence(Value* values, std::vector<Type> types, bool is
 {
 }
 
-NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
+NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64_t &seq_len) {
     //printf("at address: %p\n", (*m_values));
     /*printf("types size: %u", m_types.size());
     printf("v0: %li\n", m_values[0].i64);
@@ -78,6 +78,9 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
         if (it == active_chns.end()) {
             active_chns.push_back(chn);
         }
+        if (t > seq_len) {
+            seq_len = t;
+        }
         cmds.push_back({
                 .t = t * 625 / (32e6), // 625e6/32 / 1e12
                     .t_client = t,
@@ -99,6 +102,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend) {
             return false;
         return p1.id < p2.id;
     });
+    seq_len = seq_len * 625 / (32e6);
     printf("Now printing cmds\n");
     for (int i = 0; i < cmds.size(); i++) {
         std::cout << cmds[i] << std::endl;

@@ -22,6 +22,8 @@ using namespace NaCs;
 
 namespace Spcm {
 
+//class Controller;
+
 class Server {
 public:
     Server(Config conf);
@@ -67,6 +69,7 @@ public:
         bool m_running{false};
     uint64_t m_serv_id;
     bool first_start{false};
+    uint32_t restart_ctr;
         //std::vector<uint64_t> m_client_ids;
     //std::vector<uint8_t> init_out_chn = {1};
     };

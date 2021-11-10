@@ -45,6 +45,11 @@ inline bool Controller::checkRequest()
         stopCard();
         return false;
     }
+    if (req == WorkerRequest::RestartCard) {
+        restartCard(true);
+        m_worker_req.store(WorkerRequest::None, std::memory_order_relaxed);
+        return true;
+    }
     // Unlock request
     tryUnlock();
     return true;
@@ -59,6 +64,7 @@ NACS_EXPORT() void Controller::startWorker()
     {
         //printf("Starting card\n");
         std::lock_guard<std::mutex> locker(m_worker_lock);
+        reqWait();
         ensureInit();
         initChnsAndBuffer();
         for (int i = 0; i < n_phys_chn; ++i) {
@@ -220,7 +226,7 @@ void Controller::initChnsAndBuffer()
     // TODO: Buffer size?
     hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, notif_size,
                      (void*)buff_ptr, 0, 2 * buff_sz_nele * n_phys_chn);
-    hdl.check_error();
+    check_error();
 }
 
 void Controller::stopCard()
@@ -228,9 +234,9 @@ void Controller::stopCard()
     printf("Stopping card\n");
     // stop DMA transfer and card.
     hdl.cmd(M2CMD_DATA_STOPDMA);
-    hdl.check_error();
+    check_error();
     hdl.cmd(M2CMD_CARD_STOP);
-    hdl.check_error();
+    check_error();
     DMA_started = false;
     printf("Card stop finished\n");
 }
@@ -240,7 +246,7 @@ NACS_EXPORT() void Controller::force_trigger()
     std::cout << "calling force trigger" << std::endl;
     hdl.cmd(M2CMD_CARD_START | M2CMD_CARD_ENABLETRIGGER);
     hdl.force_trigger();
-    hdl.check_error();
+    check_error();
     uint32_t status;
     int32_t chns;
     hdl.get_param(SPC_M2STATUS, &status);
@@ -260,7 +266,7 @@ inline void Controller::startDMA(uint64_t sz)
     hdl.set_param(SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE);
     //hdl.cmd(M2CMD_CARD_START | M2CMD_CARD_ENABLETRIGGER);
     //hdl.force_trigger();
-    hdl.check_error();
+    check_error();
     DMA_started = true;
 }
 __attribute__((target("avx512f,avx512bw"), flatten))
@@ -311,6 +317,7 @@ void Controller::workerFunc()
     //can_write_amts.resize(mem_size);
     //clocks.resize(mem_size);
     //std::vector<DebugInfo> full_infos;
+    bool restart = false;
     while (checkRequest()) {
         //std::cout << "working" << std::endl;
         // relay data from StreamManager to card
@@ -345,11 +352,20 @@ void Controller::workerFunc()
             if (hdl.cmd(M2CMD_DATA_WAITDMA) == ERR_TIMEOUT)
             {
                 printf("WAITDMA timeout\n");
+                restart = true;
+                goto need_restart;
             }
-            hdl.check_error();
+            if (check_error()) {
+                restart = true;
+                goto need_restart;
+            }
         }
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &card_count);
-        hdl.check_error();
+        if (check_error()) {
+            // there's an error.
+            restart = true;
+            goto need_restart;
+        }
         //clocks[mem_idx] = (cycleclock() - initial_clock)/(3e9);
         // if (counter % 1000 == 0 && counter < 20001)
         //     printf("%lu check avail: %lu\n",counter, count);
@@ -487,10 +503,16 @@ void Controller::workerFunc()
         }
         // NO SUPPORT FOR MORE THAN 2 PHYS OUTPUTS AT THE MOMENT
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
-        hdl.check_error();
+        if (check_error()) {
+            restart = true;
+            goto need_restart;
+        }
         for (int i = 0; i < n_phys_chn; ++i) {
             (*m_stm_mngrs[m_out_chns[i]]).consume_output(count / 2 / n_phys_chn);
         }
+        if (m_output_cnt % 19531250 == 0)
+            printf("m_output_cnt, controller: %lu\n", m_output_cnt);
+        m_output_cnt += count / 2 / n_phys_chn;
         //if (!DMA_started) {
         //    printf("card avail: %lu \n", check_avail());
         //}
@@ -503,11 +525,19 @@ void Controller::workerFunc()
             printf("force trigger at count %lu\n", count);
             //std::this_thread::sleep_for(1ms);
             hdl.force_trigger();
-            hdl.check_error();
+            if (check_error()) {
+                restart = true;
+                goto need_restart;
+            }
             DMA_started = true;
-            //prev_max = 0;
+            m_wait_req.store(false, std::memory_order_relaxed);//prev_max = 0;
             //max = 0;
-            //nfills = 0; 
+            //nfills = 0;
+        }
+    need_restart:
+        if (restart) {
+            restartCard(true);
+            restart = false;
         }
         CPU::wake();
     }

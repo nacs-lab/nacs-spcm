@@ -15,6 +15,8 @@ using namespace NaCs;
 namespace Spcm {
 const uint32_t UINT_MAX = 4294967295;
 
+class Controller;
+
 template<class T>
 inline std::pair<uint32_t, T> get_min(T *begin, size_t sz) {
     T smallest = *begin;
@@ -244,6 +246,8 @@ public:
     inline void stop_streams() {
         for (int i = 0; i < m_n_streams; i++) {
             (*m_streams[i]).stop_worker();
+            (*m_streams[i]).consume_all_cmds(); // clear up any remaining commands in the stream, so next worker starts fresh.
+            (*m_streams[i]).reset_output_cnt();
         }
     }
     inline bool is_wait_for_seq() {
@@ -255,11 +259,14 @@ public:
         }
         return true;
     }
+    bool reqRestart(uint32_t trig_id);
+
 protected:
-    StreamManagerBase(uint32_t n_streams, uint32_t max_per_stream,
+StreamManagerBase(Controller& ctrl, uint32_t n_streams, uint32_t max_per_stream,
                       double step_t, std::atomic<uint64_t> &cmd_underflow,
                       std::atomic<uint64_t> &underflow, bool start = false)
-        : m_n_streams(n_streams),
+        : m_ctrl(ctrl),
+          m_n_streams(n_streams),
           m_max_per_stream(max_per_stream),
           chn_map(n_streams, max_per_stream),
           m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
@@ -268,7 +275,7 @@ protected:
         // start streams
         for (int i = 0; i < n_streams; i++) {
             Stream<128> *stream_ptr;
-            stream_ptr = new Stream<128>(step_t, cmd_underflow, underflow, i, start);
+            stream_ptr = new Stream<128>(*this, step_t, cmd_underflow, underflow, i, start);
             m_streams.push_back(stream_ptr);
             stream_ptrs.push_back(nullptr);
         }
@@ -321,14 +328,16 @@ private:
     size_t m_cmd_max_write = 0;
 
     uint64_t stuck_counter = 0;
+    Controller& m_ctrl;
+    uint32_t restart_id;
 };
 
 struct StreamManager : StreamManagerBase {
-    StreamManager(uint32_t n_streams, uint32_t max_per_stream,
+    StreamManager(Controller &ctrl, uint32_t n_streams, uint32_t max_per_stream,
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false)
-        : StreamManagerBase(n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream)
+        : StreamManagerBase(ctrl, n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream)
     {
         if (startWorker)
         {

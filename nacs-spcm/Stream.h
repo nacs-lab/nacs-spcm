@@ -22,6 +22,8 @@ using namespace NaCs;
 
 namespace Spcm {
 
+class StreamManagerBase;
+
 enum class CmdType : uint8_t
 {
     // CmdType is a enumerated class that holds all possible commands.
@@ -304,7 +306,11 @@ public:
     {
         return m_chns;
     }
-
+    void consume_all_cmds();
+    void reset_output_cnt() {
+        m_output_cnt = 0;
+    }
+    inline void reqRestart(uint32_t id);
 protected:
     struct State {
         // structure which keeps track of the state of a channel
@@ -315,7 +321,8 @@ protected:
     void generate_page(State *states); //workhorse, takes a vector of states for the channels
     void step(int16_t *out, State *states); // workhorse function to step to next time
     const Cmd *get_cmd();
-    StreamBase(double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num) :
+    StreamBase(StreamManagerBase &stm_mngr, double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num) :
+        m_stm_mngr(stm_mngr),
         m_step_t(step_t),
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
@@ -383,13 +390,15 @@ private:
     std::atomic<int16_t*> m_end_trigger{nullptr};
     std::atomic<uint32_t> m_start_trigger{0};
     std::atomic<uint64_t> m_start_trigger_time{0};
+
+    StreamManagerBase &m_stm_mngr;
 };
 
 template<uint32_t max_chns = 128>
 struct Stream : StreamBase {
-    Stream(double step_t, std::atomic<uint64_t> &cmd_underflow,
+    Stream(StreamManagerBase& stm_mngr, double step_t, std::atomic<uint64_t> &cmd_underflow,
            std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true)
-        : StreamBase(step_t, cmd_underflow, underflow, stream_num)
+        : StreamBase(stm_mngr, step_t, cmd_underflow, underflow, stream_num)
     {
         if (start) {
             start_worker();

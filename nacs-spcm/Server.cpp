@@ -28,7 +28,7 @@ NACS_EXPORT() Server::Server(Config conf)
 m_zmqctx(),
 m_zmqsock(m_zmqctx, ZMQ_ROUTER),
 m_evfd(openEvent(0, EFD_NONBLOCK | EFD_CLOEXEC)),
-m_ctrl(m_conf, std::vector<uint8_t>{0}),
+m_ctrl(*this, m_conf, std::vector<uint8_t>{0}),
 m_cache(8 * 1024ll * 1024ll * 1024ll) // pretty arbitrary
 {
     //m_ctrl = Controller(init_out_chn);
@@ -122,6 +122,9 @@ NACS_INTERNAL void Server::seqRunner()
             if (entry.start_trigger) {
                 preSend.push_back(Cmd::getTriggerStart(0, 0, 0, entry.start_trigger));
             }
+            else {
+                m_ctrl.set_trig_to_now(0, 195312); // baked in 10 ms delay. Otherwise the trigger_t will be set when the trigger arrives.
+            }
             auto &tot_seq = entry.entry->m_seq;
             //if (tot_seq.is_valid) {
             //    printf("Sequence valid\n");
@@ -129,8 +132,10 @@ NACS_INTERNAL void Server::seqRunner()
             //else {
             //    printf("Sequence invalid\n");
             //}
+            int64_t seq_len = 0;
             auto &this_seq = tot_seq.getSeq(phys_chn_idx);
-            auto cmds = this_seq.toCmds(preSend);
+            auto cmds = this_seq.toCmds(preSend, seq_len);
+            m_ctrl.set_len(entry.start_trigger, (uint64_t) seq_len);
             // MAKE COMMANDS HERE AT RUNTIME, SORT AND SEND.
             auto pPre = &preSend[0];
             auto szPre = preSend.size();
@@ -169,12 +174,22 @@ NACS_INTERNAL void Server::seqRunner()
                 first_start = true;
                 }*/
         }
-        while (m_ctrl.get_end_triggered() < fin_id && controllerRunning() && m_running){
-                std::this_thread::sleep_for(100ms);
+        uint32_t cur_restarts = m_ctrl.get_restarts();
+        while (!m_ctrl.get_end_triggered(entry.start_trigger) && controllerRunning() && m_running){
+            cur_restarts = m_ctrl.get_restarts();
+            if (cur_restarts != restart_ctr) {
+                goto restart;
+            }
+            std::this_thread::sleep_for(100ms);
         }
         printf("Sequence finished!");
         m_seqfin.store(entry.id, std::memory_order_release);
         writeEvent(m_evfd);
+        continue;
+    restart:
+        printf("Restart interrupted sequence");
+        m_seqfin.store(entry.id, std::memory_order_release);
+        writeEvent(m_evfd, 2); // 2 indicates an interruption.
     }
 }
 
@@ -218,7 +233,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
         }
         else if (ZMQ::match(msg, "set_out_config")) {
             // [nchns: 4B][out_chn_num: 1B x nchns]
-            // expected to be sorted. 
+            // expected to be sorted.
             if (!recvMore(msg)) {
                 send_reply(addr, ZMQ::bits_msg(uint64_t(0)));
                 goto out;
@@ -246,6 +261,11 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             ZMQ::send_addr(m_zmqsock,addr, empty);
             ZMQ::send(m_zmqsock, ZMQ::bits_msg(m_serv_id));
         }
+        else if (ZMQ::match(msg, "req_restarts")) {
+            ZMQ::send_addr(m_zmqsock, addr, empty);
+            uint32_t restarts = m_ctrl.get_restarts();
+            ZMQ::send(m_zmqsock, ZMQ::bits_msg(restarts));
+        }
         else if (ZMQ::match(msg, "req_triple")) {
             // TODO: reply correctly
             ZMQ::send_addr(m_zmqsock, addr, empty);
@@ -265,6 +285,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
                 startController();
             //if (seqcnt && seqDone(seqcnt))
             //  m_ctrl.reqWait();
+            restart_ctr = m_ctrl.get_restarts();
             if (!recvMore(msg) || msg.size() != 4) {
                 // No version
                 send_reply(addr, ZMQ::bits_msg(uint64_t(0)));
@@ -329,6 +350,14 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             else if (data_type == 1) {
                 seq_sent = true;
             }
+            while (m_ctrl.waitPending()) {
+                // We hang here until the card is ready for sequences
+                if (!m_running) {
+                    send_reply(addr, ZMQ::bits_msg(uint64_t(0)));
+                    goto out;
+                }
+                std::this_thread::sleep_for(1ms);
+            }
             if (!runSeq(this_client_id, this_seq_id, msg_data, msg_sz, seq_sent, id, start_id, is_first_seq)) {
                 // this must mean data is missing
                 send_reply(addr, ZMQ::str_msg("need_data"));
@@ -339,13 +368,6 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             // Do as much as possible before waiting for the wait request to be processed
             ZMQ::send_addr(m_zmqsock, addr, empty);
             auto rpy = ZMQ::bits_msg(id);
-            while (m_ctrl.waitPending()) {
-                if (!m_running) {
-                    send_reply(addr, ZMQ::bits_msg(uint64_t(0)));
-                    goto out;
-                }
-                std::this_thread::sleep_for(1ms);
-            }
             ZMQ::send_more(m_zmqsock, ZMQ::str_msg("ok"));
             ZMQ::send(m_zmqsock, rpy);
         }
@@ -406,12 +428,18 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
         if (polls[1].revents & ZMQ_POLLIN) {
             //printf("SEQUENCE FINISHED!");
             // sequence finish event
-            readEvent(m_evfd);
+            uint64_t ev = readEvent(m_evfd);
             for (size_t i = 0; i < waits.size(); i++) {
                 auto &wait = waits[i];
                 if (!seqDone(wait.id))
                     continue;
-                send_reply(wait.addr, ZMQ::bits_msg(true));
+                if (ev == 2) {
+                    // A restart had occurred.
+                    send_reply(wait.addr, ZMQ::bits_msg(false));
+                }
+                else {
+                    send_reply(wait.addr, ZMQ::bits_msg(true));
+                }
                 waits.erase(waits.begin() + i);
                 i--;
             }
