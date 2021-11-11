@@ -260,7 +260,12 @@ public:
         return true;
     }
     bool reqRestart(uint32_t trig_id);
-
+    void reset_streams_out() {
+        for (int i = 0; i < m_n_streams; i++) {
+            (*m_streams[i]).reset_out();
+        }
+    }
+    DataPipe<int16_t> m_output; // pipe for output and hardware to output
 protected:
 StreamManagerBase(Controller& ctrl, uint32_t n_streams, uint32_t max_per_stream,
                       double step_t, std::atomic<uint64_t> &cmd_underflow,
@@ -317,7 +322,6 @@ private:
     uint64_t output_buf_sz = 8 * 1024ll * 1024ll; // in bytes. Let Streams below it throttle the filling of this buffer.
     uint64_t wait_buf_sz = 2 * 1024ll * 1024ll;
     DataPipe<Cmd> m_commands; // command pipe for writers to put in commands
-    DataPipe<int16_t> m_output; // pipe for output and hardware to output
     constexpr static uint32_t output_block_sz = 2048 * 16; //32768; //2048;
 
     const Cmd *m_cmd_read_ptr = nullptr; // pointer to read commands
@@ -356,6 +360,15 @@ struct StreamManager : StreamManagerBase {
         if (m_worker.joinable()) {
             m_worker.join();
         }
+    }
+    void reset_out() {
+        if (m_worker.joinable()) {
+            stop_worker();
+        }
+        size_t sz;
+        //m_output.sync_reader();
+        m_output.get_read_ptr(&sz);
+        m_output.read_size(sz); // reset my own output.
     }
     ~StreamManager()
     {

@@ -311,6 +311,7 @@ public:
         m_output_cnt = 0;
     }
     inline void reqRestart(uint32_t id);
+    DataPipe<int16_t> m_output;
 protected:
     struct State {
         // structure which keeps track of the state of a channel
@@ -380,7 +381,6 @@ private:
     uint64_t wait_buf_sz = 2 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
     bool wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     DataPipe<Cmd> m_commands;
-    DataPipe<int16_t> m_output;
     std::vector<activeCmd*> active_cmds;
     std::atomic<uint32_t> m_end_triggered{0};
     std::atomic<int64_t> m_time_offset{0};
@@ -416,6 +416,16 @@ struct Stream : StreamBase {
         if (m_worker.joinable()){
             m_worker.join();
         }
+    }
+    void reset_out()
+    {
+        if (m_worker.joinable()) {
+            stop_worker();
+        }
+        size_t sz;
+        //m_output.sync_reader();
+        m_output.get_read_ptr(&sz);
+        m_output.read_size(sz); // reset my own output.
     }
     ~Stream()
     {

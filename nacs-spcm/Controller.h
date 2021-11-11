@@ -121,6 +121,8 @@ namespace Spcm{
                       //printf("Stopping stream %u\n", m_out_chns[i]);
                       (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
                       (*m_stm_mngrs[m_out_chns[i]]).stop_worker();
+                      (*m_stm_mngrs[m_out_chns[i]]).reset_streams_out();
+                      (*m_stm_mngrs[m_out_chns[i]]).reset_out();
                   }
               }
               stopCard();
@@ -229,6 +231,7 @@ namespace Spcm{
           }
           inline bool waitPending() const {
               return m_wait_req.load(std::memory_order_relaxed);
+              //return false;
           }
           inline uint32_t get_end_triggered() {
               uint32_t min_end_triggered = UINT_MAX;
@@ -238,9 +241,17 @@ namespace Spcm{
               return min_end_triggered;
           }
           inline bool get_end_triggered(uint32_t v) {
+              // v = 0 is non-triggered, in which case we don't need to delete the map entry
+              // and can't use the trigger id to see if previously had finished.
+              if (!v && v <= last_trig_id) {
+                  return true;
+              }
               TrigInfo &info = m_trig_map[v];
               if (m_output_cnt >= info.trigger_t + info.len) {
-                  m_trig_map.erase(v);
+                  if (!v) {
+                      m_trig_map.erase(v);
+                      last_trig_id = v;
+                  }
                   return true;
               }
               return false;
@@ -313,6 +324,7 @@ namespace Spcm{
           uint64_t m_output_cnt = 0;
           std::map<uint32_t, TrigInfo> m_trig_map;
           uint32_t restart_id = 0; // keeps track of start_trigger that requested a restart (for triggers that are noticed too late)
+          uint32_t last_trig_id = 0; // last finished trig id
       };
 }
 #endif

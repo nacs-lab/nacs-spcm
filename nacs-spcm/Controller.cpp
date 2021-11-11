@@ -87,6 +87,8 @@ NACS_EXPORT() void Controller::stopWorker()
             //printf("Stopping stream %u\n", m_out_chns[i]);
             (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
             (*m_stm_mngrs[m_out_chns[i]]).stop_worker();
+            (*m_stm_mngrs[m_out_chns[i]]).reset_streams_out();
+            (*m_stm_mngrs[m_out_chns[i]]).reset_out();
         }
         //stopCard();
         m_worker.join();
@@ -510,9 +512,8 @@ void Controller::workerFunc()
         for (int i = 0; i < n_phys_chn; ++i) {
             (*m_stm_mngrs[m_out_chns[i]]).consume_output(count / 2 / n_phys_chn);
         }
-        if (m_output_cnt % 19531250 == 0)
-            printf("m_output_cnt, controller: %lu\n", m_output_cnt);
-        m_output_cnt += count / 2 / n_phys_chn;
+        //printf("m_output_cnt, controller: %lu\n", m_output_cnt);
+        m_output_cnt += count / 2 / n_phys_chn / 32; // stream times are in units of 32 samples
         //if (!DMA_started) {
         //    printf("card avail: %lu \n", check_avail());
         //}

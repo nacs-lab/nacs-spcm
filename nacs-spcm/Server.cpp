@@ -176,6 +176,7 @@ NACS_INTERNAL void Server::seqRunner()
         }
         uint32_t cur_restarts = m_ctrl.get_restarts();
         while (!m_ctrl.get_end_triggered(entry.start_trigger) && controllerRunning() && m_running){
+            //while(m_ctrl.get_end_triggered() < fin_id && controllerRunning() && m_running) {
             cur_restarts = m_ctrl.get_restarts();
             if (cur_restarts != restart_ctr) {
                 goto restart;
