@@ -698,6 +698,7 @@ cmd_out:
 
 NACS_EXPORT() void StreamBase::generate_page(State *states)
 {
+    //printf("generate page\n");
     int16_t *out_ptr;
     while (true) {
         size_t sz_to_write;
@@ -717,6 +718,7 @@ NACS_EXPORT() void StreamBase::generate_page(State *states)
             return;
         }
     }
+    //printf("Stream ready\n");
     //std::cout << "ready to write" << std::endl;
     // Now ready to write to output. Write in output_block_sz chunks
     for (uint32_t i = 0; i < output_block_sz; i += 32) {

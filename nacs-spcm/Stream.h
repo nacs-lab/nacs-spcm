@@ -311,7 +311,21 @@ public:
         m_output_cnt = 0;
     }
     inline void reqRestart(uint32_t id);
-    DataPipe<int16_t> m_output;
+    inline void reset_output() {
+        size_t sz;
+        //uint32_t i = 0;
+        //const int16_t* ptr;
+        //const int16_t* ptr2;
+        //m_output.sync_reader();
+        //m_output.get_read_ptr(&sz);
+        //m_output.read_size(sz); // reset my own output.
+        do {
+            //i++;
+            m_output.get_read_ptr(&sz);
+            //ptr2 = m_output.get_write_ptr(&sz2);
+            m_output.read_size(sz); // reset my own output.
+        } while (sz != 0);
+    }
 protected:
     struct State {
         // structure which keeps track of the state of a channel
@@ -381,6 +395,7 @@ private:
     uint64_t wait_buf_sz = 2 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
     bool wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     DataPipe<Cmd> m_commands;
+    DataPipe<int16_t> m_output;
     std::vector<activeCmd*> active_cmds;
     std::atomic<uint32_t> m_end_triggered{0};
     std::atomic<int64_t> m_time_offset{0};
@@ -419,13 +434,11 @@ struct Stream : StreamBase {
     }
     void reset_out()
     {
+        printf("reset out stream called\n");
         if (m_worker.joinable()) {
             stop_worker();
         }
-        size_t sz;
-        //m_output.sync_reader();
-        m_output.get_read_ptr(&sz);
-        m_output.read_size(sz); // reset my own output.
+        reset_output();
     }
     ~Stream()
     {
@@ -449,10 +462,13 @@ private:
             //std::cout << get_cmd() << std::endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             } */
+        //printf("m_stop 1: %s\n", m_stop.load(std::memory_order_relaxed) ? "true" : "false");
         while(likely(!m_stop.load(std::memory_order_relaxed))) {
             generate_page(m_states);
+            //printf("m_stop 2: %s\n", m_stop.load(std::memory_order_relaxed) ? "true" : "false");
             //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
+        //printf("m_stop 3: %s\n", m_stop.load(std::memory_order_relaxed) ? "true" : "false");
     }
     State m_states[max_chns]{}; // array of states
     std::thread m_worker{};

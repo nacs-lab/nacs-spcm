@@ -240,6 +240,9 @@ void Controller::stopCard()
     hdl.cmd(M2CMD_CARD_STOP);
     check_error();
     DMA_started = false;
+    //hdl.reset();
+    //check_error();
+    //m_initialized = false;
     printf("Card stop finished\n");
 }
 
@@ -344,7 +347,7 @@ void Controller::workerFunc()
                 min_sz = sz;
             }
         }
-        
+        //printf("stream manager ready\n");
         //std::cout << "stream manager ready" << std::endl;
         min_sz = min_sz & ~(uint64_t)(notif_size / 2 / n_phys_chn - 1); // make it chunks of 2048
         //read out available number of bytes
