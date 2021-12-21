@@ -243,13 +243,14 @@ namespace Spcm{
           inline bool get_end_triggered(uint32_t v) {
               // v = 0 is non-triggered, in which case we don't need to delete the map entry
               // and can't use the trigger id to see if previously had finished.
-              if (!v && v <= last_trig_id) {
+              if (v && v <= last_trig_id) {
                   return true;
               }
               TrigInfo &info = m_trig_map[v];
               if (m_output_cnt >= info.trigger_t + info.len) {
-                  if (!v) {
+                  if (v) {
                       m_trig_map.erase(v);
+                      printf("Erasing trigger %u\n", v);
                       last_trig_id = v;
                   }
                   return true;
