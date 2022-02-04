@@ -331,16 +331,17 @@ void Controller::workerFunc()
     //clocks.resize(mem_size);
     //std::vector<DebugInfo> full_infos;
     bool restart = false;
+    uint64_t last_output_cnt = 0;
     while (checkRequest()) {
         //std::cout << "working" << std::endl;
         // relay data from StreamManager to card
-    retry:
         //min_sz = 8 * 1024ll * 1024ll * 1024ll;
         std::vector<const int16_t*> ptrs(n_phys_chn, nullptr);
         size_t sz;
         size_t min_sz = 8 * 1024ll * 1024ll * 1024ll; // cannot be this large.
         for (int i = 0; i < n_phys_chn; ++i)
         {
+        retry:
             ptrs[i] = (*m_stm_mngrs[m_out_chns[i]]).get_output(sz);
             //std::cout << "sz: " << sz << std::endl;
             if (sz < notif_size / 2 / n_phys_chn) { // 4096
