@@ -65,7 +65,6 @@ private:
     inline uint32_t getIdx(std::pair<uint32_t, uint32_t> stream_info) {
         return stream_info.first * m_max_per_chn + stream_info.second;
     }
-
     inline std::pair<uint32_t, uint32_t> getStreamInfo(uint32_t idx) {
         uint32_t stream_num = idx / m_max_per_chn;
         uint32_t stream_pos = idx % m_max_per_chn;
@@ -329,8 +328,8 @@ private:
     int64_t m_cur_t = 0; // current time for output
     uint64_t m_output_cnt = 0; // output count, units of output_block_sz
 
-    uint64_t output_buf_sz = 8 * 1024ll * 1024ll; // in bytes. Let Streams below it throttle the filling of this buffer.
-    uint64_t wait_buf_sz = 2 * 1024ll * 1024ll;
+    uint64_t output_buf_sz = 16*8 * 1024ll * 1024ll; // in bytes. Let Streams below it throttle the filling of this buffer.
+    uint64_t wait_buf_sz = 16*2 * 1024ll * 1024ll;
     DataPipe<Cmd> m_commands; // command pipe for writers to put in commands
     DataPipe<int16_t> m_output; // pipe for output and hardware to output
     constexpr static uint32_t output_block_sz = 2048 * 16; //32768; //2048;

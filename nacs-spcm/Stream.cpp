@@ -38,7 +38,7 @@ constexpr double phase_scale = 2 / double(max_phase); // convert from "phase_cnt
 constexpr double phase_scale_client = 625e7; // converts from 0 to 1 scale to phase_cnt
 constexpr double freq_scale_client = 10; // converts from real frequency to freq_cnt.
 constexpr double freq_scale = 0.1 / (sample_rate / 32); // 1 cycle in 32 samples at 625 MHz sampling rate. Converts a frequency at 10 times the real frequency, hence the 0.1.
-constexpr double amp_scale = 6.7465185e9f / 8;
+constexpr double amp_scale = 6.7465185e9f;
 
 //__m512 is a vector type that can hold 16 32 bit floats
 static constexpr __m512 tidxs = {0.0, 0.0625, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375,
@@ -326,7 +326,7 @@ inline bool StreamBase::check_start(int64_t t, uint32_t id)
         else if (time_offset() + global_time > trigger_time) {
             printf("Noticed trigger too late\n");
             // request card restart which will also notify the client of the bad sequence.
-            reqRestart(id);
+            //reqRestart(id);
         }
     }
     m_slow_mode.store(false, std::memory_order_relaxed);
@@ -688,7 +688,7 @@ cmd_out:
     //  std::cout << "t: " << m_cur_t << std::endl;
     //}
     if (m_output_cnt % 19531250 == 0) { // 19531250
-        printf("m_output_cnt: %lu\n", m_output_cnt);
+        // printf("m_output_cnt: %lu\n", m_output_cnt);
     }
     __m512i v;
     v = _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,

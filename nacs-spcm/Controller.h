@@ -53,7 +53,7 @@ namespace Spcm{
                   }
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
-                      m_stm_mngrs.emplace_back(new StreamManager(*this, 6, 4, 1, cmd_underflow, cmd_underflow, false));
+                      m_stm_mngrs.emplace_back(new StreamManager(*this, 4, 4, 1, cmd_underflow, cmd_underflow, false));
                       max_chns.push_back(16);
                   }
               }
@@ -81,8 +81,8 @@ namespace Spcm{
           }
           // StreamManager commands
           inline void setPhysChn(std::vector<uint8_t> &out_chns) {
-          // end state is a working stream
-          // check if vectors match
+              // end state is a working stream
+              // check if vectors match
               if (out_chns == m_out_chns) {
                   startWorker();
                   return;
@@ -294,8 +294,8 @@ namespace Spcm{
           std::thread m_worker; // worker for relaying data to card
           int16_t* buff_ptr; // buffer pointer for spcm
           size_t buff_pos; // position for the output buffer
-          uint64_t buff_sz_nele{4 * 1024ll * 1024ll / 2}; // 2/2 //4 factor of 4 1 channel output latency of 6.71 ms. Software buffer size
-          uint64_t hw_buff_sz_nele{2 * 1024ll * 1024ll}; // 1 //2 1 channel output latency of 1.67 ms. Hardware buffer size number of elements
+          uint64_t buff_sz_nele{512 * 4*1024ll * 1024ll / 2}; // 2/2 //4 factor of 4 1 channel output latency of 6.71 ms. Software buffer size
+          uint64_t hw_buff_sz_nele{128 * 8* 1024ll * 1024ll}; // 1 //2 1 channel output latency of 1.67 ms. Hardware buffer size number of elements
           bool DMA_started{false};
 
           NaCs::Spcm::Spcm hdl{"/dev/spcm0"}; //Spcm handle

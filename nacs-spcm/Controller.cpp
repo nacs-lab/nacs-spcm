@@ -42,11 +42,12 @@ inline bool Controller::checkRequest()
     if (likely(req == WorkerRequest::None))
         return true;
     if (req == WorkerRequest::Stop) {
-        stopCard();
+        stopCard();        
         return false;
     }
     if (req == WorkerRequest::RestartCard) {
         restartCard(true);
+        printf("Restarted by worker request\n");
         m_worker_req.store(WorkerRequest::None, std::memory_order_relaxed);
         return true;
     }
@@ -113,7 +114,7 @@ NACS_EXPORT() void Controller::runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait
         //Trigger stuff
     }
     if (wait) {
-        // Trigger stuff
+// Trigger stuff
         if (!wasRunning) {
             stopWorker();
         }
@@ -152,6 +153,7 @@ void Controller::init()
     hdl.set_param(SPC_SAMPLERATE, rate);
     hdl.get_param(SPC_SAMPLERATE, &rate);
     printf("Sampling rate set to %.1lf MHz\n", (double)rate / MEGA(1));
+
     int64_t clock_rate;
     hdl.set_param(SPC_CLOCKOUT, 1);
     hdl.get_param(SPC_CLOCKOUTFREQUENCY, &clock_rate);
@@ -162,7 +164,9 @@ void Controller::init()
     hdl.set_param(SPC_TRIG_CH_ORMASK1, 0);
     hdl.set_param(SPC_TRIG_CH_ANDMASK0, 0);
     hdl.set_param(SPC_TRIG_CH_ANDMASK1, 0);
-
+    int64_t serial_no;
+    hdl.get_param(SPC_PCISERIALNO, &serial_no);
+    printf("serial no: %li\n", serial_no);
     hdl.set_param(SPCM_X2_MODE, SPCM_XMODE_TRIGOUT);
 
     hdl.set_param(SPC_TIMEOUT, 1000); // 1 s time out
@@ -214,7 +218,10 @@ void Controller::initChnsAndBuffer()
     }
     hdl.ch_enable(chn_bits);
     // set up hardware buffer
+    uint64_t hw_buff_sz;
     hdl.set_param(SPC_DATA_OUTBUFSIZE, 2 * hw_buff_sz_nele * n_phys_chn);
+    hdl.get_param(SPC_DATA_OUTBUFSIZE, &hw_buff_sz);
+    printf("hardware buffer size: %lu\n", hw_buff_sz);
     hdl.write_setup();
 
     uint32_t active_chns;
@@ -226,6 +233,7 @@ void Controller::initChnsAndBuffer()
     buff_ptr = (int16_t*)mapAnonPage(2 * buff_sz_nele * n_phys_chn, Prot::RW);
     buff_pos = 0;
     // TODO: Buffer size?
+    printf("software buffer size: %lu\n", 2 * buff_sz_nele * n_phys_chn);
     hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, notif_size,
                      (void*)buff_ptr, 0, 2 * buff_sz_nele * n_phys_chn);
     check_error();
@@ -361,6 +369,7 @@ void Controller::workerFunc()
                 goto need_restart;
             }
             if (check_error()) {
+                printf("Error after DMA start");
                 restart = true;
                 goto need_restart;
             }
@@ -368,6 +377,7 @@ void Controller::workerFunc()
         hdl.get_param(SPC_DATA_AVAIL_USER_LEN, &card_count);
         if (check_error()) {
             // there's an error.
+            printf("Error SPC_DATA_AVAIL");
             restart = true;
             goto need_restart;
         }
@@ -509,6 +519,7 @@ void Controller::workerFunc()
         // NO SUPPORT FOR MORE THAN 2 PHYS OUTPUTS AT THE MOMENT
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
         if (check_error()) {
+            printf("Error after SPC_DATA_AVAIL_CARD_LEN\n");
             restart = true;
             goto need_restart;
         }
@@ -517,7 +528,11 @@ void Controller::workerFunc()
         }
         //printf("m_output_cnt, controller: %lu\n", m_output_cnt);
         m_output_cnt += count / 2 / n_phys_chn / 32; // stream times are in units of 32 samples
-        //if (!DMA_started) {
+        if (m_output_cnt / 19531250 > last_output_cnt) { // 19531250
+            last_output_cnt = m_output_cnt / 19531250;
+            printf("Controller m_output_cnt: %lu\n", last_output_cnt * 19531250);
+        }
+//if (!DMA_started) {
         //    printf("card avail: %lu \n", check_avail());
         //}
         if (!DMA_started && check_avail() < 1000)
@@ -530,6 +545,7 @@ void Controller::workerFunc()
             //std::this_thread::sleep_for(1ms);
             hdl.force_trigger();
             if (check_error()) {
+                printf("Error after force trigger\n");
                 restart = true;
                 goto need_restart;
             }
@@ -542,6 +558,7 @@ void Controller::workerFunc()
         if (restart) {
             restartCard(true);
             restart = false;
+            last_output_cnt = 0;
         }
         CPU::wake();
     }

@@ -5,6 +5,8 @@
 
 #include <nacs-utils/mem.h>
 #include <nacs-utils/thread.h>
+#include <chrono>
+#include <thread>
 
 using namespace NaCs;
 
@@ -305,6 +307,7 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
         }
         else {
             CPU::pause();
+            //std::this_thread::sleep_for(std::chrono::microseconds(1000));
             //(*m_streams[stream_idx]).sync_reader();
         }
         if (unlikely(m_stop.load(std::memory_order_relaxed))) {

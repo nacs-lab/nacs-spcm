@@ -45,7 +45,7 @@ set_property(SOURCE ${nacs_spcm_SRCS} APPEND_STRING
 add_library(nacs-spcm SHARED
   ${nacs_spcm_SRCS})
 target_link_libraries(nacs-spcm PUBLIC ${nacs_spcm_LINKS})
-target_link_libraries(nacs-spcm PRIVATE LLVM yaml-cpp zmq)
+target_link_libraries(nacs-spcm PRIVATE LLVM yaml-cpp PkgConfig::ZMQ)
 set_target_properties(nacs-spcm PROPERTIES
   VERSION "${MAJOR_VERSION}.${MINOR_VERSION}"
   SOVERSION "${MAJOR_VERSION}"
