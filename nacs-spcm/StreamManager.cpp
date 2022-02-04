@@ -1,7 +1,7 @@
 // Written by Kenneth Wang Oct 2020
 
 #include "StreamManager.h"
-#include "Controller.h"
+#include "ControllerText.h"
 
 #include <nacs-utils/mem.h>
 #include <nacs-utils/thread.h>

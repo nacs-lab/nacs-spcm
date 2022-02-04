@@ -5,7 +5,7 @@ set(nacs_spcm_HDRS
   Stream.h
   StreamManager.h
   Config.h
-  Controller.h
+  ControllerText.h
   DummyController.h
   DummyServer.h
   DummyStream.h
@@ -14,7 +14,6 @@ set(nacs_spcm_HDRS
   IDataCache.h
   Sequence.h
   SerialPort.h
-  Server.h
   Trigger.h
   clock.h)
 set(nacs_spcm_SRCS
@@ -23,7 +22,7 @@ set(nacs_spcm_SRCS
   Stream.cpp
   StreamManager.cpp
   Config.cpp
-  Controller.cpp
+  ControllerText.cpp
   DummyController.cpp
   DummyServer.cpp
   DummyStream.cpp
@@ -32,7 +31,6 @@ set(nacs_spcm_SRCS
   IDataCache.cpp
   Sequence.cpp
   SerialPort.cpp
-  Server.cpp
   Trigger.cpp)
 set(nacs_spcm_LINKS ${SLEEF_LIBRARIES} ${SPCM_LIBRARIES} ${DEPS_LIBRARIES})
 set_source_files_properties(data_stream.cpp DummyStream.cpp DummyStreamManager.cpp Stream.cpp StreamManager.cpp Controller.cpp SeqCache.cpp IDataCache.cpp Sequence.cpp Server.cpp

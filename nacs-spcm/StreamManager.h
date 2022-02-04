@@ -15,7 +15,7 @@ using namespace NaCs;
 namespace Spcm {
 const uint32_t UINT_MAX = 4294967295;
 
-class Controller;
+class ControllerText;
 
 template<class T>
 inline std::pair<uint32_t, T> get_min(T *begin, size_t sz) {
@@ -277,7 +277,7 @@ public:
         } while (sz != 0);
     }
 protected:
-StreamManagerBase(Controller& ctrl, uint32_t n_streams, uint32_t max_per_stream,
+StreamManagerBase(ControllerText& ctrl, uint32_t n_streams, uint32_t max_per_stream,
                       double step_t, std::atomic<uint64_t> &cmd_underflow,
                       std::atomic<uint64_t> &underflow, bool start = false)
         : m_ctrl(ctrl),
@@ -343,12 +343,12 @@ private:
     size_t m_cmd_max_write = 0;
 
     uint64_t stuck_counter = 0;
-    Controller& m_ctrl;
+    ControllerText& m_ctrl;
     uint32_t restart_id;
 };
 
 struct StreamManager : StreamManagerBase {
-    StreamManager(Controller &ctrl, uint32_t n_streams, uint32_t max_per_stream,
+    StreamManager(ControllerText &ctrl, uint32_t n_streams, uint32_t max_per_stream,
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false)
