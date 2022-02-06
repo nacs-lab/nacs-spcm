@@ -7,6 +7,7 @@
 #include <nacs-utils/processor.h>
 #include <nacs-utils/timer.h>
 
+#include <llvm/Config/llvm-config.h>
 #include <llvm/Support/Host.h>
 
 #include <system_error>
