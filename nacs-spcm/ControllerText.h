@@ -26,7 +26,7 @@ using namespace NaCs;
 namespace Spcm{
       class ControllerText {
       public:
-          ControllerText(std::vector<uint8_t> out_chns)
+          ControllerText(std::vector<uint8_t> out_chns, uint32_t nstreams)
           {
               /* StreamManager(uint32_t n_streams, uint32_t max_per_stream,
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
@@ -46,7 +46,7 @@ namespace Spcm{
                   }
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
-                      m_stm_mngrs.emplace_back(new StreamManager(*this, 6, 4, 1, cmd_underflow, cmd_underflow, false));
+                      m_stm_mngrs.emplace_back(new StreamManager(*this, nstreams, 4, 1, cmd_underflow, cmd_underflow, false));
                       max_chns.push_back(16);
                   }
               }

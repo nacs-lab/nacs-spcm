@@ -144,7 +144,8 @@ NACS_EXPORT() YAML::Node ControllerText::testCompute(size_t nele, size_t buff_sz
     res["rate"] = nele / ((finish_time - initial_clock) / 3e9); // amount of time elements per second
     res["number of samples per second"] =  32 * nele / ((finish_time - initial_clock) / 3e9);
     res["ratio with 625e6"] = 32 * nele / ((finish_time - initial_clock) / 3e9) / 625e6;
-    printf("Worker finishing\n");
+    //printf("Worker finishing\n");
+    unmapPage(buff_ptr, buff_sz_nele * 2);
     return res;
 }
 }

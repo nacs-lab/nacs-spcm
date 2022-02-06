@@ -373,7 +373,7 @@ struct StreamManager : StreamManagerBase {
         }
     }
     void reset_out() {
-        printf("reset out stm mngr called\n");
+        //printf("reset out stm mngr called\n");
         if (m_worker.joinable()) {
             stop_worker();
         }

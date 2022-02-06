@@ -434,7 +434,7 @@ struct Stream : StreamBase {
     }
     void reset_out()
     {
-        printf("reset out stream called\n");
+        //printf("reset out stream called\n");
         if (m_worker.joinable()) {
             stop_worker();
         }
