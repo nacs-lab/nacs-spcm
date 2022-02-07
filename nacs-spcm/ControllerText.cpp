@@ -46,7 +46,7 @@ NACS_EXPORT() YAML::Node ControllerText::testCompute(size_t nele, size_t buff_sz
     uint64_t m_output_cnt = 0;
     size_t notif_size = 4096;
     // set up buffer to write into
-    int16_t* buff_ptr = (int16_t*)mapAnonPage(buff_sz_nele * 2, Prot::RW);
+    int16_t* buff_ptr = (int16_t*)mapAnonPage(buff_sz_nele * 2 * n_phys_chn, Prot::RW);
     size_t buff_pos = 0;
     uint64_t initial_clock = cycleclock();
     uint64_t count;
