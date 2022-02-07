@@ -15,7 +15,7 @@ int test_stream_combining(int nrep)
     std::vector<uint8_t> out_chns;
     out_chns.push_back(0);
     size_t nele = 8 * 1024ll * 1024ll;
-    size_t buff_sz_nele = 512 * 1024ll * 1024ll;
+    size_t buff_sz_nele = 2 * 1024ll * 1024ll;
     std::vector<uint32_t> stream_nums = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20};
     //std::vector<uint32_t> stream_nums = {1};
     std::vector<double> rates;

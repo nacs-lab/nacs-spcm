@@ -88,6 +88,7 @@ NACS_EXPORT() YAML::Node ControllerText::testCompute(size_t nele, size_t buff_sz
             printf("Count: %lu\n", count);
             abort();
         }
+        
         int16_t* curr_ptr;
         int16_t* curr_ptr2;
         if (n_phys_chn == 1) {
@@ -122,6 +123,7 @@ NACS_EXPORT() YAML::Node ControllerText::testCompute(size_t nele, size_t buff_sz
                 }
             }
         }
+        
         // NO SUPPORT FOR MORE THAN 2 PHYS OUTPUTS AT THE MOMENT
         for (int i = 0; i < n_phys_chn; ++i) {
             (*m_stm_mngrs[m_out_chns[i]]).consume_output(count / 2 / n_phys_chn);
