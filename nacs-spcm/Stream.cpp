@@ -441,7 +441,6 @@ __attribute__((target("avx512f,avx512bw"), flatten))
 NACS_EXPORT() void StreamBase::step(int16_t *out, State *states)
 {
     // Key function
-    /*
     const Cmd *cmd;
 retry:
     // returns command at current time or before
@@ -501,7 +500,6 @@ retry:
             }
         }
     }
-    */
 cmd_out:
     // At this point we have a nullptr if out of commands or in the future, or it's an actual command
     // related to amp, phase, freq
@@ -525,12 +523,12 @@ cmd_out:
     __m512 v1 = _mm512_set1_ps(0.0f);
     __m512 v2 = _mm512_set1_ps(0.0f);
     uint32_t _nchns = m_chns;
-    //if(!cmd){
+    if(!cmd){
         //std::cout << "This command is null" << std::endl;
-    //}
-    //else {
+    }
+    else {
         //std::cout << (*cmd) << std::endl;
-    //}
+    }
     for (uint32_t i = 0; i < _nchns; i++){
         // iterate through the number of channels
         auto &state = states[i];
@@ -540,7 +538,6 @@ cmd_out:
         int64_t df = 0;
         double damp = 0;
         // check active commands
-        /*
         auto it = active_cmds.begin();
         while(it != active_cmds.end()) {
             const Cmd* this_cmd = (*it)->m_cmd;
@@ -578,9 +575,7 @@ cmd_out:
             }
             ++it;
         }
-        */
         // now deal with current command
-        /*
         if (!cmd || cmd->chn != i) {
             //std::cout << phase << std::endl;
             //std::cout << "freq: " << freq << std::endl;
@@ -597,7 +592,6 @@ cmd_out:
             if (amp + damp > amp_scale) {
                 damp = 0;
             }
-        */
             compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), amp, damp);
             /*if (freq != 0) {
                 std::cout << "int64_t " <<typeid(int64_t(2)).name() << std::endl;
@@ -608,8 +602,7 @@ cmd_out:
             std::cout << "state phase: " <<typeid(state.phase).name() << std::endl;
             }*/
             phase = phase + (int64_t) (freq * 32) + df * 32 / 2;
-            /*
-//if (freq != 0) {
+            //if (freq != 0) {
             //std::cout << "phase type after: " << typeid(phase).name() << std::endl;
             //}
             //phase = phase + freq * 2;
@@ -679,7 +672,6 @@ cmd_out:
             state.amp = amp + damp;
             state.freq = (uint64_t)((int64_t) freq + df);
         }
-            */
         // deal with phase wraparound
         if (phase > 0)
         {

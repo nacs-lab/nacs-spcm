@@ -48,9 +48,9 @@ NACS_EXPORT() YAML::Node ControllerText::testCompute(size_t nele, size_t buff_sz
     // set up buffer to write into
     int16_t* buff_ptr = (int16_t*)mapAnonPage(buff_sz_nele * 2, Prot::RW);
     size_t buff_pos = 0;
+    uint64_t initial_clock = cycleclock();
     uint64_t count;
     YAML::Node res;
-    uint64_t initial_clock = cycleclock();
     for (int i = 0; i < n_phys_chn; ++i) {
         (*m_stm_mngrs[m_out_chns[i]]).start_streams();
         (*m_stm_mngrs[m_out_chns[i]]).start_worker();
