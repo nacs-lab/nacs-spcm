@@ -318,7 +318,6 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
     // now streams are ready.
     //std::cout << "reading from streams" << std::endl;
     //__m512i data;
-    /*
     for (uint32_t stream_idx = 0; stream_idx < m_n_streams; stream_idx++) {
         for (uint32_t i = 0; i < output_block_sz; i+= 32) {
             if (stream_idx == 0) {
@@ -336,15 +335,6 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
                 (*m_streams[stream_idx]).consume_output(output_block_sz); // allow stream to continue
             }
         }
-    }
-    */
-    __m512i data;
-    for (uint32_t i = 0; i < output_block_sz; i += 32) {
-        _mm512_store_si512(&data, *(__m512i*)(stream_ptrs[0] + i));
-        for (uint32_t stream_idx = 1; stream_idx < m_n_streams; stream_idx++) {
-            data = _mm512_add_epi16(data, *(__m512i*)(stream_ptrs[stream_idx] + i));
-        }
-        _mm512_store_si512(&out_ptr[i], data);
     }
     //std::cout << "output_block_sz: " << output_block_sz << std::endl;
     //std::cout << "m_cur_t: " << m_cur_t << std::endl;
