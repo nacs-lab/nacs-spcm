@@ -538,42 +538,44 @@ cmd_out:
         int64_t df = 0;
         double damp = 0;
         // check active commands
-        auto it = active_cmds.begin();
-        while(it != active_cmds.end()) {
-            const Cmd* this_cmd = (*it)->m_cmd;
-            if (this_cmd->chn == i) {
-                if (this_cmd->op() == CmdType::AmpFn || this_cmd->op() == CmdType::AmpVecFn) {
-                    if (this_cmd->t + this_cmd->len > m_cur_t) {
-                        std::pair<double, double> these_vals;
-                        these_vals = (*it)->eval(m_cur_t - this_cmd->t);
-                        amp = these_vals.first * amp_scale;
-                        damp = these_vals.second * amp_scale;
-                        state.amp = amp + damp;
+        if (active_cmds.size() > 0) {
+            auto it = active_cmds.begin();
+            while(it != active_cmds.end()) {
+                const Cmd* this_cmd = (*it)->m_cmd;
+                if (this_cmd->chn == i) {
+                    if (this_cmd->op() == CmdType::AmpFn || this_cmd->op() == CmdType::AmpVecFn) {
+                        if (this_cmd->t + this_cmd->len > m_cur_t) {
+                            std::pair<double, double> these_vals;
+                            these_vals = (*it)->eval(m_cur_t - this_cmd->t);
+                            amp = these_vals.first * amp_scale;
+                            damp = these_vals.second * amp_scale;
+                            state.amp = amp + damp;
+                        }
+                        else {
+                            amp = this_cmd->final_val * amp_scale;
+                            state.amp = amp;
+                            it = active_cmds.erase(it); // no longer active
+                            continue;
+                        }
                     }
-                    else {
-                        amp = this_cmd->final_val * amp_scale;
-                        state.amp = amp;
-                        it = active_cmds.erase(it); // no longer active
-                        continue;
+                    else if (this_cmd->op() == CmdType::FreqFn || this_cmd->op() == CmdType::FreqVecFn) {
+                        if (this_cmd->t + this_cmd->len > m_cur_t) {
+                            std::pair<double, double> these_vals;
+                            these_vals = (*it)->eval(m_cur_t - this_cmd->t);
+                            freq = uint64_t(these_vals.first) * freq_scale_client;
+                            df = int64_t(these_vals.second) * freq_scale_client;
+                            state.freq = (uint64_t)((int64_t) freq + df);
+                        }
+                        else {
+                            freq = this_cmd->final_val * freq_scale_client;
+                            state.freq = freq;
+                            it = active_cmds.erase(it); // no longer active
+                            continue;
+                        }
                     }
                 }
-                else if (this_cmd->op() == CmdType::FreqFn || this_cmd->op() == CmdType::FreqVecFn) {
-                    if (this_cmd->t + this_cmd->len > m_cur_t) {
-                        std::pair<double, double> these_vals;
-                        these_vals = (*it)->eval(m_cur_t - this_cmd->t);
-                        freq = uint64_t(these_vals.first) * freq_scale_client;
-                        df = int64_t(these_vals.second) * freq_scale_client;
-                        state.freq = (uint64_t)((int64_t) freq + df);
-                    }
-                    else {
-                        freq = this_cmd->final_val * freq_scale_client;
-                        state.freq = freq;
-                        it = active_cmds.erase(it); // no longer active
-                        continue;
-                    }
-                }
+                ++it;
             }
-            ++it;
         }
         // now deal with current command
         if (!cmd || cmd->chn != i) {
