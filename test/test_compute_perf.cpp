@@ -1,6 +1,7 @@
 #define LLVM_DISABLE_ABI_BREAKING_CHECKS_ENFORCING 1
 
 #include <nacs-spcm/ControllerText.h>
+#include <nacs-spcm/Stream.h>
 #include <yaml-cpp/yaml.h>
 #include <numeric>
 #include <stdlib.h>
@@ -8,6 +9,67 @@
 #include <nacs-utils/log.h>
 
 using namespace NaCs;
+
+int test_tone_generation(int nrep, int ntones)
+{
+    printf("nrep: %d\n", nrep);
+    printf("ntones: %d\n", ntones);
+    std::vector<uint8_t> out_chns;
+    out_chns.push_back(0);
+    //out_chns.push_back(1);
+    size_t nele = 8 * 1024ll * 1024ll;
+    size_t buff_sz_nele = 2 * 1024ll * 1024ll;
+    //std::vector<uint32_t> stream_nums = {1,2,3,4,5,6,7,8,9,10};
+    std::vector<uint32_t> stream_nums = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20};
+    //std::vector<uint32_t> stream_nums = {1};
+    std::vector<double> rates;
+
+    std::vector<::Spcm::Cmd> cmd_vector;
+    double start_freq = 70e6;
+    double delta_freq = 100e3;
+    double amp = 0.9f / (static_cast<double> (ntones));
+    uint32_t nwrote;
+    for (int i = 0; i < ntones; i++) {
+        cmd_vector.push_back(::Spcm::Cmd::getAddChn(0,0,i,i));
+    }
+    for (int i = 0; i < ntones; i++) {
+        cmd_vector.push_back(::Spcm::Cmd::getFreqSet(0,0,ntones + i, i, start_freq + i * delta_freq));
+        cmd_vector.push_back(::Spcm::Cmd::getAmpSet(0,0,ntones + i, i, amp));
+    }
+    for (int i = 0; i < stream_nums.size(); i++) {
+        // Compute once that doesn't get included in the average
+        ::Spcm::ControllerText ctxt = ::Spcm::ControllerText(out_chns, stream_nums[i]);
+        auto p = &cmd_vector[0];
+        auto sz = cmd_vector.size();
+        do {
+            nwrote = ctxt.copy_cmds(0, p, sz);
+            p += nwrote;
+            sz -= nwrote;
+        } while (sz > 0);
+        ctxt.flush_cmd(0);
+        ctxt.distribute_cmds(0);
+        ctxt.testCompute(nele, buff_sz_nele);
+        for (int j = 0; j < nrep; j++) {
+            p = &cmd_vector[0];
+            sz = cmd_vector.size();
+            do {
+                nwrote = ctxt.copy_cmds(0, p, sz);
+                p += nwrote;
+                sz -= nwrote;
+            } while (sz > 0);
+            ctxt.flush_cmd(0);
+            ctxt.distribute_cmds(0);
+            auto res = ctxt.testCompute(nele, buff_sz_nele);
+            auto node = res["ratio with 625e6"];
+            rates.push_back(node.as<double>());
+        }
+        // Average and print out
+        auto avg = 1.0f * std::accumulate(rates.begin(), rates.end(), 0.0f) / rates.size();
+        printf("Number of Streams: %lu, Average Ratio: %f\n", stream_nums[i], avg);
+        rates.clear();
+    }
+    return 0;
+}
 
 int test_stream_combining(int nrep)
 {
@@ -61,6 +123,9 @@ int main(int argc, char **argv)
     }
     if (strcmp(argv[1], "test_stream_combining") == 0) {
         return test_stream_combining(atoi(argv[2]));
+    }
+    else if (strcmp(argv[1], "test_tone_generation") == 0) {
+        return test_tone_generation(atoi(argv[2]), atoi(argv[3]));
     }
     return 0;
 }
