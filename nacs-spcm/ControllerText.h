@@ -92,9 +92,9 @@ namespace Spcm{
               for (int i = 0; i < n_phys_chn; ++i) {
                   //printf("Stopping stream %u\n", m_out_chns[i]);
                   (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
-                  //(*m_stm_mngrs[m_out_chns[i]]).stop_worker();
+                  (*m_stm_mngrs[m_out_chns[i]]).stop_worker();
                   (*m_stm_mngrs[m_out_chns[i]]).reset_streams_out();
-                  //(*m_stm_mngrs[m_out_chns[i]]).reset_out();
+                  (*m_stm_mngrs[m_out_chns[i]]).reset_out();
               }
               resetStmManagers();
               n_restarts++; // Incrementing this is the key for letting all players know of a card restart.
@@ -102,7 +102,7 @@ namespace Spcm{
               std::this_thread::sleep_for(std::chrono::milliseconds(1000));
               for (int i = 0; i < n_phys_chn; ++i) {
                   (*m_stm_mngrs[m_out_chns[i]]).start_streams();
-                  //(*m_stm_mngrs[m_out_chns[i]]).start_worker();
+                  (*m_stm_mngrs[m_out_chns[i]]).start_worker();
               }
               printf("Done with card restart\n");
           }

@@ -51,35 +51,29 @@ NACS_EXPORT() YAML::Node ControllerText::testCompute(size_t nele, size_t buff_sz
     uint64_t initial_clock = cycleclock();
     uint64_t count;
     YAML::Node res;
-    std::map<uint32_t, std::vector<const int16_t*>> ptr_map;
     for (int i = 0; i < n_phys_chn; ++i) {
         (*m_stm_mngrs[m_out_chns[i]]).start_streams();
-        //(*m_stm_mngrs[m_out_chns[i]]).start_worker();
-        ptr_map.emplace(m_out_chns[i], std::vector<const int16_t*>{(*m_stm_mngrs[m_out_chns[i]]).num_streams(), nullptr});
+        (*m_stm_mngrs[m_out_chns[i]]).start_worker();
     }
     while (m_output_cnt < nele) {
-        //std::vector<const int16_t*> ptrs(n_phys_chn, nullptr);
+        std::vector<const int16_t*> ptrs(n_phys_chn, nullptr);
         size_t sz;
         size_t min_sz = 8 * 1024ll * 1024ll * 1024ll; // cannot be this large.
         for (int i = 0; i < n_phys_chn; ++i)
         {
-            auto &stm_mngr = *m_stm_mngrs[m_out_chns[i]];
-            auto &ptr_vec = ptr_map.at(m_out_chns[i]);
-            for (uint32_t j = 0; j < stm_mngr.num_streams(); j++) {
-            retry:
-                ptr_vec[j] = stm_mngr.get_read_ptr(j, sz);
-                //std::cout << "sz: " << sz << std::endl;
-                if (sz < notif_size / 2 / n_phys_chn) { // 4096
-                    // data not ready
-                    //if (sz > 0)
-                    //     (*m_stm_mngrs[m_out_chns[i]]).sync_reader();
-                    CPU::pause();
-                    //toCont = true;
-                    goto retry;
-                }
-                if (sz < min_sz) {
-                    min_sz = sz;
-                }
+        retry:
+            ptrs[i] = (*m_stm_mngrs[m_out_chns[i]]).get_output(sz);
+            //std::cout << "sz: " << sz << std::endl;
+            if (sz < notif_size / 2 / n_phys_chn) { // 4096
+                // data not ready
+                //if (sz > 0)
+                //     (*m_stm_mngrs[m_out_chns[i]]).sync_reader();
+                CPU::pause();
+                //toCont = true;
+                goto retry;
+            }
+            if (sz < min_sz) {
+                min_sz = sz;
             }
         }
         min_sz = min_sz & ~(uint64_t)(notif_size / 2 / n_phys_chn - 1); // make it chunks of 2048
@@ -98,50 +92,31 @@ NACS_EXPORT() YAML::Node ControllerText::testCompute(size_t nele, size_t buff_sz
         int16_t* curr_ptr;
         int16_t* curr_ptr2;
         if (n_phys_chn == 1) {
-            auto nstreams = (*m_stm_mngrs[m_out_chns[0]]).num_streams();
-            auto &ptr_vec = ptr_map.at(m_out_chns[0]);
-            __m512i res;
             for(int i = 0; i < (count / 2); i += 64/2) {
-                // sum tones
-                res = *(__m512i*)(ptr_vec[0] + i);
-                for (uint32_t j = 1; j < nstreams; j++) {
-                    res = _mm512_add_epi16(res, *(__m512i*)(ptr_vec[j] + i));
-                    //ptr_vec[j] += 64/2;
-                }
                 curr_ptr = buff_ptr + buff_pos;
-                _mm512_stream_si512((__m512i*)curr_ptr, res);
+                _mm512_stream_si512((__m512i*)curr_ptr, *(__m512i*) ptrs[0]);
                 buff_pos += 64/2;
+                ptrs[0] += 64/2;
                 if (buff_pos >= buff_sz_nele) {
                     buff_pos = 0;
                 }
             }
         }
         else if (n_phys_chn == 2) {
-            auto nstreams = (*m_stm_mngrs[m_out_chns[0]]).num_streams();
-            auto nstreams2 = (*m_stm_mngrs[m_out_chns[1]]).num_streams();
-            auto &ptr_vec = ptr_map.at(m_out_chns[0]);
-            auto &ptr_vec2 = ptr_map.at(m_out_chns[1]);
-            __m512i res, res2;
             for (int i = 0; i < (count / 2); i+= 64) {
-                res = *(__m512i*)(ptr_vec[0] + i/2);
-                res2 = *(__m512i*)(ptr_vec2[0] + i/2);
-                for (uint32_t j = 1; j < nstreams; j++) {
-                    res = _mm512_add_epi16(res, *(__m512i*)(ptr_vec[j] + i/2));
-                    res2 = _mm512_add_epi16(res2, *(__m512i*)(ptr_vec2[j] + i/2));
-                }
                 curr_ptr = buff_ptr + buff_pos;
                 curr_ptr2 = curr_ptr + 32;
-                __m512i out1, out2; //, data1, data2;
-                //data1 = *(__m512i*)ptrs[0];
-                //data2 = *(__m512i*)ptrs[1];
-                out1 = _mm512_mask_permutex2var_epi16(res, 0xFFFFFFFF,
-                                                      (__m512i) interweave_idx1, res2);
-                out2 = _mm512_mask_permutex2var_epi16(res, 0xFFFFFFFF,
-                                                      (__m512i) interweave_idx2, res2);
+                __m512i out1, out2, data1, data2;
+                data1 = *(__m512i*)ptrs[0];
+                data2 = *(__m512i*)ptrs[1];
+                out1 = _mm512_mask_permutex2var_epi16(data1, 0xFFFFFFFF,
+                                                      (__m512i) interweave_idx1, data2);
+                out2 = _mm512_mask_permutex2var_epi16(data1, 0xFFFFFFFF,
+                                                      (__m512i) interweave_idx2, data2);
                 _mm512_stream_si512((__m512i*)curr_ptr, out1);
                 _mm512_stream_si512((__m512i*)curr_ptr2, out2);
-                //ptrs[0] += 32;
-                //ptrs[1] += 32;
+                ptrs[0] += 32;
+                ptrs[1] += 32;
                 buff_pos += 64;
                 if (buff_pos >= buff_sz_nele * 2) {
                     buff_pos = 0;
@@ -151,7 +126,7 @@ NACS_EXPORT() YAML::Node ControllerText::testCompute(size_t nele, size_t buff_sz
         
         // NO SUPPORT FOR MORE THAN 2 PHYS OUTPUTS AT THE MOMENT
         for (int i = 0; i < n_phys_chn; ++i) {
-            (*m_stm_mngrs[m_out_chns[i]]).consume_all_output(count / 2 / n_phys_chn);
+            (*m_stm_mngrs[m_out_chns[i]]).consume_output(count / 2 / n_phys_chn);
         }
         //printf("m_output_cnt, controller: %lu\n", m_output_cnt);
         m_output_cnt += count / 2 / n_phys_chn / 32; // stream times are in units of 32 samples
@@ -161,9 +136,9 @@ NACS_EXPORT() YAML::Node ControllerText::testCompute(size_t nele, size_t buff_sz
     for (int i = 0; i < n_phys_chn; ++i) {
         //printf("Stopping stream %u\n", m_out_chns[i]);
         (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
-        //(*m_stm_mngrs[m_out_chns[i]]).stop_worker();
+        (*m_stm_mngrs[m_out_chns[i]]).stop_worker();
         (*m_stm_mngrs[m_out_chns[i]]).reset_streams_out();
-        //(*m_stm_mngrs[m_out_chns[i]]).reset_out();
+        (*m_stm_mngrs[m_out_chns[i]]).reset_out();
     }
     res["t"] = (finish_time - initial_clock) / 3e9;
     res["nele"] = nele;
