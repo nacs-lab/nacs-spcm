@@ -13,7 +13,7 @@
 using namespace NaCs;
 
 namespace Spcm {
-const uint32_t UINT_MAX = 4294967295;
+const uint32_t UINT_MAX2 = 4294967295;
 
 class ControllerText;
 
@@ -39,10 +39,10 @@ struct ChannelMap {
         chn_map.reserve(n_streams * max_per_chn);
         for (int i = 0; i < n_streams; i++) {
             chn_counts.push_back(0);
-            chn_map.push_back(UINT_MAX);
+            chn_map.push_back(UINT_MAX2);
         }
         for (int i = n_streams; i < (n_streams * max_per_chn); i++) {
-            chn_map.push_back(UINT_MAX);
+            chn_map.push_back(UINT_MAX2);
         }
               //std::cout << "Initial chn count: ";
               //for (int i = 0; i < n_streams; i++) {
@@ -123,7 +123,7 @@ public:
         // returns stream idx to delete from and position there
         uint32_t idx = getChn(chnid);
         if (idx == chn_map.size()){
-            return std::make_pair(idx,UINT_MAX); // entry doesnt exist
+            return std::make_pair(idx,UINT_MAX2); // entry doesnt exist
         }
         else {
             // implements what happens in stream. when a channel is deleted, the last channel gets moved to the deleted channel.
@@ -132,7 +132,7 @@ public:
             chn_counts[stream_num] = chn_counts[stream_num] - 1;
             uint32_t stream_last = getIdx(std::make_pair(stream_num, chn_counts[stream_num]));
             chn_map[idx] = chn_map[stream_last];
-            chn_map[stream_last] = UINT_MAX;
+            chn_map[stream_last] = UINT_MAX2;
             tot_chns--;
             return stream_info;
         }
@@ -141,10 +141,10 @@ public:
     inline void reset() {
         for (int i = 0; i < stream_cnt; i++) {
             chn_counts[i] = 0;
-            chn_map[i] = UINT_MAX;
+            chn_map[i] = UINT_MAX2;
         }
         for (int i = stream_cnt; i < (stream_cnt * m_max_per_chn); i++) {
-            chn_map[i] = UINT_MAX;
+            chn_map[i] = UINT_MAX2;
         }
         tot_chns = 0;
     }
@@ -191,7 +191,7 @@ public:
     }
     inline uint32_t get_end_triggered()
     {
-        uint32_t min_end_triggered = UINT_MAX;
+        uint32_t min_end_triggered = UINT_MAX2;
         for (int i = 0; i < m_n_streams; i++) {
             min_end_triggered = std::min(min_end_triggered, (*m_streams[i]).end_triggered());
         }
