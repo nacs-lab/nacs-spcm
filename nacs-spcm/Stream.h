@@ -353,6 +353,18 @@ protected:
         m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2),
         m_stream_num(stream_num)
     {
+        freqs.reserve(128);
+        amps.reserve(128);
+        phases.reserve(128);
+        dfs.reserve(128);
+        damps.reserve(128);
+        for (size_t i = 0; i < 128; i++) {
+            freqs.push_back(0);
+            amps.push_back(0);
+            phases.push_back(0);
+            dfs.push_back(0);
+            damps.push_back(0);
+        }
     }
 private:
     inline bool probe_cmd_input()
@@ -416,6 +428,13 @@ private:
     std::atomic<uint64_t> m_start_trigger_time{0};
 
     StreamManagerBase &m_stm_mngr;
+
+    std::vector<int64_t> phases;//(128, 0);
+    std::vector<uint64_t> freqs;//(128, 0);
+    std::vector<double> amps;//(128, 0);
+    std::vector<int64_t> dfs;//(128, 0);
+    std::vector<double> damps;//(128, 0);
+
 };
 
 template<uint32_t max_chns = 128>

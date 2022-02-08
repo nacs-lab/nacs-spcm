@@ -102,6 +102,36 @@ void compute_single_chn(__m512 &v1, __m512 &v2, float phase, float freq,
     //}
 }
 
+__attribute__((target("avx512f,avx512bw"), flatten))
+__m512i calc_multi(int64_t* phase_cnt, uint64_t* freq_cnt,
+                int64_t* df_cnt, double* amp, double* damp, size_t nchn)
+{
+    __m512 v1 = _mm512_set1_ps(0.0f);
+    __m512 v2 = _mm512_set1_ps(0.0f);
+    for (int i = 0; i < nchn; i++) {
+        float phase = float(double(phase_cnt[i] * phase_scale));
+        float freq = float(double(freq_cnt[i] * freq_scale));
+        float df = float(double(df_cnt[i] * freq_scale));
+        compute_single_chn(v1, v2, phase, freq, df, amp[i], damp[i]);
+        phase_cnt[i] = phase_cnt[i] + int64_t(freq_cnt[i] * 32) + df_cnt[i] * 32 / 2;
+        if (phase_cnt[i] > 0) {
+            phase_cnt[i] -= max_phase * 4;
+            while (unlikely(phase_cnt[i] > 0)) {
+                phase_cnt[i] -= max_phase * 4;
+            }
+        }
+        if (damp[i] != 0) {
+            amp[i] += damp[i];
+        }
+        if (df_cnt[i] != 0) {
+            freq_cnt[i] = uint64_t(int64_t(freq_cnt[i]) + df_cnt[i]);
+        }
+    }
+    return _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,
+                                     _mm512_cvttps_epi32(v2));
+}
+
+
 void test_compute_single_chn(int& out1, int& out2, int val, int dval) {
     out1 += val;
     out2 = out2 + val + dval;
@@ -386,10 +416,12 @@ StreamBase::consume_old_cmds(State *states)
             }
             break;
         case CmdType::AmpSet:
-            states[cmd->chn].amp = cmd->final_val * amp_scale; // set amplitude of state
+            //states[cmd->chn].amp = cmd->final_val * amp_scale; // set amplitude of state
+            amps[cmd->chn] = cmd->final_val * amp_scale;
             break;
         case CmdType::FreqSet:
-            states[cmd->chn].freq = cmd->final_val * freq_scale_client;
+            //states[cmd->chn].freq = cmd->final_val * freq_scale_client;
+            freqs[cmd->chn] = cmd->final_val * freq_scale_client;
             break;
         case CmdType::AmpFn:
         case CmdType::AmpVecFn:
@@ -399,10 +431,12 @@ StreamBase::consume_old_cmds(State *states)
                 active_cmds.push_back(new activeCmd(cmd));
                 std::pair<double, double> these_vals;
                 these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
-                states[cmd->chn].amp = (these_vals.first + these_vals.second) * amp_scale;
+                //states[cmd->chn].amp = (these_vals.first + these_vals.second) * amp_scale;
+                amps[cmd->chn] = (these_vals.first + these_vals.second) * amp_scale;
             }
             else {
-                states[cmd->chn].amp = cmd->final_val * amp_scale; // otherwise set to final value.
+                //states[cmd->chn].amp = cmd->final_val * amp_scale; // otherwise set to final value.
+                amps[cmd->chn] = cmd->final_val * amp_scale;
             }
             break;
         case CmdType::FreqFn:
@@ -412,24 +446,33 @@ StreamBase::consume_old_cmds(State *states)
                 active_cmds.push_back(new activeCmd(cmd));
                 std::pair<double, double> these_vals;
                 these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
-                states[cmd->chn].freq = uint64_t(these_vals.first + these_vals.second) * freq_scale_client;
+                //states[cmd->chn].freq = uint64_t(these_vals.first + these_vals.second) * freq_scale_client;
+                freqs[cmd->chn] = uint64_t(these_vals.first + these_vals.second) * freq_scale_client;
             }
             else {
-                states[cmd->chn].freq = cmd->final_val * freq_scale_client; // otherwise set to final value.
+                //states[cmd->chn].freq = cmd->final_val * freq_scale_client; // otherwise set to final value.
+                freqs[cmd->chn] = cmd->final_val * freq_scale_client;
             }
             break;
         case CmdType::Phase:
-            states[cmd->chn].phase = cmd->final_val * phase_scale_client; // possibly a scale factor needed. COME BACK
+            //states[cmd->chn].phase = cmd->final_val * phase_scale_client; // possibly a scale factor needed. COME BACK
+            phases[cmd->chn] = cmd->final_val * phase_scale_client;
             break;
         case CmdType::ModChn:
             if (cmd->chn == Cmd::add_chn) {
                 //printf("Process add_chn\n");
-                states[m_chns] = {0, 0, 0.0f}; // initialize new channel
+                //states[m_chns] = {0, 0, 0.0f}; // initialize new channel
+                freqs[m_chns] = 0;
+                amps[m_chns] = 0;
+                phases[m_chns] = 0;
                 m_chns++;
             }
             else {
                 m_chns--;
-                states[cmd->chn] = states[m_chns]; // move last_chn to place of deleted channel
+                //states[cmd->chn] = states[m_chns]; // move last_chn to place of deleted channel
+                freqs[cmd->chn] = freqs[m_chns];
+                amps[cmd->chn] = amps[m_chns];
+                phases[cmd->chn] = phases[m_chns];
             }
             break;
         }
@@ -496,12 +539,18 @@ retry:
             while (unlikely(cmd->op() == CmdType::ModChn)) {
                 if (cmd->chn == Cmd::add_chn) {
                     //printf("Process add chn\n");
-                    states[m_chns] = {0, 0, 0.0f};
+                    //states[m_chns] = {0, 0, 0.0f};
+                    freqs[m_chns] = 0;
+                    amps[m_chns] = 0;
+                    phases[m_chns] = 0;
                     m_chns++;
                 }
                 else {
                     m_chns--;
-                    states[cmd->chn] = states[m_chns];
+                    //states[cmd->chn] = states[m_chns];
+                    freqs[cmd->chn] = freqs[m_chns];
+                    amps[cmd->chn] = amps[m_chns];
+                    phases[cmd->chn] = phases[m_chns];
                 }
                 cmd_next();
                 cmd = get_cmd_curt();
@@ -544,12 +593,12 @@ cmd_out:
     }
     for (uint32_t i = 0; i < _nchns; i++){
         // iterate through the number of channels
-        auto &state = states[i];
-        int64_t phase = state.phase;
-        double amp = state.amp;
-        uint64_t freq = state.freq;
-        int64_t df = 0;
-        double damp = 0;
+        //auto &state = states[i];
+        //int64_t phase = state.phase;
+        //double amp = state.amp;
+        //uint64_t freq = state.freq;
+        //int64_t df = 0;
+        //double damp = 0;
         // check active commands
         if (active_cmds.size() > 0) {
             auto it = active_cmds.begin();
@@ -560,13 +609,16 @@ cmd_out:
                         if (this_cmd->t + this_cmd->len > m_cur_t) {
                             std::pair<double, double> these_vals;
                             these_vals = (*it)->eval(m_cur_t - this_cmd->t);
-                            amp = these_vals.first * amp_scale;
-                            damp = these_vals.second * amp_scale;
-                            state.amp = amp + damp;
+                            //amp = these_vals.first * amp_scale;
+                            //damp = these_vals.second * amp_scale;
+                            //state.amp = amp + damp;
+                            amps[i] = these_vals.first * amp_scale;
+                            damps[i] = these_vals.second * amp_scale;
                         }
                         else {
-                            amp = this_cmd->final_val * amp_scale;
-                            state.amp = amp;
+                            //amp = this_cmd->final_val * amp_scale;
+                            //state.amp = amp;
+                            amps[i] = this_cmd->final_val * amp_scale;
                             it = active_cmds.erase(it); // no longer active
                             continue;
                         }
@@ -575,13 +627,16 @@ cmd_out:
                         if (this_cmd->t + this_cmd->len > m_cur_t) {
                             std::pair<double, double> these_vals;
                             these_vals = (*it)->eval(m_cur_t - this_cmd->t);
-                            freq = uint64_t(these_vals.first) * freq_scale_client;
-                            df = int64_t(these_vals.second) * freq_scale_client;
-                            state.freq = (uint64_t)((int64_t) freq + df);
+                            //freq = uint64_t(these_vals.first) * freq_scale_client;
+                            //df = int64_t(these_vals.second) * freq_scale_client;
+                            // state.freq = (uint64_t)((int64_t) freq + df);
+                            freqs[i] = uint64_t(these_vals.first) * freq_scale_client;
+                            dfs[i] = int64_t(these_vals.second) * freq_scale_client;
                         }
                         else {
-                            freq = this_cmd->final_val * freq_scale_client;
-                            state.freq = freq;
+                            //freq = this_cmd->final_val * freq_scale_client;
+                            //state.freq = freq;
+                            freqs[i] = this_cmd->final_val * freq_scale_client;
                             it = active_cmds.erase(it); // no longer active
                             continue;
                         }
@@ -594,6 +649,7 @@ cmd_out:
         if (!cmd || cmd->chn != i) {
             //std::cout << phase << std::endl;
             //std::cout << "freq: " << freq << std::endl;
+            /*
             if (damp != 0)
             {// && freq != 70e7)
                 //std::cout << "df: " << float(df * freq_scale) << std::endl;
@@ -608,15 +664,16 @@ cmd_out:
                 damp = 0;
             }
             compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), amp, damp);
-            /*if (freq != 0) {
+            if (freq != 0) {
                 std::cout << "int64_t " <<typeid(int64_t(2)).name() << std::endl;
                 std::cout << "uint64_t: " << typeid(uint64_t(2)).name() << std::endl;
             std::cout << "phase type: " << typeid(phase).name() << std::endl;
             std::cout << "freq type: " << typeid(freq).name() << std::endl;
             std::cout << "df type: " << typeid(df).name() << std::endl;
             std::cout << "state phase: " <<typeid(state.phase).name() << std::endl;
-            }*/
+            }
             phase = phase + (int64_t) (freq * 32) + df * 32 / 2;
+            */
             //if (freq != 0) {
             //std::cout << "phase type after: " << typeid(phase).name() << std::endl;
             //}
@@ -628,7 +685,8 @@ cmd_out:
                 //std::cout << (*cmd) << std::endl;
                 if (cmd->op() == CmdType::FreqSet){
                     //std::cout << "in freq set" << std::endl;
-                    freq = cmd->final_val * freq_scale_client;
+                    //freq = cmd->final_val * freq_scale_client;
+                    freqs[i] = cmd->final_val * freq_scale_client;
                 }
                 else if (cmd->op() == CmdType::FreqFn || cmd->op() == CmdType::FreqVecFn) {
                     // first time seeing function command
@@ -637,15 +695,19 @@ cmd_out:
                         active_cmds.push_back(new activeCmd(cmd));
                         std::pair<float, float> these_vals;
                         these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
-                        freq = uint64_t(these_vals.first) * freq_scale_client;
-                        df = int64_t(these_vals.second) * freq_scale_client;
+                        //freq = uint64_t(these_vals.first) * freq_scale_client;
+                        //df = int64_t(these_vals.second) * freq_scale_client;
+                        freqs[i] = uint64_t(these_vals.first) * freq_scale_client;
+                        dfs[i] = int64_t(these_vals.second) * freq_scale_client;
                     }
                     else {
-                        freq = cmd->final_val * freq_scale_client; // otherwise set to final value.
+                        //freq = cmd->final_val * freq_scale_client; // otherwise set to final value.
+                        freqs[i] = cmd->final_val * freq_scale_client;
                     }
                 }
                 else if (cmd->op() == CmdType::AmpSet) {
-                    amp = cmd->final_val * amp_scale;
+                    //amp = cmd->final_val * amp_scale;
+                    amps[i] = cmd->final_val * amp_scale;
                 }
                 else if (likely(cmd->op() == CmdType::AmpFn || cmd->op() == CmdType::AmpVecFn)) {
                     // first time seeing function command
@@ -654,15 +716,19 @@ cmd_out:
                         active_cmds.push_back(new activeCmd(cmd));
                         std::pair<double, double> these_vals;
                         these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
-                        amp = these_vals.first * amp_scale;
-                        damp = these_vals.second * amp_scale;
+                        //amp = these_vals.first * amp_scale;
+                        //damp = these_vals.second * amp_scale;
+                        amps[i] = these_vals.first * amp_scale;
+                        damps[i] = these_vals.second * amp_scale;
                     }
                     else {
-                        amp = cmd->final_val * amp_scale; // otherwise set to final value.
+                        //amp = cmd->final_val * amp_scale; // otherwise set to final value.
+                        amps[i] = cmd->final_val * amp_scale;
                     }
                 }
                 else if (unlikely(cmd->op() == CmdType::Phase)) {
-                    phase = cmd->final_val * phase_scale_client; // may need to be changed
+                    //phase = cmd->final_val * phase_scale_client; // may need to be changed
+                    phases[i] = cmd->final_val * phase_scale_client;
                 }
                 else {
                     //encountered a non phase,amp,freq command
@@ -676,35 +742,37 @@ cmd_out:
                     cmd = nullptr;
                 }
             } while (cmd && cmd->chn == i);
-            if (damp != 0)
+            if (damps[i] != 0)
             {
                 //std::cout << "damp: " << damp << std::endl;
             }
-            if (amp > amp_scale) {
-                amp = amp_scale;
+            if (amps[i] > amp_scale) {
+                amps[i] = amp_scale;
             }
-            if (amp + damp > amp_scale) {
-                damp = 0;
+            if (amps[i] + damps[i] > amp_scale) {
+                damps[i] = 0;
             }
-            compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), amp, damp);
-            phase = phase + int64_t(freq * 32) + df * 32 / 2;
+            //compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), amp, damp);
+            //phase = phase + int64_t(freq * 32) + df * 32 / 2;
             //test_compute_single_chn(out1freq, out2freq, freq, df);
-            if (damp > 0)
-                state.amp = amp + damp;
-            if (df > 0)
-                state.freq = (uint64_t)((int64_t) freq + df);
+            //if (damp > 0)
+            //    state.amp = amp + damp;
+            //if (df > 0)
+            //    state.freq = (uint64_t)((int64_t) freq + df);
         }
         // deal with phase wraparound
-        if (phase > 0)
-        {
-          phase -= max_phase * 4;
-          while (unlikely(phase > 0)) {
-              phase -= max_phase * 4;
-          }
-        }
-        state.phase = phase;
+        //if (phase > 0)
+        //{
+        //  phase -= max_phase * 4;
+        // while (unlikely(phase > 0)) {
+        //    phase -= max_phase * 4;
+        //}
+        //}
+        //state.phase = phase;
     } // channel iteration
     // after done iterating channels
+auto v = calc_multi(phases.data(), freqs.data(),
+                    dfs.data(), amps.data(), damps.data(), _nchns);
     m_cur_t++; // increment time
     //if (m_cur_t % uint32_t(1e6) == 0) {
     //  std::cout << "t: " << m_cur_t << std::endl;
@@ -712,9 +780,9 @@ cmd_out:
     if (m_output_cnt % 19531250 == 0) { // 19531250
         printf("m_output_cnt: %lu\n", m_output_cnt);
     }
-    __m512i v;
-    v = _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,
-                              _mm512_cvttps_epi32(v2));
+//__m512i v;
+//v = _mm512_permutex2var_epi16(_mm512_cvttps_epi32(v1), (__m512i)mask0,
+//                              _mm512_cvttps_epi32(v2));
     _mm512_store_si512(out, v);
 }
 
