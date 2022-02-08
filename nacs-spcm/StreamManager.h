@@ -276,6 +276,11 @@ public:
             m_output.read_size(sz); // reset my own output.
         } while (sz != 0);
     }
+    void set_streams_chk_cmd(bool chk) {
+        for (int i = 0; i < m_n_streams; i++) {
+            (*m_streams[i]).set_chk_cmd(chk);
+        }
+    }
 protected:
 StreamManagerBase(ControllerText& ctrl, uint32_t n_streams, uint32_t max_per_stream,
                       double step_t, std::atomic<uint64_t> &cmd_underflow,

@@ -62,6 +62,10 @@ __m512 xsinpif_pi(__m512 d)
     auto neg = _mm512_test_epi32_mask(q, _mm512_set1_epi32(1));
     d = (__m512)_mm512_mask_xor_epi32((__m512i)d, neg, (__m512i)d, _mm512_set1_epi32(0x80000000));
 
+    //d = __m512(_mm512_slli_epi32(q, 31) ^ __m512i(d));
+    //auto u = -0.17818783f * s + 0.8098674f;
+    //u = u * s - 1.6448531f;
+
     auto u = 0.024749093f * s - 0.19045785f;
     u = u * s + 0.8117177f;
     u = u * s - 1.6449335f;
@@ -134,6 +138,8 @@ NACS_EXPORT() const char *Cmd::name() const
             return "trigger_end";
         if (chn == (uint32_t)CmdMeta::TriggerStart)
             return "trigger_start";
+        if (chn == (uint32_t)CmdMeta::StopCheck)
+            return "stop_check";
     default:
         return "(unknown)";
     }
@@ -375,6 +381,9 @@ StreamBase::consume_old_cmds(State *states)
                 }
                 wait_for_seq = false;
             }
+            else if (cmd -> chn == (uint32_t)CmdMeta::StopCheck) {
+                chk_cmd = false;
+            }
             break;
         case CmdType::AmpSet:
             states[cmd->chn].amp = cmd->final_val * amp_scale; // set amplitude of state
@@ -441,10 +450,10 @@ __attribute__((target("avx512f,avx512bw"), flatten))
 NACS_EXPORT() void StreamBase::step(int16_t *out, State *states)
 {
     // Key function
-    const Cmd *cmd;
+    const Cmd *cmd = nullptr;
 retry:
     // returns command at current time or before
-    if ((cmd = get_cmd_curt())){
+    if (chk_cmd && (cmd = get_cmd_curt())){
         if (unlikely(cmd->t < m_cur_t)) {
             cmd = consume_old_cmds(states); //consume past commands
             if (!cmd) {
@@ -477,6 +486,9 @@ retry:
                 }
                 wait_for_seq = false;
             }
+            else if (cmd->chn == (uint32_t)CmdMeta::StopCheck) {
+                chk_cmd = false;
+            }
             cmd_next();
             goto retry; // keep on going if it's a meta command
         }
@@ -503,6 +515,7 @@ retry:
 cmd_out:
     // At this point we have a nullptr if out of commands or in the future, or it's an actual command
     // related to amp, phase, freq
+    
     if (unlikely(m_end_trigger_waiting)) {
         auto cur_end_trigger = end_trigger();
         if (cur_end_trigger) {
@@ -517,7 +530,7 @@ cmd_out:
         m_end_trigger_waiting = m_end_trigger_pending;
         m_end_trigger_pending = 0;
         set_end_trigger(out); // out
-    }
+        }
     // calculate actual output.
     // For testing purposes. At the moment keep the output simple.
     __m512 v1 = _mm512_set1_ps(0.0f);
@@ -655,8 +668,13 @@ cmd_out:
                     //encountered a non phase,amp,freq command
                     break;
                 }
-                cmd_next(); // increment cmd counter
-                cmd = get_cmd_curt(); // get command only if it's current
+                if (chk_cmd) {
+                    cmd_next(); // increment cmd counter
+                    cmd = get_cmd_curt(); // get command only if it's current
+                }
+                else {
+                    cmd = nullptr;
+                }
             } while (cmd && cmd->chn == i);
             if (damp != 0)
             {
@@ -671,8 +689,10 @@ cmd_out:
             compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), amp, damp);
             phase = phase + int64_t(freq * 32) + df * 32 / 2;
             //test_compute_single_chn(out1freq, out2freq, freq, df);
-            state.amp = amp + damp;
-            state.freq = (uint64_t)((int64_t) freq + df);
+            if (damp > 0)
+                state.amp = amp + damp;
+            if (df > 0)
+                state.freq = (uint64_t)((int64_t) freq + df);
         }
         // deal with phase wraparound
         if (phase > 0)

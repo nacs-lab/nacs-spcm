@@ -45,7 +45,8 @@ enum class CmdMeta : uint32_t
     Reset,
     ResetAll,
     TriggerEnd,
-    TriggerStart
+    TriggerStart,
+    StopCheck
 };
 
 // Note freq, amp, and phase are already integers in the command struct
@@ -92,6 +93,10 @@ public:
     static Cmd getTriggerStart(int64_t t = 0, int64_t t_client = 0, uint32_t id = 0, uint32_t trigger_id = 0)
     {
         return Cmd{t, t_client, id, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::TriggerStart, trigger_id};
+    }
+    static Cmd getStopCheck(int64_t t = 0, int64_t t_client = 0, uint32_t id = 0)
+    {
+        return Cmd{t, t_client, id, (uint8_t)CmdType::Meta, (uint32_t)CmdMeta::StopCheck, 0};
     }
     static Cmd getAmpSet(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double amp)
     {
@@ -310,6 +315,9 @@ public:
     void reset_output_cnt() {
         m_output_cnt = 0;
     }
+    void set_chk_cmd(bool chk) {
+        chk_cmd = chk;
+    }
     inline void reqRestart(uint32_t id);
     inline void reset_output() {
         size_t sz;
@@ -371,6 +379,7 @@ private:
 protected:
     std::atomic_bool m_stop{false};
 private:
+    bool chk_cmd = true;
     uint32_t m_stream_num;
     std::atomic_bool m_slow_mode{true}; // related to trigger
     uint32_t m_end_trigger_pending{0};

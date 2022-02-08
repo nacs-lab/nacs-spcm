@@ -146,6 +146,10 @@ namespace Spcm{
           {
               m_stm_mngrs[idx]->distribute_cmds();
           }
+          void set_chk_cmd(uint32_t idx, bool chk)
+          {
+              m_stm_mngrs[idx]->set_streams_chk_cmd(chk);
+          }
           inline uint32_t getMaxChn(uint32_t idx) {
               return max_chns[idx];
           }
