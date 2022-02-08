@@ -104,7 +104,7 @@ int test_tone_generation_fixed_tones(int nrep, int ntones)
 
 int test_tone_generation(int nrep, int ntones)
 {
-    bool two_outputs = true;
+    bool two_outputs = false;
     printf("nrep: %d\n", nrep);
     printf("ntones: %d\n", ntones);
     if (two_outputs) {
@@ -117,7 +117,7 @@ int test_tone_generation(int nrep, int ntones)
     size_t nele = 8 * 1024ll * 1024ll;
     size_t buff_sz_nele = 2 * 1024ll * 1024ll;
     //std::vector<uint32_t> stream_nums = {1,2,3,4,5,6,7,8,9,10};
-    std::vector<uint32_t> stream_nums = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20};
+    std::vector<uint32_t> stream_nums = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
     //std::vector<uint32_t> stream_nums = {1};
     std::vector<double> rates;
 
