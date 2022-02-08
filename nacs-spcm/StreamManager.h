@@ -6,6 +6,7 @@
 #include <nacs-utils/thread.h>
 #include <nacs-utils/mem.h>
 #include "Stream.h"
+#include "Config.h"
 
 #include <thread>
 #include <vector>
@@ -276,10 +277,11 @@ public:
         } while (sz != 0);
     }
 protected:
-StreamManagerBase(Controller& ctrl, uint32_t n_streams, uint32_t max_per_stream,
+    StreamManagerBase(Controller& ctrl,Config &conf, uint32_t n_streams, uint32_t max_per_stream,
                       double step_t, std::atomic<uint64_t> &cmd_underflow,
                       std::atomic<uint64_t> &underflow, bool start = false)
         : m_ctrl(ctrl),
+          m_conf(conf),
           m_n_streams(n_streams),
           m_max_per_stream(max_per_stream),
           chn_map(n_streams, max_per_stream),
@@ -289,7 +291,7 @@ StreamManagerBase(Controller& ctrl, uint32_t n_streams, uint32_t max_per_stream,
         // start streams
         for (int i = 0; i < n_streams; i++) {
             Stream<128> *stream_ptr;
-            stream_ptr = new Stream<128>(*this, step_t, cmd_underflow, underflow, i, start);
+            stream_ptr = new Stream<128>(*this, m_conf, step_t, cmd_underflow, underflow, i, start);
             m_streams.push_back(stream_ptr);
             stream_ptrs.push_back(nullptr);
         }
@@ -324,7 +326,7 @@ private:
     ChannelMap chn_map;
     uint32_t m_n_streams = 0;
     uint32_t m_max_per_stream = 0;
-    
+    Config& m_conf;
     int64_t m_cur_t = 0; // current time for output
     uint64_t m_output_cnt = 0; // output count, units of output_block_sz
 
@@ -347,11 +349,11 @@ private:
 };
 
 struct StreamManager : StreamManagerBase {
-    StreamManager(Controller &ctrl, uint32_t n_streams, uint32_t max_per_stream,
+    StreamManager(Controller &ctrl,Config &conf, uint32_t n_streams, uint32_t max_per_stream,
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false)
-        : StreamManagerBase(ctrl, n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream)
+        : StreamManagerBase(ctrl, conf, n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream)
     {
         if (startWorker)
         {
@@ -408,7 +410,6 @@ private:
     }
 
     std::thread m_worker{};
-
 };
 
 } // namespace brace

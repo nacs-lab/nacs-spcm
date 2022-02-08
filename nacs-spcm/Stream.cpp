@@ -30,14 +30,14 @@ static NACS_INLINE void accum_nonzero(T &out, T in, float s)
     out += in * s;
 }
 
-constexpr long long int sample_rate = 625ll * 1000000ll;
+//constexpr long long int sample_rate = 625ll * 1000000ll;
 constexpr int cycle = 1024/32;
 
-constexpr uint64_t max_phase = uint64_t(sample_rate * 10);
-constexpr double phase_scale = 2 / double(max_phase); // convert from "phase_cnt" which is tracked by state.phase to phase in units of pi radians that compute_single_chn wants.
-constexpr double phase_scale_client = 625e7; // converts from 0 to 1 scale to phase_cnt
+//uint64_t max_phase = uint64_t(m_conf.sample_rate * 10);
+//double phase_scale = 2 / double(max_phase); // convert from "phase_cnt" which is tracked by state.phase to phase in units of pi radians that compute_single_chn wants.
+//double phase_scale_client = m_conf.sample_rate*10; // converts from 0 to 1 scale to phase_cnt
 constexpr double freq_scale_client = 10; // converts from real frequency to freq_cnt.
-constexpr double freq_scale = 0.1 / (sample_rate / 32); // 1 cycle in 32 samples at 625 MHz sampling rate. Converts a frequency at 10 times the real frequency, hence the 0.1.
+//double freq_scale = 0.1 / (m_conf.sample_rate / 32); // 1 cycle in 32 samples at 625 MHz sampling rate. Converts a frequency at 10 times the real frequency, hence the 0.1.
 constexpr double amp_scale = 6.7465185e9f;
 
 //__m512 is a vector type that can hold 16 32 bit floats

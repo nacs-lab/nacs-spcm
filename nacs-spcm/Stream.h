@@ -55,7 +55,7 @@ enum class CmdMeta : uint32_t
 // phase_scale is 2 / (625e6 * 10). We take the integer phase and multiply itby
 // phase_scale to get the actual phase in units of pi. 625e6 * 10 is the max possible frequency.
 
-constexpr uint64_t t_serv_to_client = 32/(625e6) * 1e12; // converts to client time standard which is in ps.
+constexpr uint64_t t_serv_to_client = 32/(400e6) * 1e12; // converts to client time standard which is in ps.
 
 struct Cmd
 {
@@ -337,14 +337,19 @@ protected:
     void generate_page(State *states); //workhorse, takes a vector of states for the channels
     void step(int16_t *out, State *states); // workhorse function to step to next time
     const Cmd *get_cmd();
-    StreamBase(StreamManagerBase &stm_mngr, double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num) :
-        m_stm_mngr(stm_mngr),
+    StreamBase(StreamManagerBase &stm_mngr,Config &conf, double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num)
+        : m_stm_mngr(stm_mngr),
+        m_conf(conf),
         m_step_t(step_t),
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
         m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
         m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2),
-        m_stream_num(stream_num)
+        m_stream_num(stream_num),
+        max_phase(uint64_t(m_conf.sample_rate *10)),
+        phase_scale(2/double(max_phase)),
+        phase_scale_client(m_conf.sample_rate*10),
+        freq_scale(0.1/(m_conf.sample_rate/32)
     {
     }
 private:
@@ -379,21 +384,25 @@ private:
     uint32_t m_chns = 0;
     int64_t m_cur_t = 0;
     uint64_t m_output_cnt = 0; // in unit of 8 bytes, or 32 samples (each sample 2 bits)
+    uint64_t max_phase;
+    double phase_scale;
+    double phase_scale_client;
+    double freq_scale;
     const double m_step_t;
     const Cmd *m_cmd_read_ptr = nullptr;
     size_t m_cmd_read = 0;
     size_t m_cmd_max_read = 0;
     std::atomic<uint64_t> &m_cmd_underflow;
     std::atomic<uint64_t> &m_underflow;
+    Config& m_conf;
     // Members accessed by the command generation thread
     Cmd *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr; //location to write commands to
     size_t m_cmd_wrote = 0;
     size_t m_cmd_max_write = 0;
     //uint32_t m_end_trigger_cnt{0};
     //uint32_t m_start_trigger_cnt{0};
-
-    uint64_t output_buf_sz = 2 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
-    uint64_t wait_buf_sz = 2 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
+    uint64_t output_buf_sz = 4 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
+    uint64_t wait_buf_sz = 4 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
     bool wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     DataPipe<Cmd> m_commands;
     DataPipe<int16_t> m_output;
@@ -412,9 +421,9 @@ private:
 
 template<uint32_t max_chns = 128>
 struct Stream : StreamBase {
-    Stream(StreamManagerBase& stm_mngr, double step_t, std::atomic<uint64_t> &cmd_underflow,
+    Stream(StreamManagerBase& stm_mngr,Config &conf, double step_t, std::atomic<uint64_t> &cmd_underflow,
            std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true)
-        : StreamBase(stm_mngr, step_t, cmd_underflow, underflow, stream_num)
+        : StreamBase(stm_mngr,conf, step_t, cmd_underflow, underflow, stream_num)
     {
         if (start) {
             start_worker();

@@ -295,10 +295,10 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
     }
     //std::cout << "can write" << std::endl;
     // wait for input streams to be ready
-    uint32_t stream_idx = m_n_streams - 1;
+    int32_t stream_idx = m_n_streams - 1;
     size_t sz_to_read;
     const int16_t *read_ptr;
-    while (stream_idx > 0) {
+    while (stream_idx >= 0) {
         read_ptr = (*m_streams[stream_idx]).get_output(&sz_to_read);
         if (sz_to_read >= output_block_sz) {
             //std::cout << stream_idx << std::endl;
