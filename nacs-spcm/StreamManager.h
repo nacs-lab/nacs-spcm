@@ -338,7 +338,7 @@ private:
     uint64_t wait_buf_sz = 1 * 1024ll * 1024ll;
     DataPipe<Cmd> m_commands; // command pipe for writers to put in commands
     DataPipe<int16_t> m_output; // pipe for output and hardware to output
-    constexpr static uint32_t output_block_sz = 2048 * 16; //32768; //2048;
+    constexpr static uint32_t output_block_sz = 2048 * 8; //32768; //2048;
 
     const Cmd *m_cmd_read_ptr = nullptr; // pointer to read commands
     size_t m_cmd_read = 0;
