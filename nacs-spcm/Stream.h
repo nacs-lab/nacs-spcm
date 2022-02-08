@@ -349,7 +349,7 @@ protected:
         max_phase(uint64_t(m_conf.sample_rate *10)),
         phase_scale(2/double(max_phase)),
         phase_scale_client(m_conf.sample_rate*10),
-        freq_scale(0.1/(m_conf.sample_rate/32)
+          freq_scale(0.1/(m_conf.sample_rate/32))
     {
     }
 private:
@@ -394,7 +394,7 @@ private:
     size_t m_cmd_max_read = 0;
     std::atomic<uint64_t> &m_cmd_underflow;
     std::atomic<uint64_t> &m_underflow;
-    Config& m_conf;
+    Config &m_conf;
     // Members accessed by the command generation thread
     Cmd *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr; //location to write commands to
     size_t m_cmd_wrote = 0;

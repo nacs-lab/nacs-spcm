@@ -326,7 +326,7 @@ private:
     ChannelMap chn_map;
     uint32_t m_n_streams = 0;
     uint32_t m_max_per_stream = 0;
-    Config& m_conf;
+    Config &m_conf;
     int64_t m_cur_t = 0; // current time for output
     uint64_t m_output_cnt = 0; // output count, units of output_block_sz
 
