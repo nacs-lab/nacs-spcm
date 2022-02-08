@@ -12,7 +12,7 @@ using namespace NaCs;
 
 int test_tone_generation_fixed_tones(int nrep, int ntones)
 {
-    bool two_outputs = true;
+    bool two_outputs = false;
     printf("nrep: %d\n", nrep);
     printf("ntones_per_thread: %d\n", ntones);
     if (two_outputs) {
@@ -30,7 +30,7 @@ int test_tone_generation_fixed_tones(int nrep, int ntones)
     std::vector<double> rates;
 
     std::vector<::Spcm::Cmd> cmd_vector;
-    double start_freq = 70e6;
+    double start_freq = 1e2;
     double delta_freq = 100e3;
     double amp = 0.9f / (static_cast<double> (ntones));
     uint32_t nwrote;

@@ -293,19 +293,34 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
     }
     //std::cout << "can write" << std::endl;
     // wait for input streams to be ready
-    uint32_t stream_idx = 0;
+    //uint32_t stream_idx = 0;
+    uint32_t ready_streams = 0;
+    std::vector<bool> ready_vec(m_n_streams, false);
     size_t sz_to_read;
     const int16_t *read_ptr;
-    while (stream_idx < m_n_streams) {
-        read_ptr = (*m_streams[stream_idx]).get_output(&sz_to_read);
-        if (sz_to_read >= output_block_sz) {
-            //std::cout << stream_idx << std::endl;
-            stream_ptrs[stream_idx] = read_ptr;
-            stream_idx++;
-        }
-        else {
-            CPU::pause();
-            //(*m_streams[stream_idx]).sync_reader();
+    while (ready_streams < m_n_streams) {
+        //if (m_n_streams == 2) {
+        //    printf("ready_streams: %u\n", ready_streams);
+        //}
+        for (uint32_t stream_idx = 0; stream_idx < m_n_streams; stream_idx++) {
+
+            if (!ready_vec[stream_idx]) {
+                //if (m_n_streams == 2) {
+                //  printf("checking stream %u\n", stream_idx);
+                //  printf("ready streams %u\n", ready_streams);
+                //}
+                read_ptr = (*m_streams[stream_idx]).get_output(&sz_to_read);
+                if (sz_to_read >= output_block_sz) {
+                    //std::cout << stream_idx << std::endl;
+                    stream_ptrs[stream_idx] = read_ptr;
+                    ready_streams++;
+                    ready_vec[stream_idx] = true;
+                }
+                else {
+                    CPU::pause();
+                    //(*m_streams[stream_idx]).sync_reader();
+                }
+            }
         }
         if (unlikely(m_stop.load(std::memory_order_relaxed))) {
             return;
@@ -345,6 +360,7 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
     }
     for (uint32_t stream_idx = 0; stream_idx < m_n_streams; stream_idx++) {
         (*m_streams[stream_idx]).consume_output(output_block_sz);
+        //stream_ptrs[stream_idx] = nullptr;
     }
     //std::cout << "output_block_sz: " << output_block_sz << std::endl;
     //std::cout << "m_cur_t: " << m_cur_t << std::endl;
