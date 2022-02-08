@@ -346,10 +346,10 @@ protected:
         m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
         m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2),
         m_stream_num(stream_num),
-        max_phase(uint64_t(m_conf.sample_rate *10)),
+        max_phase(uint64_t(conf.sample_rate *10)),
         phase_scale(2/double(max_phase)),
-        phase_scale_client(m_conf.sample_rate*10),
-          freq_scale(0.1/(m_conf.sample_rate/32))
+        phase_scale_client(conf.sample_rate*10),
+          freq_scale(0.1/(conf.sample_rate/32))
     {
     }
 private:
@@ -401,8 +401,8 @@ private:
     size_t m_cmd_max_write = 0;
     //uint32_t m_end_trigger_cnt{0};
     //uint32_t m_start_trigger_cnt{0};
-    uint64_t output_buf_sz = 4 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
-    uint64_t wait_buf_sz = 4 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
+    uint64_t output_buf_sz = 2 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
+    uint64_t wait_buf_sz = 2 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
     bool wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     DataPipe<Cmd> m_commands;
     DataPipe<int16_t> m_output;

@@ -291,7 +291,7 @@ protected:
         // start streams
         for (int i = 0; i < n_streams; i++) {
             Stream<128> *stream_ptr;
-            stream_ptr = new Stream<128>(*this, m_conf, step_t, cmd_underflow, underflow, i, start);
+            stream_ptr = new Stream<128>(*this, conf, step_t, cmd_underflow, underflow, i, start);
             m_streams.push_back(stream_ptr);
             stream_ptrs.push_back(nullptr);
         }
