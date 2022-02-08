@@ -234,7 +234,7 @@ namespace Spcm{
               //return false;
           }
           inline uint32_t get_end_triggered() {
-              uint32_t min_end_triggered = UINT_MAX;
+              uint32_t min_end_triggered = UINT_MAX2;
               for (int i = 0; i < n_phys_chn; i++) {
                   min_end_triggered = std::min(min_end_triggered, (*(m_stm_mngrs[m_out_chns[i]])).get_end_triggered());
               }
