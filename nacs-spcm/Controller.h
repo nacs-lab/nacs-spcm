@@ -53,8 +53,9 @@ namespace Spcm{
                   }
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
-                      m_stm_mngrs.emplace_back(new StreamManager(*this,m_conf, 7, 6, 1, cmd_underflow, cmd_underflow, false));
+                      m_stm_mngrs.emplace_back(new StreamManager(*this,m_conf, num_streams, 6, 1, cmd_underflow, cmd_underflow, false));
                       max_chns.push_back(16);
+                      ptr_map.emplace(i, std::vector<const int16_t*>{num_streams, nullptr});
                   }
               }
           }
@@ -120,9 +121,9 @@ namespace Spcm{
                   for (int i = 0; i < n_phys_chn; ++i) {
                       //printf("Stopping stream %u\n", m_out_chns[i]);
                       (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
-                      (*m_stm_mngrs[m_out_chns[i]]).stop_worker();
+                      //(*m_stm_mngrs[m_out_chns[i]]).stop_worker();
                       (*m_stm_mngrs[m_out_chns[i]]).reset_streams_out();
-                      (*m_stm_mngrs[m_out_chns[i]]).reset_out();
+                      //(*m_stm_mngrs[m_out_chns[i]]).reset_out();
                   }
               }
               stopCard();
@@ -139,7 +140,7 @@ namespace Spcm{
                   initChnsAndBuffer();
                   for (int i = 0; i < n_phys_chn; ++i) {
                       (*m_stm_mngrs[m_out_chns[i]]).start_streams();
-                      (*m_stm_mngrs[m_out_chns[i]]).start_worker();
+                      //(*m_stm_mngrs[m_out_chns[i]]).start_worker();
                   }
               }
               printf("Done with card restart\n");
@@ -326,6 +327,9 @@ namespace Spcm{
           std::map<uint32_t, TrigInfo> m_trig_map;
           uint32_t restart_id = 0; // keeps track of start_trigger that requested a restart (for triggers that are noticed too late)
           uint32_t last_trig_id = 0; // last finished trig id
+
+          std::map<uint32_t, std::vector<const int16_t*>> ptr_map;
+          uint32_t num_streams = 7;
       };
 }
 #endif
