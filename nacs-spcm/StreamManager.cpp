@@ -266,6 +266,7 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
         m_streams[i]->flush_cmd();
     }
 }
+/*
 __attribute__((target("avx512f,avx512bw"), flatten))
 NACS_EXPORT() void StreamManagerBase::generate_page()
 {
@@ -337,7 +338,7 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
             }
         }
     }
-    */
+    
     __m512i data;
     for (uint32_t i = 0; i < output_block_sz; i += 32) {
         _mm512_store_si512(&data, *(__m512i*)(stream_ptrs[0] + i));
@@ -356,6 +357,7 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
     m_cur_t += 1;
     m_output_cnt += 1;
 }
+*/
 
 
 
