@@ -55,7 +55,7 @@ enum class CmdMeta : uint32_t
 // phase_scale is 2 / (625e6 * 10). We take the integer phase and multiply itby
 // phase_scale to get the actual phase in units of pi. 625e6 * 10 is the max possible frequency.
 
-constexpr uint64_t t_serv_to_client = 32/(400e6) * 1e12; // converts to client time standard which is in ps.
+constexpr uint64_t t_serv_to_client = 32/(475e6) * 1e12; // converts to client time standard which is in ps.
 
 struct Cmd
 {
@@ -401,8 +401,8 @@ private:
     size_t m_cmd_max_write = 0;
     //uint32_t m_end_trigger_cnt{0};
     //uint32_t m_start_trigger_cnt{0};
-    uint64_t output_buf_sz = 1 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
-    uint64_t wait_buf_sz = 1 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
+    uint64_t output_buf_sz = 2 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
+    uint64_t wait_buf_sz = 2 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
     bool wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     DataPipe<Cmd> m_commands;
     DataPipe<int16_t> m_output;
