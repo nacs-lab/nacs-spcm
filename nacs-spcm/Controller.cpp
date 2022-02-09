@@ -516,7 +516,7 @@ void Controller::workerFunc()
                 res2 = *(__m512i*)(ptr_vec2[0] + i/2);
                 for (uint32_t j = 1; j < num_streams; j++) {
                     res = _mm512_add_epi16(res, *(__m512i*)(ptr_vec[j] + i/2));
-                    res2 = _mm512_add_epi16(res, *(__m512i*)(ptr_vec2[j] + i/2));
+                    res2 = _mm512_add_epi16(res2, *(__m512i*)(ptr_vec2[j] + i/2));
                 }
                 curr_ptr = buff_ptr + buff_pos;
                 //curr_ptr2 = curr_ptr + 32;
