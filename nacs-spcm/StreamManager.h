@@ -170,6 +170,7 @@ public:
         }
         chn_map.reset();
     }
+    /*
     inline void sync_reader()
     {
         m_output.sync_reader();
@@ -182,6 +183,7 @@ public:
     {
         return m_output.read_size(sz);
     }
+    */
     inline void set_start_trigger(uint32_t v, uint64_t t)
     {
         for (int i = 0; i < m_n_streams; i++) {
@@ -265,6 +267,20 @@ public:
             (*m_streams[i]).reset_out();
         }
     }
+    inline const int16_t* get_read_ptr(uint32_t idx, size_t &sz) {
+        return (*m_streams[idx]).get_output(&sz);
+    }
+
+    inline void consume_output(uint32_t idx, size_t sz)
+    {
+        (*m_streams[idx]).consume_output(sz);
+    }
+    inline void consume_all_output(size_t sz) {
+        for (uint32_t i = 0; i < m_n_streams; i++) {
+            (*m_streams[i]).consume_output(sz);
+        }
+    }
+    /*
     inline void reset_output() {
         size_t sz;
         //uint32_t i = 0;
@@ -276,6 +292,10 @@ public:
             m_output.read_size(sz); // reset my own output.
         } while (sz != 0);
     }
+    */
+    uint32_t num_streams() {
+        return m_n_streams;
+    }
 protected:
     StreamManagerBase(Controller& ctrl,Config &conf, uint32_t n_streams, uint32_t max_per_stream,
                       double step_t, std::atomic<uint64_t> &cmd_underflow,
@@ -285,8 +305,8 @@ protected:
           m_n_streams(n_streams),
           m_max_per_stream(max_per_stream),
           chn_map(n_streams, max_per_stream),
-          m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
-          m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2)
+          m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512)
+          //m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2)
     {
         // start streams
         for (int i = 0; i < n_streams; i++) {
@@ -296,7 +316,7 @@ protected:
             stream_ptrs.push_back(nullptr);
         }
     }
-    void generate_page();
+    //void generate_page();
 
     std::atomic_bool m_stop{false};
 private:
@@ -333,7 +353,7 @@ private:
     uint64_t output_buf_sz = 2 * 1024ll * 1024ll; // in bytes. Let Streams below it throttle the filling of this buffer.
     uint64_t wait_buf_sz = 2 * 1024ll * 1024ll;
     DataPipe<Cmd> m_commands; // command pipe for writers to put in commands
-    DataPipe<int16_t> m_output; // pipe for output and hardware to output
+    //DataPipe<int16_t> m_output; // pipe for output and hardware to output
     constexpr static uint32_t output_block_sz = 2048 * 16; //32768; //2048;
 
     const Cmd *m_cmd_read_ptr = nullptr; // pointer to read commands
@@ -355,12 +375,12 @@ struct StreamManager : StreamManagerBase {
                   bool startWorker = false)
         : StreamManagerBase(ctrl, conf, n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream)
     {
-        if (startWorker)
+        /*if (startWorker)
         {
             start_worker();
-        }
+            }*/
     }
-
+/*
     void start_worker()
     {
         m_stop.store(false, std::memory_order_relaxed);
@@ -373,22 +393,25 @@ struct StreamManager : StreamManagerBase {
             m_worker.join();
         }
     }
+
     void reset_out() {
         printf("reset out stm mngr called\n");
         if (m_worker.joinable()) {
             stop_worker();
         }
-        reset_output();
+        //reset_output();
         //size_t sz;
         //m_output.sync_reader();
         //m_output.get_read_ptr(&sz);
         //m_output.read_size(sz); // reset my own output.
     }
+*/
     ~StreamManager()
     {
-        stop_worker();
+        //stop_worker();
     }
 private:
+    /*
     void thread_fun()
     {
         //while (get_cur_t() < 19) {
@@ -407,9 +430,9 @@ private:
             //std::cout << "here" << std::endl;
             generate_page();
         }
-    }
+        }*/
 
-    std::thread m_worker{};
+    //std::thread m_worker{};
 };
 
 } // namespace brace
