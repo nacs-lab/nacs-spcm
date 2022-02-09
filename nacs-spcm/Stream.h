@@ -55,7 +55,7 @@ enum class CmdMeta : uint32_t
 // phase_scale is 2 / (625e6 * 10). We take the integer phase and multiply itby
 // phase_scale to get the actual phase in units of pi. 625e6 * 10 is the max possible frequency.
 
-constexpr uint64_t t_serv_to_client = 32/(475e6) * 1e12; // converts to client time standard which is in ps.
+constexpr uint64_t t_serv_to_client = 32/(450e6) * 1e12; // converts to client time standard which is in ps.
 
 struct Cmd
 {
