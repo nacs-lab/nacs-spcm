@@ -401,8 +401,8 @@ private:
     size_t m_cmd_max_write = 0;
     //uint32_t m_end_trigger_cnt{0};
     //uint32_t m_start_trigger_cnt{0};
-    uint64_t output_buf_sz = 2 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
-    uint64_t wait_buf_sz = 2 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
+    uint64_t output_buf_sz = 4 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
+    uint64_t wait_buf_sz = 4 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
     bool wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     DataPipe<Cmd> m_commands;
     DataPipe<int16_t> m_output;
