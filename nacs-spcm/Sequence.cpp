@@ -23,7 +23,7 @@ NACS_EXPORT() Sequence::Sequence(Value* values, std::vector<Type> types, bool is
                        m_is_valid(is_valid)
 {
     std::string fname = "/etc/server_config.yml";
-    m_conf = m_conf.loadYAML(fname.data()); 
+    m_conf = m_conf.loadYAML(fname.data());
 }
 
 NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64_t &seq_len) {

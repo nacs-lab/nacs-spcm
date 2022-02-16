@@ -13,6 +13,7 @@ using namespace NaCs;
 namespace Spcm {
 struct Config {
     Config();
+    Config(std::string fname);
     std::string listen;
     uint32_t amp{2500};
     int64_t sample_rate{static_cast<int64_t> (625e6)};

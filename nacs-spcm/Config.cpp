@@ -12,6 +12,28 @@ NACS_EXPORT() Config::Config()
 {
 }
 
+NACS_EXPORT() Config::Config(std::string fname)
+: listen("tcp://*:8888")
+{
+    auto file = YAML::LoadFile(fname);
+    if (auto listen_node = file["listen"])
+        listen = listen_node.as<std::string>();
+    if (auto amp_node = file["amp"])
+        amp = amp_node.as<uint32_t>();
+    if (auto sample_rate_node = file["sample_rate_mhz"])
+        sample_rate = sample_rate_node.as<int64_t>() * 1e6;
+    if (auto trig_node = file["trig_delay_ms"])
+        trig_delay = uint64_t(trig_node.as<double>() * sample_rate / (32 * 1e3)); // units of stream times
+    if (auto clock_node = file["clock_cycle_factor"])
+        ext_clock_cycle_factor = uint64_t(clock_node.as<double>());
+    if (sample_rate  > 71.68e6) {
+        clock_factor = 8 * ext_clock_cycle_factor;
+    }
+    else {
+        clock_factor = 4 * ext_clock_cycle_factor;
+    }
+}
+
 NACS_EXPORT() Config Config::loadYAML(const char *fname)
 {
     Config conf;

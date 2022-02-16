@@ -21,7 +21,7 @@ NACS_EXPORT() std::ostream &operator<<(std::ostream &stm, ChannelMap cmap) {
     return stm;
 }
 
-bool StreamManagerBase::reqRestart(uint32_t trig_id) {
+bool StreamManager::reqRestart(uint32_t trig_id) {
     if (trig_id == restart_id) {
         // restart already requested
         return false;

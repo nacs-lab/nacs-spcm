@@ -335,7 +335,9 @@ protected:
         double amp; // real amp * 6.7465185e9f
     };
     void generate_page(State *states); //workhorse, takes a vector of states for the channels
+    void generate_page_float(State *states);
     void step(int16_t *out, State *states); // workhorse function to step to next time
+    void step_float(int16_t *out, State *states);
     const Cmd *get_cmd();
     StreamBase(StreamManagerBase &stm_mngr,Config &conf, double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num)
         : m_stm_mngr(stm_mngr),
@@ -422,18 +424,22 @@ private:
 template<uint32_t max_chns = 128>
 struct Stream : StreamBase {
     Stream(StreamManagerBase& stm_mngr,Config &conf, double step_t, std::atomic<uint64_t> &cmd_underflow,
-           std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true)
+           std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true, bool bFloat = false)
         : StreamBase(stm_mngr,conf, step_t, cmd_underflow, underflow, stream_num)
     {
         if (start) {
-            start_worker();
+            start_worker(bFloat);
         }
     }
 
-    void start_worker()
+    void start_worker(bool bFloat = false)
     {
         m_stop.store(false, std::memory_order_relaxed);
-        m_worker = std::thread(&Stream::thread_fun, this);
+        if (bFloat)
+            m_worker = std::thread(&Stream::thread_fun_float, this);
+        else {
+            m_worker = std::thread(&Stream::thread_fun, this);
+        }
     }
     void stop_worker()
     {
@@ -479,6 +485,12 @@ private:
             //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
         //printf("m_stop 3: %s\n", m_stop.load(std::memory_order_relaxed) ? "true" : "false");
+    }
+    void thread_fun_float()
+    {
+        while(likely(!m_stop.load(std::memory_order_relaxed))) {
+            generate_page_float(m_states);
+        }
     }
     State m_states[max_chns]{}; // array of states
     std::thread m_worker{};

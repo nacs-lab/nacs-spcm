@@ -239,9 +239,9 @@ public:
     inline ChannelMap get_chn_map() {
         return chn_map;
     }
-    inline void start_streams() {
+    inline void start_streams(bool bFloat = false) {
         for (int i = 0; i < m_n_streams; i++) {
-            (*m_streams[i]).start_worker();
+            (*m_streams[i]).start_worker(bFloat);
             //std::cout << "Started Stream: " << i << std::endl;
         }
     }
@@ -261,7 +261,6 @@ public:
         }
         return true;
     }
-    bool reqRestart(uint32_t trig_id);
     void reset_streams_out() {
         for (int i = 0; i < m_n_streams; i++) {
             (*m_streams[i]).reset_out();
@@ -296,12 +295,13 @@ public:
     uint32_t num_streams() {
         return m_n_streams;
     }
-protected:
-    StreamManagerBase(Controller& ctrl,Config &conf, uint32_t n_streams, uint32_t max_per_stream,
+    virtual bool reqRestart(uint32_t trig_id){
+        return false;
+    }
+    StreamManagerBase(Config &conf, uint32_t n_streams, uint32_t max_per_stream,
                       double step_t, std::atomic<uint64_t> &cmd_underflow,
-                      std::atomic<uint64_t> &underflow, bool start = false)
-        : m_ctrl(ctrl),
-          m_conf(conf),
+                      std::atomic<uint64_t> &underflow, bool start = false, bool bFloat = false)
+        : m_conf(conf),
           m_n_streams(n_streams),
           m_max_per_stream(max_per_stream),
           chn_map(n_streams, max_per_stream),
@@ -311,14 +311,15 @@ protected:
         // start streams
         for (int i = 0; i < n_streams; i++) {
             Stream<128> *stream_ptr;
-            stream_ptr = new Stream<128>(*this, conf, step_t, cmd_underflow, underflow, i, start);
+            stream_ptr = new Stream<128>(*this, conf, step_t, cmd_underflow, underflow, i, start, bFloat);
             m_streams.push_back(stream_ptr);
             stream_ptrs.push_back(nullptr);
         }
     }
     //void generate_page();
-
+protected:
     std::atomic_bool m_stop{false};
+    uint32_t restart_id;
 private:
     inline bool probe_cmd_input()
     {
@@ -364,16 +365,15 @@ private:
     size_t m_cmd_max_write = 0;
 
     uint64_t stuck_counter = 0;
-    Controller& m_ctrl;
-    uint32_t restart_id;
 };
 
 struct StreamManager : StreamManagerBase {
     StreamManager(Controller &ctrl,Config &conf, uint32_t n_streams, uint32_t max_per_stream,
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
                   std::atomic<uint64_t> &underflow, bool startStream = false,
-                  bool startWorker = false)
-        : StreamManagerBase(ctrl, conf, n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream)
+                  bool startWorker = false, bool bFloat = false)
+        : m_ctrl(ctrl),
+          StreamManagerBase(conf, n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream, bFloat)
     {
         /*if (startWorker)
         {
@@ -410,7 +410,9 @@ struct StreamManager : StreamManagerBase {
     {
         //stop_worker();
     }
+    bool reqRestart(uint32_t trig_id);
 private:
+    Controller& m_ctrl;
     /*
     void thread_fun()
     {
