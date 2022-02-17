@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 
+#include <nacs-spcm/Stream.h>
 #include <nacs-spcm/StreamManager.h>
 #include <nacs-spcm/Config.h>
 

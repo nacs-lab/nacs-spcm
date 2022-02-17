@@ -28,7 +28,7 @@ public:
 
     void load();
     __attribute__((target("avx512f,avx512bw"), flatten))
-    void get_data(__m512i* out_buf, uint64_t sz, BuffOp op = BuffOp::Id, float amp = 1);
+    void get_data(__m512i* out_buf, uint64_t sz, BuffOp op = BuffOp::Id, float amp = 1, float damp = 0);
 
     std::string fname;
     char* data;

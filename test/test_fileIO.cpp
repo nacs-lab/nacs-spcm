@@ -11,7 +11,7 @@ int main (int argc, char **argv) {
     uint32_t nstreams = 4;
     uint32_t nchunks = 2; // each chunk is 512 bits, and 32 samples
     uint32_t nchunks_read = 4;
-    std::string fname = "1.dat";
+    std::string fname = "/home/nilab/data/1.dat";
     ::Spcm::FileWriter fw = ::Spcm::FileWriter(nstreams, fname);
 
     std::vector<::Spcm::Cmd> cmd_vector;
