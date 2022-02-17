@@ -55,7 +55,7 @@ enum class CmdMeta : uint32_t
 // phase_scale is 2 / (625e6 * 10). We take the integer phase and multiply itby
 // phase_scale to get the actual phase in units of pi. 625e6 * 10 is the max possible frequency.
 
-constexpr uint64_t t_serv_to_client = 32/(450e6) * 1e12; // converts to client time standard which is in ps.
+//constexpr uint64_t t_serv_to_client = 32/(450e6) * 1e12; // converts to client time standard which is in ps.
 
 struct Cmd
 {
@@ -176,7 +176,10 @@ struct activeCmd {
 // structure to keep track of commands that span longer times
     const Cmd* m_cmd;
     //std::vector<float> vals; // precalculated values
-    activeCmd(const Cmd* cmd) : m_cmd(cmd) {
+    activeCmd(const Cmd* cmd, uint64_t t = 32 * 1e12 / (450e6)) :
+        m_cmd(cmd),
+        t_serv_to_client(double(t))
+    {
         ramp_func = cmd->fnptr;
         if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn) {
             is_vec = true;
@@ -194,6 +197,7 @@ struct activeCmd {
             }*/
     }
     std::pair<double,double> eval(int64_t t); // called with server t convention
+    double t_serv_to_client = 1;
     int64_t time_base = 0; // in server times
     int64_t nsteps = 0;
     double buffer[8] __attribute__((aligned(64)));
@@ -453,6 +457,7 @@ struct Stream : StreamBase<Cmd> {
     Stream(StreamManagerBase& stm_mngr,Config &conf, double step_t, std::atomic<uint64_t> &cmd_underflow,
            std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true, bool bFloat = false)
         : m_stm_mngr(stm_mngr),
+          t_serv_to_client(uint64_t(32 * 1e12 / (conf.sample_rate))),
           max_phase(uint64_t(conf.sample_rate *10)),
           phase_scale(2/double(max_phase)),
           phase_scale_client(conf.sample_rate*10),
@@ -507,6 +512,7 @@ struct Stream : StreamBase<Cmd> {
     inline void reqRestart(uint32_t id);
     bool check_start(int64_t t, uint32_t id);
     StreamManagerBase &m_stm_mngr;
+    uint64_t t_serv_to_client;
     uint64_t max_phase;
     double phase_scale;
     double phase_scale_client;
