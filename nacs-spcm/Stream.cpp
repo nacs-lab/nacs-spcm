@@ -254,56 +254,14 @@ std::pair<double, double> activeCmd::eval(int64_t t) {
     return std::make_pair(val, dval);
 }
 
-inline void StreamBase::reqRestart(uint32_t id) {
+
+NACS_EXPORT() inline void Stream::reqRestart(uint32_t id) {
     auto res = m_stm_mngr.reqRestart(id);
 }
 
-NACS_INLINE void StreamBase::clear_underflow()
-{
-    m_cmd_underflow.store(0, std::memory_order_relaxed);
-    m_underflow.store(0, std::memory_order_relaxed);
-}
-
-inline const Cmd *StreamBase::get_cmd_curt()
-{
-    // check get_cmd returns something valid and if so is t less than the current time
-    if (auto cmd = get_cmd()){
-        //std::cout << *cmd << std::endl;
-        if (cmd->t <= m_cur_t) {
-            return cmd;
-        }
-    }
-    return nullptr;
-}
-
-inline const Cmd *StreamBase::get_cmd()
-{
-    // returns command at m_cmd_read location. If it's hit max, reset to zero and get a new pointer
-    if (m_cmd_read == m_cmd_max_read) {
-        m_cmd_read = 0;
-        m_cmd_read_ptr = m_commands.get_read_ptr(&m_cmd_max_read);
-        // check if m_cmd_max_read == 0
-        if (!m_cmd_max_read) {
-            return nullptr;
-        }
-    }
-    //std::cout << "pointer " << m_cmd_read_ptr << std::endl;
-    //std::cout << "m_cmd_read " << m_cmd_read << std::endl;
-    return &m_cmd_read_ptr[m_cmd_read];
-}
-
-inline void StreamBase::cmd_next()
-{
-    // increment m_cmd_read in the if statement. If hit max_read, alert writer that reading is done
-    if (++m_cmd_read == m_cmd_max_read) {
-        m_commands.read_size(m_cmd_max_read);
-    }
-    //std::cout << "m_cmd_max_read: " << m_cmd_max_read << std::endl;
-    //std::cout << "m_cmd_read: " << m_cmd_read << std::endl;
-}
-
 // TRIGGER STUFF. COME BACK TO
-inline bool StreamBase::check_start(int64_t t, uint32_t id)
+
+inline bool Stream::check_start(int64_t t, uint32_t id)
 {
     // The corresponding time must be visible when the id is loaded
     // We don't load the time and the id atomically so it is possible
@@ -339,7 +297,7 @@ not_yet:
 }
 
 NACS_INTERNAL NACS_NOINLINE const Cmd*
-StreamBase::consume_old_cmds(State *states)
+Stream::consume_old_cmds(State *states)
 {
     // consumes old commands (updates the states) and returns a pointer to a currently active command.
     // If only commmands in future or no commands, then return nullptr
@@ -429,16 +387,9 @@ StreamBase::consume_old_cmds(State *states)
     return nullptr;
 }
 
-NACS_EXPORT() void StreamBase::consume_all_cmds()
-{
-    // This function consumes all commands in the command buffer.
-    while(get_cmd()) {
-        cmd_next();
-    }
-}
 
 __attribute__((target("avx512f,avx512bw"), flatten))
-NACS_EXPORT() void StreamBase::step(int16_t *out, State *states)
+NACS_EXPORT() void Stream::step(int16_t *out, State *states)
 {
     // Key function
     const Cmd *cmd;
@@ -698,7 +649,7 @@ cmd_out:
     _mm512_store_si512(out, v);
 }
 
-NACS_EXPORT() void StreamBase::generate_page(State *states)
+NACS_EXPORT() void Stream::generate_page(State *states)
 {
     //printf("generate page\n");
     int16_t *out_ptr;
@@ -737,7 +688,7 @@ NACS_EXPORT() void StreamBase::generate_page(State *states)
 // FLOAT VERSIONS BELOW
 
 __attribute__((target("avx512f,avx512bw"), flatten))
-NACS_EXPORT() void StreamBase::step_float(int16_t *out, State *states)
+NACS_EXPORT() void Stream::step_float(int16_t *out, State *states)
 {
     // Key function
     const Cmd *cmd;
@@ -999,7 +950,7 @@ cmd_out:
     //printf("Step Float\n");
 }
 
-NACS_EXPORT() void StreamBase::generate_page_float(State *states)
+NACS_EXPORT() void Stream::generate_page_float(State *states)
 {
     //printf("generate page\n");
     int16_t *out_ptr;

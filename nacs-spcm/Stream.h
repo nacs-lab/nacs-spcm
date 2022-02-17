@@ -202,6 +202,7 @@ struct activeCmd {
     double times [8] __attribute((aligned(64))) = {0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875};
 };
 
+template<typename T>
 class StreamBase
 {
 public:
@@ -218,7 +219,7 @@ public:
         return m_output.sync_reader();
     }
     //similar commands for the command pipe to come
-    inline size_t copy_cmds(const Cmd *cmds, size_t sz)
+    inline size_t copy_cmds(const T *cmds, size_t sz)
     {
         if (!probe_cmd_input()) // return 0 if no commands to consume
             return 0;
@@ -231,12 +232,12 @@ public:
         }
         return sz;
     }
-    inline bool try_add_cmd(const Cmd &cmd)
+    inline bool try_add_cmd(const T &cmd)
     {
         // adds a single command. returns true if successfully added
         return copy_cmds(&cmd, 1) != 0;
     }
-    inline void add_cmd(const Cmd &cmd)
+    inline void add_cmd(const T &cmd)
     {
         // keeps on trying to add command until successfully added
         while(!try_add_cmd(cmd)){
@@ -307,11 +308,20 @@ public:
     {
         return m_chns;
     }
-    void consume_all_cmds();
+
+    void consume_all_cmds()
+    {
+        // This function consumes all commands in the command buffer.
+        while(get_cmd()) {
+            cmd_next();
+        }
+    }
+    
     void reset_output_cnt() {
         m_output_cnt = 0;
     }
-    inline void reqRestart(uint32_t id);
+    //virtual inline void reqRestart(uint32_t id){
+    //}
     inline void reset_output() {
         size_t sz;
         //uint32_t i = 0;
@@ -328,33 +338,33 @@ public:
         } while (sz != 0);
     }
 protected:
-    struct State {
-        // structure which keeps track of the state of a channel
-        int64_t phase; // phase_cnt = (0 to 1 phase) * 625e6 * 10
-        uint64_t freq; // freq_cnt = real freq * 10
-        double amp; // real amp * 6.7465185e9f
-    };
-    void generate_page(State *states); //workhorse, takes a vector of states for the channels
-    void generate_page_float(State *states);
-    void step(int16_t *out, State *states); // workhorse function to step to next time
-    void step_float(int16_t *out, State *states);
-    const Cmd *get_cmd();
-    StreamBase(StreamManagerBase &stm_mngr,Config &conf, double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num)
-        : m_stm_mngr(stm_mngr),
-        m_conf(conf),
+
+    inline const T *get_cmd()
+    {
+        // returns command at m_cmd_read location. If it's hit max, reset to zero and get a new pointer
+        if (m_cmd_read == m_cmd_max_read) {
+            m_cmd_read = 0;
+            m_cmd_read_ptr = m_commands.get_read_ptr(&m_cmd_max_read);
+            // check if m_cmd_max_read == 0
+            if (!m_cmd_max_read) {
+                return nullptr;
+            }
+        }
+        //std::cout << "pointer " << m_cmd_read_ptr << std::endl;
+        //std::cout << "m_cmd_read " << m_cmd_read << std::endl;
+        return &m_cmd_read_ptr[m_cmd_read];
+    }
+
+    StreamBase(Config &conf, double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num)
+        : m_conf(conf),
         m_step_t(step_t),
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
-        m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
+        m_commands((T*)mapAnonPage(sizeof(T) * 1024ll, Prot::RW), 1024, 512),
         m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2),
-        m_stream_num(stream_num),
-        max_phase(uint64_t(conf.sample_rate *10)),
-        phase_scale(2/double(max_phase)),
-        phase_scale_client(conf.sample_rate*10),
-          freq_scale(0.1/(conf.sample_rate/32))
+        m_stream_num(stream_num)
     {
     }
-private:
     inline bool probe_cmd_input()
     {
         // returns true if there are still commands to read, and determines number of cmds ready
@@ -369,16 +379,40 @@ private:
         //std::cout << "m_cmd_max_write:" << m_cmd_max_write << std::endl;
         return true;
     }
-    const Cmd *get_cmd_curt();
-    void cmd_next();
-    const Cmd *consume_old_cmds(State * states);
-    bool check_start(int64_t t, uint32_t id);
-    void clear_underflow();
-    constexpr static uint32_t output_block_sz = 2048 * 16;//32768; //2048; // units of int16_t. 32 of these per _m512
+    inline const T *get_cmd_curt()
+    {
+        // check get_cmd returns something valid and if so is t less than the current time
+        if (auto cmd = get_cmd()){
+            //std::cout << *cmd << std::endl;
+            if (cmd->t <= m_cur_t) {
+                return cmd;
+            }
+        }
+        return nullptr;
+    }
+    inline void cmd_next()
+    {
+        // increment m_cmd_read in the if statement. If hit max_read, alert writer that reading is done
+        if (++m_cmd_read == m_cmd_max_read) {
+            m_commands.read_size(m_cmd_max_read);
+        }
+        //std::cout << "m_cmd_max_read: " << m_cmd_max_read << std::endl;
+        //std::cout << "m_cmd_read: " << m_cmd_read << std::endl;
+    }
+    
+    void clear_underflow()
+    {
+        m_cmd_underflow.store(0, std::memory_order_relaxed);
+        m_underflow.store(0, std::memory_order_relaxed);
+    }
+    //virtual inline bool check_start(int64_t t, uint32_t id) {
+    //    return false;
+    //}
+
+    int32_t output_block_sz = 2048 * 16;//32768; //2048; // units of int16_t. 32 of these per _m512
     // Members accessed by worker threads
 protected:
     std::atomic_bool m_stop{false};
-private:
     uint32_t m_stream_num;
     std::atomic_bool m_slow_mode{true}; // related to trigger
     uint32_t m_end_trigger_pending{0};
@@ -386,19 +420,15 @@ private:
     uint32_t m_chns = 0;
     int64_t m_cur_t = 0;
     uint64_t m_output_cnt = 0; // in unit of 8 bytes, or 32 samples (each sample 2 bits)
-    uint64_t max_phase;
-    double phase_scale;
-    double phase_scale_client;
-    double freq_scale;
     const double m_step_t;
-    const Cmd *m_cmd_read_ptr = nullptr;
+    const T *m_cmd_read_ptr = nullptr;
     size_t m_cmd_read = 0;
     size_t m_cmd_max_read = 0;
     std::atomic<uint64_t> &m_cmd_underflow;
     std::atomic<uint64_t> &m_underflow;
     Config &m_conf;
     // Members accessed by the command generation thread
-    Cmd *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr; //location to write commands to
+    T *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr; //location to write commands to
     size_t m_cmd_wrote = 0;
     size_t m_cmd_max_write = 0;
     //uint32_t m_end_trigger_cnt{0};
@@ -406,7 +436,7 @@ private:
     uint64_t output_buf_sz = 2 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
     uint64_t wait_buf_sz = 2 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
     bool wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
-    DataPipe<Cmd> m_commands;
+    DataPipe<T> m_commands;
     DataPipe<int16_t> m_output;
     std::vector<activeCmd*> active_cmds;
     std::atomic<uint32_t> m_end_triggered{0};
@@ -417,15 +447,17 @@ private:
     std::atomic<int16_t*> m_end_trigger{nullptr};
     std::atomic<uint32_t> m_start_trigger{0};
     std::atomic<uint64_t> m_start_trigger_time{0};
-
-    StreamManagerBase &m_stm_mngr;
 };
 
-template<uint32_t max_chns = 128>
-struct Stream : StreamBase {
+struct Stream : StreamBase<Cmd> {
     Stream(StreamManagerBase& stm_mngr,Config &conf, double step_t, std::atomic<uint64_t> &cmd_underflow,
            std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true, bool bFloat = false)
-        : StreamBase(stm_mngr,conf, step_t, cmd_underflow, underflow, stream_num)
+        : m_stm_mngr(stm_mngr),
+          max_phase(uint64_t(conf.sample_rate *10)),
+          phase_scale(2/double(max_phase)),
+          phase_scale_client(conf.sample_rate*10),
+          freq_scale(0.1/(conf.sample_rate/32)),
+        StreamBase<Cmd>(conf, step_t, cmd_underflow, underflow, stream_num)
     {
         if (start) {
             start_worker(bFloat);
@@ -460,7 +492,25 @@ struct Stream : StreamBase {
     {
         stop_worker();
     }
+    struct State {
+        // structure which keeps track of the state of a channel
+        int64_t phase; // phase_cnt = (0 to 1 phase) * 625e6 * 10
+        uint64_t freq; // freq_cnt = real freq * 10
+        double amp; // real amp * 6.7465185e9f
+    };
+    const Cmd *consume_old_cmds(State * states);
+    void generate_page(State *states); //workhorse, takes a vector of states for the channels
+    void generate_page_float(State *states);
+    void step(int16_t *out, State *states); // workhorse function to step to next time
+    void step_float(int16_t *out, State *states);
 
+    inline void reqRestart(uint32_t id);
+    bool check_start(int64_t t, uint32_t id);
+    StreamManagerBase &m_stm_mngr;
+    uint64_t max_phase;
+    double phase_scale;
+    double phase_scale_client;
+    double freq_scale;
 private:
     void thread_fun()
     {
@@ -492,7 +542,7 @@ private:
             generate_page_float(m_states);
         }
     }
-    State m_states[max_chns]{}; // array of states
+    State m_states[128]{}; // array of states
     std::thread m_worker{};
 };
 

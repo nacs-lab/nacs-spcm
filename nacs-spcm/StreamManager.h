@@ -310,8 +310,8 @@ public:
     {
         // start streams
         for (int i = 0; i < n_streams; i++) {
-            Stream<128> *stream_ptr;
-            stream_ptr = new Stream<128>(*this, conf, step_t, cmd_underflow, underflow, i, start, bFloat);
+            Stream *stream_ptr;
+            stream_ptr = new Stream(*this, conf, step_t, cmd_underflow, underflow, i, start, bFloat);
             m_streams.push_back(stream_ptr);
             stream_ptrs.push_back(nullptr);
         }
@@ -342,7 +342,7 @@ private:
     void actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz);
     void send_cmds(Cmd *cmd, size_t sz);
     
-    std::vector<Stream<128>*> m_streams; // vector of Streams to manage
+    std::vector<Stream*> m_streams; // vector of Streams to manage
     std::vector<const int16_t*> stream_ptrs; // vector of stream_ptrs
     ChannelMap chn_map;
     uint32_t m_n_streams = 0;
