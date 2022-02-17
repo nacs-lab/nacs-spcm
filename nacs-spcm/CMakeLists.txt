@@ -6,10 +6,10 @@ set(nacs_spcm_HDRS
   StreamManager.h
   Config.h
   Controller.h
-  DummyController.h
-  DummyServer.h
-  DummyStream.h
-  DummyStreamManager.h
+  #DummyController.h
+  #DummyServer.h
+  #DummyStream.h
+  #DummyStreamManager.h
   SeqCache.h
   IDataCache.h
   Sequence.h
@@ -24,10 +24,10 @@ set(nacs_spcm_SRCS
   StreamManager.cpp
   Config.cpp
   Controller.cpp
-  DummyController.cpp
-  DummyServer.cpp
-  DummyStream.cpp
-  DummyStreamManager.cpp
+  #DummyController.cpp
+  #DummyServer.cpp
+  #DummyStream.cpp
+  #DummyStreamManager.cpp
   SeqCache.cpp
   IDataCache.cpp
   Sequence.cpp
