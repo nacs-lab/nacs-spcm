@@ -10,6 +10,7 @@ set(nacs_spcm_HDRS
   DummyServer.h
   DummyStream.h
   DummyStreamManager.h
+  FileCache.h
   FileManager.h
   FileWriter.h
   SeqCache.h
@@ -30,6 +31,7 @@ set(nacs_spcm_SRCS
   DummyServer.cpp
   DummyStream.cpp
   DummyStreamManager.cpp
+  FileCache.cpp
   FileManager.cpp
   FileWriter.cpp
   SeqCache.cpp
