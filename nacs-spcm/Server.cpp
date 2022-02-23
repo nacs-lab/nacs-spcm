@@ -63,10 +63,10 @@ NACS_EXPORT() bool Server::stop()
     return true;
 }
 
-NACS_EXPORT() bool Server::runSeq(uint64_t client_id, uint64_t seq_id, const uint8_t *data, uint32_t &sz, bool is_seq_sent, uint64_t seqcnt, uint32_t start_trigger_id, bool is_first_seq)
+NACS_EXPORT() bool Server::runSeq(uint64_t client_id, uint64_t seq_id, const uint8_t *data, uint32_t &sz, bool is_seq_sent, uint64_t seqcnt, uint32_t start_trigger_id, bool is_first_seq, uint32_t ver)
 {
     SeqCache::Entry* entry;
-    if (!m_cache.getAndFill(client_id, seq_id, data, sz, entry, is_seq_sent)) {
+    if (!m_cache.getAndFill(client_id, seq_id, data, sz, entry, is_seq_sent, ver)) {
         return false;
     }
     {
@@ -116,9 +116,11 @@ NACS_INTERNAL void Server::seqRunner()
         }
         auto fin_id = m_ctrl.get_end_id();
         auto outChns = m_ctrl.getOutChn();
+        int64_t seq_len = 0;
         for (int i = 0; i < outChns.size(); i++) {
             uint8_t phys_chn_idx = outChns[i];
-            std::vector<Cmd> preSend;
+            std::vector<Cmd> preSend, cmds;
+            std::vector<FCmd> preSendf, cmdsf;
             if (entry.start_trigger) {
                 preSend.push_back(Cmd::getTriggerStart(0, 0, 0, entry.start_trigger));
             }
@@ -132,10 +134,8 @@ NACS_INTERNAL void Server::seqRunner()
             //else {
             //    printf("Sequence invalid\n");
             //}
-            int64_t seq_len = 0;
             auto &this_seq = tot_seq.getSeq(phys_chn_idx);
-            auto cmds = this_seq.toCmds(preSend, seq_len);
-            m_ctrl.set_len(entry.start_trigger, (uint64_t) seq_len);
+            this_seq.toCmds(preSend, cmds, preSendf, cmdsf, seq_len);
             // MAKE COMMANDS HERE AT RUNTIME, SORT AND SEND.
             auto pPre = &preSend[0];
             auto szPre = preSend.size();
@@ -174,6 +174,8 @@ NACS_INTERNAL void Server::seqRunner()
                 first_start = true;
                 }*/
         }
+        seq_len = seq_len / (32*1e12) * m_conf.sample_rate;
+        m_ctrl.set_len(entry.start_trigger, (uint64_t) seq_len);
         uint32_t cur_restarts = m_ctrl.get_restarts();
         while (!m_ctrl.get_end_triggered(entry.start_trigger) && controllerRunning() && m_running){
             //while(m_ctrl.get_end_triggered() < fin_id && controllerRunning() && m_running) {
@@ -359,7 +361,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
                 }
                 std::this_thread::sleep_for(1ms);
             }
-            if (!runSeq(this_client_id, this_seq_id, msg_data, msg_sz, seq_sent, id, start_id, is_first_seq)) {
+            if (!runSeq(this_client_id, this_seq_id, msg_data, msg_sz, seq_sent, id, start_id, is_first_seq, ver)) {
                 // this must mean data is missing
                 send_reply(addr, ZMQ::str_msg("need_data"));
                 goto out;

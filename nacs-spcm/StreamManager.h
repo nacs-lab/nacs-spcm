@@ -298,9 +298,7 @@ public:
     virtual bool reqRestart(uint32_t trig_id){
         return false;
     }
-    StreamManagerBase(Config &conf, uint32_t n_streams, uint32_t max_per_stream,
-                      double step_t, std::atomic<uint64_t> &cmd_underflow,
-                      std::atomic<uint64_t> &underflow, bool start = false, bool bFloat = false)
+    StreamManagerBase(Config &conf, uint32_t n_streams, uint32_t max_per_stream)
         : m_conf(conf),
           m_n_streams(n_streams),
           m_max_per_stream(max_per_stream),
@@ -308,18 +306,13 @@ public:
           m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512)
           //m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2)
     {
-        // start streams
-        for (int i = 0; i < n_streams; i++) {
-            Stream *stream_ptr;
-            stream_ptr = new Stream(*this, conf, step_t, cmd_underflow, underflow, i, start, bFloat);
-            m_streams.push_back(stream_ptr);
-            stream_ptrs.push_back(nullptr);
-        }
     }
     //void generate_page();
 protected:
     std::atomic_bool m_stop{false};
     uint32_t restart_id;
+    std::vector<StreamBase*> m_streams; // vector of Streams to manage
+    std::vector<const int16_t*> stream_ptrs; // vector of stream_ptrs
 private:
     inline bool probe_cmd_input()
     {
@@ -342,8 +335,6 @@ private:
     void actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz);
     void send_cmds(Cmd *cmd, size_t sz);
     
-    std::vector<Stream*> m_streams; // vector of Streams to manage
-    std::vector<const int16_t*> stream_ptrs; // vector of stream_ptrs
     ChannelMap chn_map;
     uint32_t m_n_streams = 0;
     uint32_t m_max_per_stream = 0;
@@ -373,8 +364,15 @@ struct StreamManager : StreamManagerBase {
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false, bool bFloat = false)
         : m_ctrl(ctrl),
-          StreamManagerBase(conf, n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream, bFloat)
+          StreamManagerBase(conf, n_streams, max_per_stream)
     {
+        // start streams
+        for (int i = 0; i < n_streams; i++) {
+            Stream *stream_ptr;
+            stream_ptr = new Stream(*this, conf, step_t, cmd_underflow, underflow, i, startStream, bFloat);
+            m_streams.push_back(stream_ptr);
+            stream_ptrs.push_back(nullptr);
+        }
         /*if (startWorker)
         {
             start_worker();

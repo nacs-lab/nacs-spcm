@@ -83,5 +83,5 @@ target_link_libraries(test_dummyServer nacs-spcm yaml-cpp PkgConfig::ZMQ)
 add_executable(test_trigger test_trigger.cpp)
 target_link_libraries(test_trigger nacs-spcm yaml-cpp PkgConfig::ZMQ)
 
-add_executable(test_fileIO test_fileIO.cpp)
-target_link_libraries(test_fileIO nacs-spcm yaml-cpp)
+#add_executable(test_fileIO test_fileIO.cpp)
+#target_link_libraries(test_fileIO nacs-spcm yaml-cpp)

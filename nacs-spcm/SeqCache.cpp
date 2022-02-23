@@ -50,9 +50,9 @@ m_szlim(szlim)
 {
 }
 
-NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry, bool is_seq_sent){
+NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry, bool is_seq_sent, uint32_t ver){
     if (is_seq_sent) {
-        return getAndFill(client_id, seq_id, msg_bytes, sz, entry);
+        return getAndFill(client_id, seq_id, msg_bytes, sz, entry, ver);
     }
     // assume we are in case when only data is sent
     // ([0: 1B][n_non_consts: 4B][[data: 8B] x n_non_consts])
@@ -72,7 +72,7 @@ NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, con
     return true;
 }
 
-NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry){
+NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry, uint32_t ver){
     // This version is called if seq is sent!
     if (get(client_id, seq_id, entry)){
         // now fill in value
@@ -86,7 +86,7 @@ NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, con
         return true;
     }
     std::pair<uint64_t, uint64_t> this_id(client_id, seq_id);
-    TotSequence seq(*this, client_id, msg_bytes, sz);
+    TotSequence seq(*this, client_id, msg_bytes, sz, ver);
     if (!seq) {
         return false; // sequence not valid cause it's missing IData
     }
@@ -203,7 +203,7 @@ NACS_EXPORT() bool SeqCache::hasSeq(uint64_t client_id, uint64_t seq_id) {
     return m_cache.count(this_key) >= 1;
 }
 
-NACS_EXPORT() SeqCache::TotSequence::TotSequence(SeqCache& cache, uint64_t client_id, const uint8_t* &msg_bytes, uint32_t &sz) :
+NACS_EXPORT() SeqCache::TotSequence::TotSequence(SeqCache& cache, uint64_t client_id, const uint8_t* &msg_bytes, uint32_t &sz, uint32_t &ver) :
 m_cache(cache)
 {
     // [n_interp_data: 4B][[ID: 8B][name: NUL-term-string][0:1B] / ([1:1B] [len: 4B][[data: 8B] x len]) x ninter_data][objfile_size: 4B][object_file: objfile_size][value_array_name: NUL-term-string]
@@ -374,8 +374,8 @@ m_cache(cache)
     msg_bytes += 4;
     sz -= 4;
     uint32_t t_start, len, end_val, chn_id, enabled, pulse_id;
-    //std::string func_name;
-    uint8_t phys_chn, functype;
+    std::string file_name;
+    uint8_t phys_chn, functype, is_file_chn;
     void(*fnptr)(void);
     while (n_pulses > 0) {
         //struct Pulse {
@@ -428,6 +428,21 @@ m_cache(cache)
 
         fnptr = (void(*)(void))m_cache.m_engine.get_symbol(funcname);
 
+        if (ver == 1) {
+            memcpy(&is_file_chn, msg_bytes, 1);
+            msg_bytes += 1;
+            sz -= 1;
+            if (is_file_chn > 0) {
+                file_name.append((char *) msg_bytes);
+                str_size = file_name.size() + 1;
+                msg_bytes += str_size;
+                sz -= str_size;
+            }
+        }
+        else {
+            is_file_chn = 0;
+            file_name.clear();
+        }
         /*pulses.push_back({
                 .enabled = enabled;
                 .id = pulse_id;
@@ -441,7 +456,7 @@ m_cache(cache)
                 }); */
         //printf("Adding pulse to output %u with pulse type %u \n", phys_chn, functype);
         addPulse(enabled, pulse_id, t_start, len, end_val,
-                 functype, phys_chn, chn_id, fnptr);
+                 functype, phys_chn, chn_id, fnptr, is_file_chn, file_name);
         n_pulses--;
 }
     is_valid = true;
@@ -460,8 +475,9 @@ NACS_EXPORT() Sequence& SeqCache::TotSequence::getSeq(uint32_t idx) {
 }
 
 NACS_EXPORT() void SeqCache::TotSequence::addPulse(uint32_t enabled, uint32_t id, uint32_t t_start,
-                  uint32_t len, uint32_t endvalue, uint8_t functype,
-                  uint8_t phys_chn, uint32_t chn, void (*fnptr)(void))
+                                                   uint32_t len, uint32_t endvalue, uint8_t functype,
+                                                   uint8_t phys_chn, uint32_t chn, void (*fnptr)(void),
+                                                   uint8_t is_file_chn, std::string file_name)
 {
     //bool res = false;
     while (phys_chn >= seqs.size()) {
@@ -471,7 +487,7 @@ NACS_EXPORT() void SeqCache::TotSequence::addPulse(uint32_t enabled, uint32_t id
     }
     //printf("types size after: %u", seqs[phys_chn].m_types.size());
     seqs[phys_chn].addPulse(enabled, id, t_start, len, endvalue,
-                            functype, phys_chn, chn, fnptr);
+                            functype, phys_chn, chn, fnptr, is_file_chn, file_name);
     //return res;
 }
 

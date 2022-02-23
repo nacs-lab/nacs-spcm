@@ -22,7 +22,7 @@ public:
     //const static Sequence invalid_seq{nullptr, std::vector<Type>(), false};
     struct TotSequence {
     public:
-        TotSequence(SeqCache& cache, uint64_t client_id, const uint8_t* &msg_bytes, uint32_t &sz);
+        TotSequence(SeqCache& cache, uint64_t client_id, const uint8_t* &msg_bytes, uint32_t &sz, uint32_t &ver);
         TotSequence(TotSequence&&) = default;
         uint64_t obj_id;
         uint32_t nconsts;
@@ -46,7 +46,8 @@ public:
         //Sequence invalid_seq{nullptr, std::vector<Type>(), false};
         void addPulse(uint32_t enabled, uint32_t id, uint32_t t_start,
                   uint32_t len, uint32_t endvalue, uint8_t functype,
-                  uint8_t phys_chn, uint32_t chn, void (*fnptr)(void));
+                      uint8_t phys_chn, uint32_t chn, void (*fnptr)(void),
+                      uint8_t is_file_num, std::string file_name);
         //Sequence invalid_seq{nullptr, nullptr, false};
         friend class SeqCache;
     };
@@ -67,8 +68,8 @@ public:
     };
 
     SeqCache(size_t szlim);
-    bool getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry, bool is_seq_sent);
-    bool getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry);
+    bool getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry, bool is_seq_sent, uint32_t ver);
+    bool getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry, uint32_t ver);
     bool get(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry);
     void unref(const Entry &entry) const;
     bool hasSeq(uint64_t client_id, uint64_t seq_id);

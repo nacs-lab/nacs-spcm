@@ -5,7 +5,9 @@
 
 #include "Stream.h"
 #include "Config.h"
+#include "FileStream.h"
 #include <algorithm>
+
 //#include "TotSequence.h"
 
 using namespace NaCs;
@@ -40,10 +42,11 @@ public:
     {
           return m_is_valid;
     }
-    std::vector<Cmd> toCmds(std::vector<Cmd> &preSend, int64_t &seq_len);
+    void toCmds(std::vector<Cmd> &preSend, std::vector<Cmd> &cmds, std::vector<FCmd> &preSendf, std::vector<FCmd> &cmdsf, int64_t &seq_len);
     void addPulse(uint32_t enabled, uint32_t id, uint32_t t_start,
                   uint32_t len, uint32_t endvalue, uint8_t functype,
-                  uint8_t phys_chn, uint32_t chn, void (*fnptr)(void));
+                  uint8_t phys_chn, uint32_t chn, void (*fnptr)(void),
+                  uint8_t is_file_chn, std::string file_name);
     double get_value(uint32_t idx) const;
     int64_t get_time(uint32_t idx) const;
     bool get_enabled(uint32_t idx) const;
@@ -60,8 +63,21 @@ private:
         uint32_t chn;
         void (*fnptr)(void);
     };
+    struct FPulse{
+        uint32_t enabled; // whether pulse is enabled or not. also an index into value array.
+        uint32_t id; //second layer of sorting
+        uint32_t t_start; // these are all indices into value array
+        uint32_t len;
+        uint32_t endvalue;
+        uint8_t functype;
+        uint8_t phys_chn; // not really necessary...but it's only 1 byte.
+        uint32_t chn;
+        void (*fnptr)(void);
+        std::string file_name;
+    };
 public:
     std::vector<Pulse> pulses;
+    std::vector<FPulse> fpulses;
     //std::vector<uint32_t> used_chns;
     //std::vector<uint64_t> IData_ids;
     //std::vector<Type> types;

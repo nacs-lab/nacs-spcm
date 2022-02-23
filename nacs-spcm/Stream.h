@@ -206,7 +206,7 @@ struct activeCmd {
     double times [8] __attribute((aligned(64))) = {0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875};
 };
 
-template<typename T>
+
 class StreamBase
 {
 public:
@@ -223,7 +223,7 @@ public:
         return m_output.sync_reader();
     }
     //similar commands for the command pipe to come
-    inline size_t copy_cmds(const T *cmds, size_t sz)
+    inline size_t copy_cmds(const Cmd *cmds, size_t sz)
     {
         if (!probe_cmd_input()) // return 0 if no commands to consume
             return 0;
@@ -236,12 +236,12 @@ public:
         }
         return sz;
     }
-    inline bool try_add_cmd(const T &cmd)
+    inline bool try_add_cmd(const Cmd &cmd)
     {
         // adds a single command. returns true if successfully added
         return copy_cmds(&cmd, 1) != 0;
     }
-    inline void add_cmd(const T &cmd)
+    inline void add_cmd(const Cmd &cmd)
     {
         // keeps on trying to add command until successfully added
         while(!try_add_cmd(cmd)){
@@ -308,10 +308,6 @@ public:
     {
         return m_cur_t;
     }
-    uint32_t get_chns()
-    {
-        return m_chns;
-    }
 
     void consume_all_cmds()
     {
@@ -343,7 +339,7 @@ public:
     }
 protected:
 
-    inline const T *get_cmd()
+    inline const Cmd *get_cmd()
     {
         // returns command at m_cmd_read location. If it's hit max, reset to zero and get a new pointer
         if (m_cmd_read == m_cmd_max_read) {
@@ -359,12 +355,11 @@ protected:
         return &m_cmd_read_ptr[m_cmd_read];
     }
 
-    StreamBase(Config &conf, double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num)
+    StreamBase(Config &conf, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num)
         : m_conf(conf),
-        m_step_t(step_t),
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
-        m_commands((T*)mapAnonPage(sizeof(T) * 1024ll, Prot::RW), 1024, 512),
+        m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
         m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2),
         m_stream_num(stream_num)
     {
@@ -383,7 +378,7 @@ protected:
         //std::cout << "m_cmd_max_write:" << m_cmd_max_write << std::endl;
         return true;
     }
-    inline const T *get_cmd_curt()
+    inline const Cmd *get_cmd_curt()
     {
         // check get_cmd returns something valid and if so is t less than the current time
         if (auto cmd = get_cmd()){
@@ -403,7 +398,7 @@ protected:
         //std::cout << "m_cmd_max_read: " << m_cmd_max_read << std::endl;
         //std::cout << "m_cmd_read: " << m_cmd_read << std::endl;
     }
-    
+
     void clear_underflow()
     {
         m_cmd_underflow.store(0, std::memory_order_relaxed);
@@ -412,6 +407,11 @@ protected:
     //virtual inline bool check_start(int64_t t, uint32_t id) {
     //    return false;
     //}
+public:
+    virtual void start_worker(bool flag) = 0;
+    virtual void stop_worker() = 0;
+    virtual void reset_out() = 0;
+    //const Cmd *consume_old_cmds(State * states);
 
     int32_t output_block_sz = 2048 * 16;//32768; //2048; // units of int16_t. 32 of these per _m512
     // Members accessed by worker threads
@@ -421,18 +421,17 @@ protected:
     std::atomic_bool m_slow_mode{true}; // related to trigger
     uint32_t m_end_trigger_pending{0};
     uint32_t m_end_trigger_waiting{0};
-    uint32_t m_chns = 0;
     int64_t m_cur_t = 0;
     uint64_t m_output_cnt = 0; // in unit of 8 bytes, or 32 samples (each sample 2 bits)
-    const double m_step_t;
-    const T *m_cmd_read_ptr = nullptr;
+    //const double m_step_t;
+    const Cmd *m_cmd_read_ptr = nullptr;
     size_t m_cmd_read = 0;
     size_t m_cmd_max_read = 0;
     std::atomic<uint64_t> &m_cmd_underflow;
     std::atomic<uint64_t> &m_underflow;
     Config &m_conf;
     // Members accessed by the command generation thread
-    T *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr; //location to write commands to
+    Cmd *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr; //location to write commands to
     size_t m_cmd_wrote = 0;
     size_t m_cmd_max_write = 0;
     //uint32_t m_end_trigger_cnt{0};
@@ -440,7 +439,7 @@ protected:
     uint64_t output_buf_sz = 2 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
     uint64_t wait_buf_sz = 2 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
     bool wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
-    DataPipe<T> m_commands;
+    DataPipe<Cmd> m_commands;
     DataPipe<int16_t> m_output;
     std::vector<activeCmd*> active_cmds;
     std::atomic<uint32_t> m_end_triggered{0};
@@ -453,7 +452,7 @@ protected:
     std::atomic<uint64_t> m_start_trigger_time{0};
 };
 
-struct Stream : StreamBase<Cmd> {
+struct Stream : StreamBase {
     Stream(StreamManagerBase& stm_mngr,Config &conf, double step_t, std::atomic<uint64_t> &cmd_underflow,
            std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true, bool bFloat = false)
         : m_stm_mngr(stm_mngr),
@@ -462,7 +461,7 @@ struct Stream : StreamBase<Cmd> {
           phase_scale(2/double(max_phase)),
           phase_scale_client(conf.sample_rate*10),
           freq_scale(0.1/(conf.sample_rate/32)),
-        StreamBase<Cmd>(conf, step_t, cmd_underflow, underflow, stream_num)
+        StreamBase(conf, cmd_underflow, underflow, stream_num)
     {
         if (start) {
             start_worker(bFloat);
@@ -503,6 +502,10 @@ struct Stream : StreamBase<Cmd> {
         uint64_t freq; // freq_cnt = real freq * 10
         double amp; // real amp * 6.7465185e9f
     };
+    uint32_t get_chns()
+    {
+        return m_chns;
+    }
     const Cmd *consume_old_cmds(State * states);
     void generate_page(State *states); //workhorse, takes a vector of states for the channels
     void generate_page_float(State *states);
@@ -548,6 +551,7 @@ private:
             generate_page_float(m_states);
         }
     }
+    uint32_t m_chns = 0;
     State m_states[128]{}; // array of states
     std::thread m_worker{};
 };

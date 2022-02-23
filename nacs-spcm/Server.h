@@ -7,6 +7,7 @@
 #include "Config.h"
 #include "DummyController.h"
 #include "SeqCache.h"
+#include "FileStream.h"
 
 #include <zmq.hpp>
 
@@ -31,7 +32,7 @@ public:
     bool startController();
     bool controllerRunning() const;
 
-    bool runSeq(uint64_t client_id, uint64_t seq_id, const uint8_t *data, uint32_t &sz, bool is_seq_sent, uint64_t seqcnt, uint32_t start_trigger_id, bool is_first_seq);
+    bool runSeq(uint64_t client_id, uint64_t seq_id, const uint8_t *data, uint32_t &sz, bool is_seq_sent, uint64_t seqcnt, uint32_t start_trigger_id, bool is_first_seq, uint32_t ver);
     bool seqDone(uint64_t) const;
 
     bool stop();

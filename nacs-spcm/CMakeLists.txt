@@ -12,7 +12,9 @@ set(nacs_spcm_HDRS
   DummyStreamManager.h
   FileCache.h
   FileManager.h
-  FileWriter.h
+  FileStream.h
+  FileStreamManager.h
+  #FileWriter.h
   SeqCache.h
   IDataCache.h
   Sequence.h
@@ -33,7 +35,9 @@ set(nacs_spcm_SRCS
   DummyStreamManager.cpp
   FileCache.cpp
   FileManager.cpp
-  FileWriter.cpp
+  FileStream.cpp
+  FileStreamManager.cpp
+  #FileWriter.cpp
   SeqCache.cpp
   IDataCache.cpp
   Sequence.cpp

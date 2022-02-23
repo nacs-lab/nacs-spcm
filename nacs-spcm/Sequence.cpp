@@ -26,7 +26,7 @@ NACS_EXPORT() Sequence::Sequence(Value* values, std::vector<Type> types, bool is
     m_conf = m_conf.loadYAML(fname.data());
 }
 
-NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64_t &seq_len) {
+NACS_EXPORT() void Sequence::toCmds(std::vector<Cmd> &preSend, std::vector<Cmd> &cmds, std::vector<FCmd> &preSendf, std::vector<FCmd> &cmdsf, int64_t &seq_len) {
     //printf("at address: %p\n", (*m_values));
     /*printf("types size: %u", m_types.size());
     printf("v0: %li\n", m_values[0].i64);
@@ -42,84 +42,155 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
 
     //printf("types at address: %p\n", m_types);
 // go through pulses, add them to cmd_vector and then sort.
-    std::vector<uint32_t> active_chns;
-    std::vector<Cmd> cmds;
-    if (pulses.size() == 0) {
-        return cmds;
+    std::vector<uint32_t> active_chns, active_chnsf;
+    //int64_t seq_len1, seq_lenf;
+    //std::vector<Cmd> cmds;
+    if (pulses.size() == 0 && fpulses.size() == 0) {
+        return;
     }
-    cmds.reserve(pulses.size());
-    int64_t t;
-    uint32_t chn;
-    double len, final_val;
-    //printf("pulses sz: %u\n", pulses.size());
-    for (int i = 0; i < pulses.size(); i++) {
-        /*if (pulses[i].enabled != uint32_t(-1)) {
-            printf("pulses[%i].enabled: array_idx: %u, val: %d, raw_val: %f", i, pulses[i].enabled, get_enabled(pulses[i].enabled), get_value(pulses[i].enabled));
-            }*/
-        if (pulses[i].enabled != uint32_t(-1) && get_value(pulses[i].enabled) == 0)
-        {
-            continue;
-        }
-        t = get_time(pulses[i].t_start);
-        if (pulses[i].len == uint32_t(-1))
-        {
-            len = 0;
-        }
-        else
-        {
-            len = get_value(pulses[i].len) / (32*1e12) * m_conf.sample_rate ; // convert to AWG time
-        }
-        final_val = get_value(pulses[i].endvalue);
-        //printf("v%i: %f\n", i, final_val);
-        chn = pulses[i].chn;
-        auto it = active_chns.begin();
-        for (; it != active_chns.end(); ++it) {
-            if (*it == chn) {
-                break;
+    if (pulses.size() != 0) {
+        cmds.reserve(pulses.size());
+        int64_t t;
+        uint32_t chn;
+        double len, final_val;
+        //printf("pulses sz: %u\n", pulses.size());
+        for (int i = 0; i < pulses.size(); i++) {
+            /*if (pulses[i].enabled != uint32_t(-1)) {
+              printf("pulses[%i].enabled: array_idx: %u, val: %d, raw_val: %f", i, pulses[i].enabled, get_enabled(pulses[i].enabled), get_value(pulses[i].enabled));
+              }*/
+            if (pulses[i].enabled != uint32_t(-1) && get_value(pulses[i].enabled) == 0)
+            {
+                continue;
             }
-        }
-        if (it == active_chns.end()) {
-            active_chns.push_back(chn);
-        }
-        if (t > seq_len) {
-            seq_len = t;
-        }
-        cmds.push_back({
-                .t = t / (32*1e12) * m_conf.sample_rate, // 625e6/32 / 1e12
+            t = get_time(pulses[i].t_start);
+            if (pulses[i].len == uint32_t(-1))
+            {
+                len = 0;
+            }
+            else
+            {
+                len = get_value(pulses[i].len) / (32*1e12) * m_conf.sample_rate ; // convert to AWG time
+            }
+            final_val = get_value(pulses[i].endvalue);
+            //printf("v%i: %f\n", i, final_val);
+            chn = pulses[i].chn;
+            auto it = active_chns.begin();
+            for (; it != active_chns.end(); ++it) {
+                if (*it == chn) {
+                    break;
+                }
+            }
+            if (it == active_chns.end()) {
+                active_chns.push_back(chn);
+            }
+            if (t > seq_len) {
+                seq_len = t;
+            }
+            cmds.push_back({
+                    .t = t / (32*1e12) * m_conf.sample_rate, // 625e6/32 / 1e12
                     .t_client = t,
                     .id = pulses[i].id,
                     ._op = pulses[i].functype,
                     .chn = chn,
                     .final_val = final_val,
                     .len = len,
-                .fnptr = pulses[i].fnptr
-            });
+                    .fnptr = pulses[i].fnptr
+                });
+        }
+        for (int i = 0; i < active_chns.size(); ++i) {
+            preSend.push_back(Cmd::getAddChn(0,0,0, active_chns[i]));
+        }
+        std::sort(cmds.begin(), cmds.end(), [&] (auto &p1, auto &p2) {
+            if (p1.t_client < p2.t_client)
+                return true;
+            if (p1.t_client > p2.t_client)
+                return false;
+            return p1.id < p2.id;
+        });
+        //seq_len = seq_len / (32*1e12) * m_conf.sample_rate;
+        printf("Now printing cmds\n");
+        for (int i = 0; i < cmds.size(); i++) {
+            std::cout << cmds[i] << std::endl;
+        }
     }
-    for (int i = 0; i < active_chns.size(); ++i) {
-        preSend.push_back(Cmd::getAddChn(0,0,0, active_chns[i]));
+    if (fpulses.size() != 0) {
+        cmdsf.reserve(fpulses.size());
+        int64_t t;
+        uint32_t chn;
+        double len, final_val;
+        //printf("pulses sz: %u\n", pulses.size());
+        for (int i = 0; i < fpulses.size(); i++) {
+            /*if (pulses[i].enabled != uint32_t(-1)) {
+              printf("pulses[%i].enabled: array_idx: %u, val: %d, raw_val: %f", i, pulses[i].enabled, get_enabled(pulses[i].enabled), get_value(pulses[i].enabled));
+              }*/
+            if (fpulses[i].enabled != uint32_t(-1) && get_value(fpulses[i].enabled) == 0)
+            {
+                continue;
+            }
+            t = get_time(fpulses[i].t_start);
+            if (fpulses[i].len == uint32_t(-1))
+            {
+                len = 0;
+            }
+            else
+            {
+                len = get_value(fpulses[i].len) / (32*1e12) * m_conf.sample_rate ; // convert to AWG time
+            }
+            final_val = get_value(fpulses[i].endvalue);
+            //printf("v%i: %f\n", i, final_val);
+            chn = fpulses[i].chn;
+            auto it = active_chnsf.begin();
+            for (; it != active_chnsf.end(); ++it) {
+                if (*it == chn) {
+                    break;
+                }
+            }
+            if (it == active_chnsf.end()) {
+                active_chnsf.push_back(chn);
+            }
+            if (t > seq_len) {
+                seq_len = t;
+            }
+            cmdsf.push_back({{
+                    .t = t / (32*1e12) * m_conf.sample_rate, // 625e6/32 / 1e12
+                    .t_client = t,
+                    .id = fpulses[i].id,
+                    ._op = fpulses[i].functype,
+                    .chn = chn,
+                    .final_val = final_val,
+                    .len = len,
+                    .fnptr = fpulses[i].fnptr},
+                    .fname = fpulses[i].file_name
+                    });
+        }
+        for (int i = 0; i < active_chnsf.size(); ++i) {
+            preSendf.push_back(FCmd::getFAddChn(0,0,0, active_chnsf[i]));
+        }
+        std::sort(cmdsf.begin(), cmdsf.end(), [&] (auto &p1, auto &p2) {
+            if (p1.t_client < p2.t_client)
+                return true;
+            if (p1.t_client > p2.t_client)
+                return false;
+            return p1.id < p2.id;
+        });
+        //seq_len = seq_len / (32*1e12) * m_conf.sample_rate;
+        printf("Now printing fcmds\n");
+        for (int i = 0; i < cmdsf.size(); i++) {
+            std::cout << cmdsf[i] << std::endl;
+        }
     }
-    std::sort(cmds.begin(), cmds.end(), [&] (auto &p1, auto &p2) {
-        if (p1.t_client < p2.t_client)
-            return true;
-        if (p1.t_client > p2.t_client)
-            return false;
-        return p1.id < p2.id;
-    });
-    seq_len = seq_len / (32*1e12) * m_conf.sample_rate;
-    printf("Now printing cmds\n");
-    for (int i = 0; i < cmds.size(); i++) {
-        std::cout << cmds[i] << std::endl;
-    }
-    return cmds;
+    //return cmds;
 }
 
 NACS_EXPORT() void Sequence::addPulse(uint32_t enabled, uint32_t id,
                                       uint32_t t_start, uint32_t len,
                                       uint32_t endvalue, uint8_t functype,
-                                      uint8_t phys_chn, uint32_t chn, void (*fnptr)(void))
+                                      uint8_t phys_chn, uint32_t chn, void (*fnptr)(void),
+                                      uint8_t is_file_chn, std::string file_name)
 {
-    pulses.push_back({
-            .enabled = enabled,
+    if (is_file_chn > 0) {
+        fpulses.push_back({
+                .enabled = enabled,
                 .id = id,
                 .t_start = t_start,
                 .len = len,
@@ -127,9 +198,23 @@ NACS_EXPORT() void Sequence::addPulse(uint32_t enabled, uint32_t id,
                 .functype = functype,
                 .phys_chn = phys_chn,
                 .chn = chn,
-            .fnptr = fnptr
+                .fnptr = fnptr,
+                .file_name = file_name
+            });
+    }
+    else {
+        pulses.push_back({
+                .enabled = enabled,
+                .id = id,
+                .t_start = t_start,
+                .len = len,
+                .endvalue = endvalue,
+                .functype = functype,
+                .phys_chn = phys_chn,
+                .chn = chn,
+                .fnptr = fnptr
         });
-
+    }
 }
 
 NACS_EXPORT() double Sequence::get_value(uint32_t idx) const
