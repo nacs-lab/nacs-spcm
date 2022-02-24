@@ -28,7 +28,8 @@ NACS_EXPORT() Server::Server(Config conf)
 m_zmqctx(),
 m_zmqsock(m_zmqctx, ZMQ_ROUTER),
 m_evfd(openEvent(0, EFD_NONBLOCK | EFD_CLOEXEC)),
-m_ctrl(*this, m_conf, std::vector<uint8_t>{0}),
+m_fcache(8 * 1024ll * 1024ll * 1024ll),
+m_ctrl(*this, m_conf, m_fcache, std::vector<uint8_t>{0}),
 m_cache(8 * 1024ll * 1024ll * 1024ll) // pretty arbitrary
 {
     //m_ctrl = Controller(init_out_chn);

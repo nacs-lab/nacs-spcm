@@ -6,6 +6,42 @@ using namespace NaCs;
 
 namespace Spcm {
 
+inline bool FStream::check_start(int64_t t, uint32_t id)
+{
+    // The corresponding time must be visible when the id is loaded
+    // We don't load the time and the id atomically so it is possible
+    // that the time could be the next trigger.
+    // It is highly unlikely and we should never have that
+    // situation in real experiment.
+    // If it really happens, we'll simply wait until the corresponding
+    // trigger id to be visible too.
+    m_cur_t = t;
+    if (m_start_trigger.load(std::memory_order_acquire) < id)
+        goto not_yet;
+    {
+        auto global_time = m_output_cnt;
+        auto trigger_time =
+            m_start_trigger_time.load(std::memory_order_relaxed);
+        if (time_offset() + global_time < trigger_time) {
+            //printf("not yet after receiving trigger\n");
+            goto not_yet;
+        }
+        else if (time_offset() + global_time > trigger_time) {
+            printf("Noticed trigger too late\n");
+            // request card restart which will also notify the client of the bad sequence.
+            //reqRestart(id);
+        }
+    }
+    m_slow_mode.store(false, std::memory_order_relaxed);
+    //printf("Processed trigger\n");
+    return true;
+not_yet:
+    //printf("waiting for trigger\n");
+    m_slow_mode.store(true, std::memory_order_relaxed);
+    return false;
+}
+
+
 NACS_INTERNAL NACS_NOINLINE const FCmd*
 FStream::consume_old_cmds()
 {

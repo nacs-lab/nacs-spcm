@@ -18,6 +18,7 @@
 #include <nacs-spcm/spcm.h>
 #include <nacs-spcm/Stream.h>
 #include <nacs-spcm/StreamManager.h>
+#include <nacs-spcm/FileStreamManager.h>
 //#include <nacs-spcm/Server.h>
 
 using namespace NaCs;
@@ -31,9 +32,10 @@ namespace Spcm{
               uint64_t trigger_t = 0;
               uint64_t len = 0;
           };
-          Controller(Server &serv, Config &conf, std::vector<uint8_t> out_chns)
+          Controller(Server &serv, Config &conf, FileCache& fcache, std::vector<uint8_t> out_chns)
               : m_serv(serv),
-                m_conf(conf)
+                m_conf(conf),
+                m_fcache(fcache)
           {
               /* StreamManager(uint32_t n_streams, uint32_t max_per_stream,
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
@@ -53,9 +55,11 @@ namespace Spcm{
                   }
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
-                      m_stm_mngrs.emplace_back(new StreamManager(*this,m_conf, num_streams, 6, 1, cmd_underflow, cmd_underflow, false));
+                      m_stm_mngrs.emplace_back(new StreamManager(*this,m_conf, num_streams, 6, 1, cmd_underflow, underflow, false));
+                      m_fstm_mngrs.emplace_back(new FileStreamManager(*this, fcache, m_conf, 1, 100, fcmd_underflow,funderflow, false));
                       max_chns.push_back(16);
                       ptr_map.emplace(i, std::vector<const int16_t*>{num_streams, nullptr});
+                      fptr_map.emplace(i, std::vector<const int16_t*>{1, nullptr});
                   }
               }
           }
@@ -121,8 +125,10 @@ namespace Spcm{
                   for (int i = 0; i < n_phys_chn; ++i) {
                       //printf("Stopping stream %u\n", m_out_chns[i]);
                       (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
+                      (*m_fstm_mngrs[m_out_chns[i]]).stop_streams();
                       //(*m_stm_mngrs[m_out_chns[i]]).stop_worker();
                       (*m_stm_mngrs[m_out_chns[i]]).reset_streams_out();
+                      (*m_fstm_mngrs[m_out_chns[i]]).reset_streams_out();
                       //(*m_stm_mngrs[m_out_chns[i]]).reset_out();
                   }
               }
@@ -140,6 +146,7 @@ namespace Spcm{
                   initChnsAndBuffer();
                   for (int i = 0; i < n_phys_chn; ++i) {
                       (*m_stm_mngrs[m_out_chns[i]]).start_streams();
+                      (*m_fstm_mngrs[m_out_chns[i]]).start_streams();
                       //(*m_stm_mngrs[m_out_chns[i]]).start_worker();
                   }
               }
@@ -151,6 +158,7 @@ namespace Spcm{
           inline void resetStmManagers() {
               for (int i = 0; i < n_phys_chn; i++) {
                   m_stm_mngrs[m_out_chns[i]]->reset();
+                  m_fstm_mngrs[m_out_chns[i]]->reset();
               }
           }
           inline uint32_t get_start_id() {
@@ -166,19 +174,32 @@ namespace Spcm{
               printf("Setting trigger %u time to %lu\n", v, t);
               for (int i = 0; i < n_phys_chn; i++) {
                   m_stm_mngrs[m_out_chns[i]]->set_start_trigger(v,t); // may not be useful, but can keep here.
+                  m_fstm_mngrs[m_out_chns[i]]->set_start_trigger(v,t);
               }
           }
           inline uint32_t copy_cmds(uint32_t idx, Cmd *cmds, uint32_t sz)
           {
               return m_stm_mngrs[idx]->copy_cmds(cmds, sz);
           }
+          inline uint32_t copy_cmdsf(uint32_t idx, FCmd *cmds, uint32_t sz)
+          {
+              return m_fstm_mngrs[idx]->copy_cmds(cmds, sz);
+          }
           inline bool try_add_cmd(uint32_t idx, Cmd cmd)
           {
               return m_stm_mngrs[idx]->try_add_cmd(cmd);
           }
+          inline bool try_add_cmdf(uint32_t idx, FCmd cmd)
+          {
+              return m_fstm_mngrs[idx]->try_add_cmd(cmd);
+          }
           inline void add_cmd(uint32_t idx, Cmd cmd)
           {
               m_stm_mngrs[idx]->add_cmd(cmd);
+          }
+          inline void add_cmdf(uint32_t idx, FCmd cmd)
+          {
+              m_fstm_mngrs[idx]->add_cmd(cmd);
           }
           inline void flush_cmd(uint32_t idx)
           {
@@ -187,6 +208,7 @@ namespace Spcm{
           void distribute_cmds(uint32_t idx)
           {
               m_stm_mngrs[idx]->distribute_cmds();
+              m_fstm_mngrs[idx]->distribute_cmds();
           }
           inline uint32_t getMaxChn(uint32_t idx) {
               return max_chns[idx];
@@ -214,7 +236,7 @@ namespace Spcm{
               return false;
           }
           void force_trigger();
-          void runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait=true);
+          void runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait=true); //TODO FILESTREAM NOT INCORPORATED HERE, Not used in Server.cpp
           inline void reqWait()
           {
               m_wait_req.store(true, std::memory_order_relaxed);
@@ -238,6 +260,7 @@ namespace Spcm{
               uint32_t min_end_triggered = UINT_MAX;
               for (int i = 0; i < n_phys_chn; i++) {
                   min_end_triggered = std::min(min_end_triggered, (*(m_stm_mngrs[m_out_chns[i]])).get_end_triggered());
+                  min_end_triggered = std::min(min_end_triggered, (*(m_fstm_mngrs[m_out_chns[i]])).get_end_triggered());
               }
               return min_end_triggered;
           }
@@ -287,8 +310,10 @@ namespace Spcm{
           void workerFunc();
           void startDMA(uint64_t sz);
           std::vector<std::unique_ptr<StreamManager>> m_stm_mngrs;
+          std::vector<std::unique_ptr<FileStreamManager>> m_fstm_mngrs;
           std::vector<uint32_t> max_chns;
           Config &m_conf;
+          FileCache &m_fcache;
 
           bool m_initialized{false};
 
@@ -306,6 +331,8 @@ namespace Spcm{
 
           std::atomic<uint64_t> cmd_underflow{0};
           std::atomic<uint64_t> underflow{0};
+          std::atomic<uint64_t> fcmd_underflow{0};
+          std::atomic<uint64_t> funderflow{0};
           std::atomic<uint64_t> card_avail{4 * 1024ll * 1024ll * 1024ll};
           std::atomic<bool> first_start = false;
 
@@ -329,6 +356,7 @@ namespace Spcm{
           uint32_t last_trig_id = 0; // last finished trig id
 
           std::map<uint32_t, std::vector<const int16_t*>> ptr_map;
+          std::map<uint32_t, std::vector<const int16_t*>> fptr_map;
           uint32_t num_streams = 3;
       };
 }

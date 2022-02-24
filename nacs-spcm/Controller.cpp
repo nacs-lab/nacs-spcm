@@ -70,7 +70,8 @@ NACS_EXPORT() void Controller::startWorker()
         initChnsAndBuffer();
         for (int i = 0; i < n_phys_chn; ++i) {
             (*m_stm_mngrs[m_out_chns[i]]).start_streams();
-            //(*m_stm_mngrs[m_out_chns[i]]).start_worker();
+            (*m_fstm_mngrs[m_out_chns[i]]).start_streams();
+//(*m_stm_mngrs[m_out_chns[i]]).start_worker();
         }
         m_worker_req.store(WorkerRequest::None, std::memory_order_relaxed);
         m_worker = std::thread(&Controller::workerFunc, this);
@@ -87,8 +88,10 @@ NACS_EXPORT() void Controller::stopWorker()
         for (int i = 0; i < n_phys_chn; ++i) {
             //printf("Stopping stream %u\n", m_out_chns[i]);
             (*m_stm_mngrs[m_out_chns[i]]).stop_streams();
+            (*m_fstm_mngrs[m_out_chns[i]]).stop_streams();
             //(*m_stm_mngrs[m_out_chns[i]]).stop_worker();
             (*m_stm_mngrs[m_out_chns[i]]).reset_streams_out();
+            (*m_fstm_mngrs[m_out_chns[i]]).reset_streams_out();
             //(*m_stm_mngrs[m_out_chns[i]]).reset_out();
         }
         //stopCard();
