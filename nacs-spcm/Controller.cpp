@@ -364,7 +364,31 @@ void Controller::workerFunc()
                 }
             }
         }
-        //printf("stream manager ready\n");
+        // Wait for FileStreamMgr
+        for (int i = 0; i < n_phys_chn; ++i)
+        {
+            //ptrs[i] = (*m_stm_mngrs[m_out_chns[i]]).get_output(sz);
+            //std::cout << "sz: " << sz << std::endl;
+            auto &stm_mngr = *m_fstm_mngrs[m_out_chns[i]];
+            auto &ptr_vec = fptr_map.at(m_out_chns[i]);
+            for (uint32_t j = 0; j < num_streams; j++) {
+            retryf:
+                ptr_vec[j] = stm_mngr.get_read_ptr(j, sz);
+                if (sz < notif_size / 2 / n_phys_chn) { // 4096
+                    // data not ready
+                    //if (sz > 0)
+                    //     (*m_stm_mngrs[m_out_chns[i]]).sync_reader();
+                    CPU::pause();
+                    //toCont = true;
+                    goto retryf;
+                }
+                if (sz < min_sz) {
+                    min_sz = sz;
+                }
+            }
+        }
+
+//printf("stream manager ready\n");
         //std::cout << "stream manager ready" << std::endl;
         min_sz = min_sz & ~(uint64_t)(notif_size / 2 / n_phys_chn - 1); // make it chunks of 2048
         //read out available number of bytes
@@ -495,11 +519,15 @@ void Controller::workerFunc()
         //int16_t* curr_ptr2;
         if (n_phys_chn == 1) {
             auto &ptr_vec = ptr_map.at(m_out_chns[0]);
+            auto &ptr_vecf = fptr_map.at(m_out_chns[0]);
             __m512i res;
             for(int i = 0; i < (count / 2); i += 64/2) {
                 res = *(__m512i*)(ptr_vec[0] + i);
                 for (uint32_t j = 1; j < num_streams; j++) {
                     res = _mm512_add_epi16(res, *(__m512i*)(ptr_vec[j] + i));
+                }
+                for (uint32_t j = 0; j < num_streamsf; j++) {
+                    res = _mm512_add_epi16(res, *(__m512i*)(ptr_vecf[j] + i));
                 }
                 curr_ptr = buff_ptr + buff_pos;
                 _mm512_stream_si512((__m512i*)curr_ptr, res);
@@ -513,6 +541,8 @@ void Controller::workerFunc()
         else if (n_phys_chn == 2) {
             auto &ptr_vec = ptr_map.at(m_out_chns[0]);
             auto &ptr_vec2 = ptr_map.at(m_out_chns[1]);
+            auto &ptr_vecf = fptr_map.at(m_out_chns[0]);
+            auto &ptr_vec2f = fptr_map.at(m_out_chns[1]);
             __m512i res, res2;
             for (int i = 0; i < (count / 2); i+= 64) {
                 res = *(__m512i*)(ptr_vec[0] + i/2);
@@ -520,6 +550,10 @@ void Controller::workerFunc()
                 for (uint32_t j = 1; j < num_streams; j++) {
                     res = _mm512_add_epi16(res, *(__m512i*)(ptr_vec[j] + i/2));
                     res2 = _mm512_add_epi16(res2, *(__m512i*)(ptr_vec2[j] + i/2));
+                }
+                for (uint32_t j = 0; j < num_streamsf; j++) {
+                    res = _mm512_add_epi16(res, *(__m512i*)(ptr_vecf[j] + i/2));
+                    res2 = _mm512_add_epi16(res2, *(__m512i*)(ptr_vec2f[j] + i/2));
                 }
                 curr_ptr = buff_ptr + buff_pos;
                 //curr_ptr2 = curr_ptr + 32;

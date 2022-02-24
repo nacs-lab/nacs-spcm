@@ -56,7 +56,7 @@ namespace Spcm{
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
                       m_stm_mngrs.emplace_back(new StreamManager(*this,m_conf, num_streams, 6, 1, cmd_underflow, underflow, false));
-                      m_fstm_mngrs.emplace_back(new FileStreamManager(*this, fcache, m_conf, 1, 100, fcmd_underflow,funderflow, false));
+                      m_fstm_mngrs.emplace_back(new FileStreamManager(*this, fcache, m_conf, num_streamsf, 100, fcmd_underflow,funderflow, false));
                       max_chns.push_back(16);
                       ptr_map.emplace(i, std::vector<const int16_t*>{num_streams, nullptr});
                       fptr_map.emplace(i, std::vector<const int16_t*>{1, nullptr});
@@ -205,9 +205,16 @@ namespace Spcm{
           {
               m_stm_mngrs[idx]->flush_cmd();
           }
+          inline void flush_cmdf(uint32_t idx)
+          {
+              m_fstm_mngrs[idx]->flush_cmd();
+          }
           void distribute_cmds(uint32_t idx)
           {
               m_stm_mngrs[idx]->distribute_cmds();
+          }
+          void distribute_cmdsf(uint32_t idx)
+          {
               m_fstm_mngrs[idx]->distribute_cmds();
           }
           inline uint32_t getMaxChn(uint32_t idx) {
@@ -358,6 +365,7 @@ namespace Spcm{
           std::map<uint32_t, std::vector<const int16_t*>> ptr_map;
           std::map<uint32_t, std::vector<const int16_t*>> fptr_map;
           uint32_t num_streams = 3;
+          uint32_t num_streamsf = 1;
       };
 }
 #endif

@@ -166,10 +166,42 @@ NACS_INTERNAL void Server::seqRunner()
             } while (sz > 0 && (nwrote > 0 || controllerRunning()) && m_running);
             if (!m_running)
                 return;
-            m_cache.unref(*entry.entry);
             m_ctrl.add_cmd(phys_chn_idx, Cmd::getTriggerEnd(0, 0, 0, fin_id));
             m_ctrl.flush_cmd(phys_chn_idx);
             m_ctrl.distribute_cmds(phys_chn_idx);
+
+            // filestream part
+            auto pPref = &preSendf[0];
+            szPre = preSendf.size();
+            //printf("preSend size: %u", szPre);
+            do {
+                nwrote = m_ctrl.copy_cmdsf(phys_chn_idx, pPref, szPre);
+                pPref += nwrote;
+                szPre -= nwrote;
+            }
+            while (szPre> 0 && (nwrote > 0 || controllerRunning()) && m_running);
+            auto pf = &cmdsf[0];
+            sz = cmdsf.size();
+                // printf("cmd size: %u", sz);
+            do {
+                nwrote = m_ctrl.copy_cmdsf(phys_chn_idx, pf, sz);
+                pf += nwrote;
+                sz -= nwrote;
+                //printf("nwrote %u, sz: %u\n", nwrote, sz);
+                if (sz > 0)
+                    CPU::pause();
+            // We just want to avoid looping without reader and without being able to
+            // write anything so we don't have to do any check if `nwrote` is not 0.
+            // `controllerRunning` can in principle sleep but that can only happen
+            // if another thread are doing very slow stuff to the controller so we
+            // don't need to worry too much.
+            } while (sz > 0 && (nwrote > 0 || controllerRunning()) && m_running);
+            if (!m_running)
+                return;
+            m_ctrl.add_cmdf(phys_chn_idx, FCmd::getFTriggerEnd(0, 0, 0, fin_id));
+            m_ctrl.flush_cmdf(phys_chn_idx);
+            m_ctrl.distribute_cmdsf(phys_chn_idx);
+            m_cache.unref(*entry.entry);
             /*if (!first_start) {
                 m_ctrl.startDataTransfer();
                 first_start = true;
