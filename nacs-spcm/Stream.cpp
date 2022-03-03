@@ -387,7 +387,7 @@ StreamBase::consume_old_cmds(State *states)
             // cmd pointer only increments. Should be safe to initialize an active command here
             if (cmd->t + cmd->len > m_cur_t) {
                 // command still active
-                active_cmds.push_back(new activeCmd(cmd,32/(m_conf.sample_rate)*1e12));
+                active_cmds.push_back(new activeCmd(cmd,32.0f/(m_conf.sample_rate)*1e12));
                 std::pair<double, double> these_vals;
                 these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                 states[cmd->chn].amp = (these_vals.first + these_vals.second) * amp_scale;
@@ -400,7 +400,7 @@ StreamBase::consume_old_cmds(State *states)
         case CmdType::FreqVecFn:
             if (cmd->t + cmd->len > m_cur_t) {
                 // command still active
-                active_cmds.push_back(new activeCmd(cmd,32/(m_conf.sample_rate)*1e12));
+                active_cmds.push_back(new activeCmd(cmd,32.0f/(m_conf.sample_rate)*1e12));
                 std::pair<double, double> these_vals;
                 these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                 states[cmd->chn].freq = uint64_t(these_vals.first + these_vals.second) * freq_scale_client;
@@ -621,7 +621,7 @@ cmd_out:
                     // first time seeing function command
                     if (cmd->t + cmd->len > m_cur_t) {
                         // command still active
-                        active_cmds.push_back(new activeCmd(cmd,32/(m_conf.sample_rate)*1e12));
+                        active_cmds.push_back(new activeCmd(cmd,32.0f/(m_conf.sample_rate)*1e12));
                         std::pair<float, float> these_vals;
                         these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                         freq = uint64_t(these_vals.first) * freq_scale_client;
@@ -638,7 +638,7 @@ cmd_out:
                     // first time seeing function command
                     if (cmd->t + cmd->len > m_cur_t) {
                         // command still active
-                        active_cmds.push_back(new activeCmd(cmd,32/(m_conf.sample_rate)*1e12));
+                        active_cmds.push_back(new activeCmd(cmd,32.0f/(m_conf.sample_rate)*1e12));
                         std::pair<double, double> these_vals;
                         these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                         amp = these_vals.first * amp_scale;

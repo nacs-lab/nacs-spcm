@@ -176,7 +176,7 @@ struct activeCmd {
 // structure to keep track of commands that span longer times
     const Cmd* m_cmd;
     //std::vector<float> vals; // precalculated values
-    activeCmd(const Cmd* cmd, uint64_t t) :
+    activeCmd(const Cmd* cmd, double t) :
         m_cmd(cmd),
         t_serv_to_client(double(t))
     {
