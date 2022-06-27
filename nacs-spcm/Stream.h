@@ -336,9 +336,10 @@ protected:
     void generate_page(State *states); //workhorse, takes a vector of states for the channels
     void step(int16_t *out, State *states); // workhorse function to step to next time
     const Cmd *get_cmd();
-    StreamBase(StreamManagerBase &stm_mngr, double step_t, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num) :
+    StreamBase(StreamManagerBase &stm_mngr, double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num) :
         m_stm_mngr(stm_mngr),
         m_step_t(step_t),
+        amp_scale(amp_scale),
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
         m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
@@ -393,6 +394,7 @@ private:
 
     uint64_t output_buf_sz = 8 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
     uint64_t wait_buf_sz = 2 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
+    double amp_scale = 6.7465185e9f / 8; // Divide by 8 for safety by default
     bool wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     DataPipe<Cmd> m_commands;
     DataPipe<int16_t> m_output;
@@ -411,9 +413,9 @@ private:
 
 template<uint32_t max_chns = 128>
 struct Stream : StreamBase {
-    Stream(StreamManagerBase& stm_mngr, double step_t, std::atomic<uint64_t> &cmd_underflow,
+    Stream(StreamManagerBase& stm_mngr, double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
            std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true)
-        : StreamBase(stm_mngr, step_t, cmd_underflow, underflow, stream_num)
+        : StreamBase(stm_mngr, step_t, amp_scale, cmd_underflow, underflow, stream_num)
     {
         if (start) {
             start_worker();

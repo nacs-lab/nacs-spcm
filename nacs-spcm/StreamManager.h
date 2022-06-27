@@ -278,19 +278,20 @@ public:
     }
 protected:
 StreamManagerBase(Controller& ctrl, uint32_t n_streams, uint32_t max_per_stream,
-                      double step_t, std::atomic<uint64_t> &cmd_underflow,
+                  double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
                       std::atomic<uint64_t> &underflow, bool start = false)
         : m_ctrl(ctrl),
           m_n_streams(n_streams),
           m_max_per_stream(max_per_stream),
           chn_map(n_streams, max_per_stream),
+          m_amp_scale(amp_scale),
           m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
           m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2)
     {
         // start streams
         for (int i = 0; i < n_streams; i++) {
             Stream<128> *stream_ptr;
-            stream_ptr = new Stream<128>(*this, step_t, cmd_underflow, underflow, i, start);
+            stream_ptr = new Stream<128>(*this, step_t, amp_scale, cmd_underflow, underflow, i, start);
             m_streams.push_back(stream_ptr);
             stream_ptrs.push_back(nullptr);
         }
@@ -335,6 +336,7 @@ private:
     DataPipe<int16_t> m_output; // pipe for output and hardware to output
     constexpr static uint32_t output_block_sz = 2048 * 16; //32768; //2048;
 
+    double m_amp_scale = 6.7465185e9f / 8;
     const Cmd *m_cmd_read_ptr = nullptr; // pointer to read commands
     size_t m_cmd_read = 0;
     size_t m_cmd_max_read = 0;
@@ -349,10 +351,10 @@ private:
 
 struct StreamManager : StreamManagerBase {
     StreamManager(Controller &ctrl, uint32_t n_streams, uint32_t max_per_stream,
-                  double step_t, std::atomic<uint64_t> &cmd_underflow,
+                  double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false)
-        : StreamManagerBase(ctrl, n_streams, max_per_stream, step_t, cmd_underflow, underflow, startStream)
+        : StreamManagerBase(ctrl, n_streams, max_per_stream, step_t, amp_scale, cmd_underflow, underflow, startStream)
     {
         if (startWorker)
         {
@@ -407,7 +409,6 @@ private:
             generate_page();
         }
     }
-
     std::thread m_worker{};
 
 };

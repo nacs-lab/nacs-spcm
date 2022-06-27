@@ -39,6 +39,8 @@ namespace Spcm{
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false) */
+              // hard coded amp_scales
+              double amp_scales[4] = {6.7465185e9f / 8, 6.7465185e9f / 8, 6.7465185e9f, 6.7465185e9f};
               auto phys_chn = out_chns.size();
               if (phys_chn != 1 && phys_chn != 2)
               {
@@ -53,7 +55,7 @@ namespace Spcm{
                   }
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
-                      m_stm_mngrs.emplace_back(new StreamManager(*this, 6, 4, 1, cmd_underflow, cmd_underflow, false));
+                      m_stm_mngrs.emplace_back(new StreamManager(*this, 6, 4, 1, amp_scales[i], cmd_underflow, cmd_underflow, false));
                       max_chns.push_back(16);
                   }
               }
