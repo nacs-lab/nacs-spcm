@@ -419,7 +419,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
                 ntrigger = start_triggers.size();
             if (ntrigger > 0)
                 m_ctrl.set_start_trigger(start_triggers[ntrigger - 1],
-                                         t + m_conf.trig_delay); // trig delay is in units of stream times already
+                                         t + m_conf.trig_delay + 25); // trig delay is in units of stream times already, 24 is hard coded roughly 1.25 us to account for start trigger length
             start_triggers.erase(start_triggers.begin(),
                                  start_triggers.begin() + ntrigger);
             //if (!first_start) {
