@@ -36,7 +36,7 @@ public:
     }
     inline uint32_t get_end_triggered()
     {
-        uint32_t min_end_triggered = UINT_MAX;
+        uint32_t min_end_triggered = UINT32_MAX;
         for (int i = 0; i < m_n_streams; i++) {
             min_end_triggered = std::min(min_end_triggered, (*m_streams[i]).end_triggered());
         }

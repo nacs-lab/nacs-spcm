@@ -18,6 +18,8 @@
 #include <iostream>
 #include <cmath>
 
+#include <stdint.h>
+
 using namespace NaCs;
 
 namespace Spcm {
