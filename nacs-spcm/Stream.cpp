@@ -98,6 +98,23 @@ void compute_single_chn(__m512 &v1, __m512 &v2, float phase, float freq,
     //}
 }
 
+__attribute__((target("avx512f,avx512bw"), flatten))
+void compute_single_chn(__m512 &v1, __m512 &v2, float phase, float freq,
+                        float df, __m512 &amp1, __m512 &amp2)
+{
+    __m512 phase_v1 = phase + freq * tidxs; // first 16 samples
+    __m512 phase_v2 = phase + freq * (tidxs + 1); // next 16 samples with no df
+    accum_nonzero(phase_v1, tidxs, df / 2);
+    accum_nonzero(phase_v2, (tidxs + 1), df / 2);
+    //__m512 amp_v1 = _mm512_set1_ps(amp);
+    //__m512 amp_v2 = _mm512_set1_ps(amp + damp / 2);
+    //accum_nonzero(amp_v1, tidxs, damp / 2); // accumulate half amplitude in one go
+    //accum_nonzero(amp_v2, tidxs, damp / 2); // accumulate next half
+    v1 += xsinpif_pi(phase_v1) * amp1;
+    v2 += xsinpif_pi(phase_v2) * amp2;
+}
+
+
 void test_compute_single_chn(int& out1, int& out2, int val, int dval) {
     out1 += val;
     out2 = out2 + val + dval;
@@ -149,7 +166,7 @@ NACS_EXPORT() std::ostream &operator<<(std::ostream &stm, const Cmd &cmd)
     if (cmd.op() == CmdType::ModChn && cmd.chn != Cmd::add_chn)
         stm << ", chn=" << cmd.chn;
     if (cmd.op() == CmdType::FreqSet || cmd.op() == CmdType::AmpSet || cmd.op() == CmdType::Phase)
-        stm << ", chn=" << cmd.chn << ", val=" << cmd.final_val;
+        stm << ", chn=" << cmd.chn << ", val=" << cmd.final_val << ", len=" << cmd.len;
     if (cmd.op() == CmdType::AmpFn || cmd.op() == CmdType::FreqFn ||
         cmd.op() == CmdType::AmpVecFn || cmd.op() == CmdType::FreqVecFn)
         stm << ", chn=" << cmd.chn << ", final_val=" << cmd.final_val << ", len=" << cmd.len;
@@ -609,6 +626,9 @@ cmd_out:
             //compute_single_chn(out1freq, out2freq, freq, df);
         }
         else {
+            bool ampSet = false; // Behavior for now... if ampSet command is at this time, ignore all other things such as active ramps
+            __m512 ampv1, ampv2;
+            __mmask16 amp_mask1, amp_mask2;
             do {
                 //std::cout << (*cmd) << std::endl;
                 if (cmd->op() == CmdType::FreqSet){
@@ -630,7 +650,26 @@ cmd_out:
                     }
                 }
                 else if (cmd->op() == CmdType::AmpSet) {
-                    amp = cmd->final_val * amp_scale;
+                    if (!ampSet) {
+                        ampSet = true;
+                        ampv1 = _mm512_set1_ps(amp);
+                        ampv2 = _mm512_set1_ps(amp);
+                    }
+                    int shift = int(cmd->len);
+                    if (shift < 16) {
+                        amp_mask1 = _mm512_int2mask(UINT16_MAX >> shift); // len determines where the pulse ought to start.
+                        amp_mask2 = _mm512_int2mask(UINT16_MAX);
+                    }
+                    else {
+                        shift = shift - 16;
+                        amp_mask1 = _mm512_int2mask(0);
+                        amp_mask2 = _mm512_int2mask(UINT16_MAX >> shift);
+                    }
+                    amp = cmd->final_val * amp_scale; // This is just for updating the state
+                    const float constamp = amp;
+                    __m128 ampfinal = _mm_load_ps1(&constamp);
+                    ampv1 = _mm512_mask_broadcastss_ps(ampv1, amp_mask1, ampfinal);
+                    ampv2 = _mm512_mask_broadcastss_ps(ampv2, amp_mask2, ampfinal);
                 }
                 else if (likely(cmd->op() == CmdType::AmpFn || cmd->op() == CmdType::AmpVecFn)) {
                     // first time seeing function command
@@ -666,7 +705,12 @@ cmd_out:
             if (amp + damp > amp_scale) {
                 damp = 0;
             }
-            compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), amp, damp);
+            if (unlikely(ampSet)) {
+                compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), ampv1, ampv2);
+            }
+            else {
+                compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), amp, damp);
+            }
             phase = phase + int64_t(freq * 32) + df * 32 / 2;
             //test_compute_single_chn(out1freq, out2freq, freq, df);
             state.amp = amp + damp;

@@ -45,7 +45,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
         return cmds;
     }
     cmds.reserve(pulses.size());
-    int64_t t;
+    int64_t t, t_sample;
     uint32_t chn;
     double len, final_val;
     //printf("pulses sz: %u\n", pulses.size());
@@ -58,9 +58,16 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
             continue;
         }
         t = get_time(pulses[i].t_start);
+        t_sample = t * 625 / 1e6; // t / 1e12 * 625e6
         if (pulses[i].len == uint32_t(-1))
         {
-            len = 0;
+            // May be a AmpSet pulse
+            if (pulses[i].functype == uint8_t(CmdType::AmpSet)) {
+                len = t_sample % 32;
+            }
+            else {
+                len = 0;
+            }
         }
         else
         {
@@ -82,7 +89,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
             seq_len = t;
         }
         cmds.push_back({
-                .t = t * 625 / (32e6), // 625e6/32 / 1e12
+                .t = t_sample / 32,
                     .t_client = t,
                     .id = pulses[i].id,
                     ._op = pulses[i].functype,
