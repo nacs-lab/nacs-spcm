@@ -108,7 +108,7 @@ void compute_single_chn(__m512 &v1, __m512 &v2, float phase, float freq,
     accum_nonzero(phase_v2, (tidxs + 1), df / 2);
     //__m512 amp_v1 = _mm512_set1_ps(amp);
     //__m512 amp_v2 = _mm512_set1_ps(amp + damp / 2);
-    //accum_nonzero(amp_v1, tidxs, damp / 2); // accumulate half amplitude in one go
+//accum_nonzero(amp_v1, tidxs, damp / 2); // accumulate half amplitude in one go
     //accum_nonzero(amp_v2, tidxs, damp / 2); // accumulate next half
     v1 += xsinpif_pi(phase_v1) * amp1;
     v2 += xsinpif_pi(phase_v2) * amp2;
@@ -628,7 +628,7 @@ cmd_out:
         else {
             bool ampSet = false; // Behavior for now... if ampSet command is at this time, ignore all other things such as active ramps
             __m512 ampv1, ampv2;
-            __mmask16 amp_mask1, amp_mask2;
+            uint16_t amp_mask1, amp_mask2;
             do {
                 //std::cout << (*cmd) << std::endl;
                 if (cmd->op() == CmdType::FreqSet){
@@ -652,27 +652,73 @@ cmd_out:
                 else if (cmd->op() == CmdType::AmpSet) {
                     if (!ampSet) {
                         ampSet = true;
+                        //printf("amp_init: %f\n", amp);
                         ampv1 = _mm512_set1_ps(amp);
                         ampv2 = _mm512_set1_ps(amp);
+                        /*float ampv1p[16];
+                    float ampv2p[16];
+                    memcpy(ampv1p, &ampv1, sizeof(ampv1p));
+                    memcpy(ampv2p, &ampv2, sizeof(ampv2p));
+                    printf("Amp v1: %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f \n", ampv1p[0],
+                           ampv1p[1],ampv1p[2],ampv1p[3],ampv1p[4], ampv1p[5],ampv1p[6],ampv1p[7],
+                           ampv1p[8],ampv1p[9],ampv1p[10],ampv1p[11],ampv1p[12],ampv1p[13],ampv1p[14],ampv1p[15]
+                        );
+                    printf("Amp v2: %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f \n", ampv2p[0],
+                           ampv2p[1],ampv2p[2],ampv2p[3],ampv2p[4], ampv2p[5],ampv2p[6],ampv2p[7],
+                           ampv2p[8],ampv2p[9],ampv2p[10],ampv2p[11],ampv2p[12],ampv2p[13],ampv2p[14],ampv2p[15]
+                           );*/
                     }
                     int shift = int(cmd->len);
                     if (shift < 16) {
-                        amp_mask1 = _mm512_int2mask(UINT16_MAX >> shift); // len determines where the pulse ought to start.
-                        amp_mask2 = _mm512_int2mask(UINT16_MAX);
+                        //printf("shift: %d\n", shift);
+                        //amp_mask1 = _mm512_int2mask(UINT16_MAX >> shift); // len determines where the pulse ought to start.
+                        //amp_mask2 = _mm512_int2mask(UINT16_MAX);
+                        amp_mask1 = UINT16_MAX << shift;
+                        amp_mask2 = UINT16_MAX;
                     }
                     else {
+                        //printf("shift: %d\n", shift);
                         shift = shift - 16;
-                        amp_mask1 = _mm512_int2mask(0);
-                        amp_mask2 = _mm512_int2mask(UINT16_MAX >> shift);
+                        amp_mask1 = 0;
+                        amp_mask2 = UINT16_MAX << shift;
+                        //amp_mask1 = _mm512_int2mask(0);
+                        //amp_mask2 = _mm512_int2mask(UINT16_MAX >> shift);
                     }
+                    //printf("amp_mask1: %x\n", amp_mask1);
+                    //printf("amp_mask2: %x\n", amp_mask2);
                     amp = cmd->final_val * amp_scale; // This is just for updating the state
                     if (amp > amp_scale) {
                         amp = amp_scale;
                     }
                     const float constamp = amp;
+                    //printf("amp: %f\n", constamp);
                     __m128 ampfinal = _mm_load_ps1(&constamp);
+                    /*float ampv1p[16];
+                    float ampv2p[16];
+                    memcpy(ampv1p, &ampv1, sizeof(ampv1p));
+                    memcpy(ampv2p, &ampv2, sizeof(ampv2p));
+                    printf("Amp v1 before broadcast: %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f \n", ampv1p[0],
+                           ampv1p[1],ampv1p[2],ampv1p[3],ampv1p[4], ampv1p[5],ampv1p[6],ampv1p[7],
+                           ampv1p[8],ampv1p[9],ampv1p[10],ampv1p[11],ampv1p[12],ampv1p[13],ampv1p[14],ampv1p[15]
+                        );
+                    printf("Amp v2 before broadcast: %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f \n", ampv2p[0],
+                           ampv2p[1],ampv2p[2],ampv2p[3],ampv2p[4], ampv2p[5],ampv2p[6],ampv2p[7],
+                           ampv2p[8],ampv2p[9],ampv2p[10],ampv2p[11],ampv2p[12],ampv2p[13],ampv2p[14],ampv2p[15]
+                           );*/
                     ampv1 = _mm512_mask_broadcastss_ps(ampv1, amp_mask1, ampfinal);
                     ampv2 = _mm512_mask_broadcastss_ps(ampv2, amp_mask2, ampfinal);
+                    //ampv1 = ampv1t;
+                    //ampv2 = ampv2t;
+                    //memcpy(ampv1p, &ampv1, sizeof(ampv1p));
+                    //memcpy(ampv2p, &ampv2, sizeof(ampv2p));
+                    /*printf("Amp v1: %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f \n", ampv1p[0],
+                           ampv1p[1],ampv1p[2],ampv1p[3],ampv1p[4], ampv1p[5],ampv1p[6],ampv1p[7],
+                           ampv1p[8],ampv1p[9],ampv1p[10],ampv1p[11],ampv1p[12],ampv1p[13],ampv1p[14],ampv1p[15]
+                        );
+                    printf("Amp v2: %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f \n", ampv2p[0],
+                           ampv2p[1],ampv2p[2],ampv2p[3],ampv2p[4], ampv2p[5],ampv2p[6],ampv2p[7],
+                           ampv2p[8],ampv2p[9],ampv2p[10],ampv2p[11],ampv2p[12],ampv2p[13],ampv2p[14],ampv2p[15]
+                           );*/
                 }
                 else if (likely(cmd->op() == CmdType::AmpFn || cmd->op() == CmdType::AmpVecFn)) {
                     // first time seeing function command
