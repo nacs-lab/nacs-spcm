@@ -666,6 +666,9 @@ cmd_out:
                         amp_mask2 = _mm512_int2mask(UINT16_MAX >> shift);
                     }
                     amp = cmd->final_val * amp_scale; // This is just for updating the state
+                    if (amp > amp_scale) {
+                        amp = amp_scale;
+                    }
                     const float constamp = amp;
                     __m128 ampfinal = _mm_load_ps1(&constamp);
                     ampv1 = _mm512_mask_broadcastss_ps(ampv1, amp_mask1, ampfinal);
