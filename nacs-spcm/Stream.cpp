@@ -609,9 +609,6 @@ cmd_out:
             if (amp + damp > amp_scale) {
                 damp = 0;
             }
-            if (float(df/ 10) > 0 && float(freq/ 10) > 175e6) {
-                printf("t: %lld, freq: %f, df: %f\n", m_cur_t, float(freq/ 10), float(df/ 10));
-            }
             compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), amp, damp);
             /*if (freq != 0) {
                 std::cout << "int64_t " <<typeid(int64_t(2)).name() << std::endl;
@@ -756,9 +753,6 @@ cmd_out:
             }
             if (amp + damp > amp_scale) {
                 damp = 0;
-            }
-            if (float(df/ 10) > 0 && float(freq/ 10) > 175e6) {
-                printf("t: %lld, freq: %f, df: %f\n", m_cur_t, float(freq/ 10), float(df/ 10));
             }
             if (unlikely(ampSet)) {
                 compute_single_chn(v1, v2, float(phase * phase_scale), float(freq * freq_scale), float(df * freq_scale), ampv1, ampv2);
