@@ -332,7 +332,7 @@ private:
     int64_t m_cur_t = 0; // current time for output
     uint64_t m_output_cnt = 0; // output count, units of output_block_sz
 
-    uint64_t output_buf_sz = 32 * 1024ll * 1024ll; // in bytes. Let Streams below it throttle the filling of this buffer.
+    uint64_t output_buf_sz = 512 * 1024ll * 1024ll; // in bytes. Let Streams below it throttle the filling of this buffer.
     uint64_t wait_buf_sz = 8 * 1024ll * 1024ll;
     DataPipe<Cmd> m_commands; // command pipe for writers to put in commands
     DataPipe<int16_t> m_output; // pipe for output and hardware to output
