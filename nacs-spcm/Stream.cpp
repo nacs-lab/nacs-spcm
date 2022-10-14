@@ -383,14 +383,14 @@ StreamBase::consume_old_cmds(State *states)
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerEnd) {
                 //printf("Process trigger end in consume_old_cmds\n");
-                wait_for_seq = true;
+                wait_for_seq.store(true,std::memory_order_relaxed);
                 m_end_trigger_pending = cmd->final_val;
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerStart) {
                 if (!check_start(cmd->t, cmd->final_val)) {
                     return nullptr;
                 }
-                wait_for_seq = false;
+                wait_for_seq.store(false,std::memory_order_relaxed);
             }
             break;
         case CmdType::AmpSet:
@@ -485,14 +485,14 @@ retry:
             else if (cmd->chn == (uint32_t)CmdMeta::TriggerEnd) {
                 //printf("Process trigger end\n");
                 m_end_trigger_pending = cmd->final_val;
-                wait_for_seq = true;
+                wait_for_seq.store(true, std::memory_order_relaxed);
             }
             else if (cmd->chn == (uint32_t)CmdMeta::TriggerStart) {
                 if (!check_start(cmd->t, cmd->final_val)){
                     cmd = nullptr;
                     goto cmd_out;
                 }
-                wait_for_seq = false;
+                wait_for_seq.store(false, std::memory_order_relaxed);
             }
             cmd_next();
             goto retry; // keep on going if it's a meta command
@@ -799,7 +799,7 @@ NACS_EXPORT() void StreamBase::generate_page(State *states)
         if (sz_to_write >= output_block_sz) {
             // If we are not waiting for a sequence, i.e. we are processing a sequence, or we are waiting
             // and the reader is less than wait_buf_sz bytes behind, we break out and generate data
-            if (!wait_for_seq || m_output.check_reader(wait_buf_sz/2)) {
+            if (!wait_for_seq.load(std::memory_order_relaxed) || m_output.check_reader(wait_buf_sz/2)) {
                 break;
             }
         }

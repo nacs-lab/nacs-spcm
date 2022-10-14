@@ -272,7 +272,7 @@ public:
     }
     inline bool is_wait_for_seq() const
     {
-        return wait_for_seq;
+        return wait_for_seq.load(std::memory_order_relaxed);
     }
     uint32_t end_triggered() const
     {
@@ -394,10 +394,10 @@ private:
     //uint32_t m_end_trigger_cnt{0};
     //uint32_t m_start_trigger_cnt{0};
 
-    uint64_t output_buf_sz = 8 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
+    uint64_t output_buf_sz = 32 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
     uint64_t wait_buf_sz = 8 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
     double amp_scale = 6.7465185e9f / 8; // Divide by 8 for safety by default
-    bool wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
+    std::atomic<bool> wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     DataPipe<Cmd> m_commands;
     DataPipe<int16_t> m_output;
     std::vector<activeCmd*> active_cmds;
