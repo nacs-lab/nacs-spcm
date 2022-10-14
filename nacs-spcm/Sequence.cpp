@@ -110,10 +110,10 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
         return p1.id < p2.id;
     });
     seq_len = seq_len * 625 / (32e6);
-    printf("Now printing cmds\n");
-    for (int i = 0; i < cmds.size(); i++) {
-        std::cout << cmds[i] << std::endl;
-    }
+    //printf("Now printing cmds\n");
+    //for (int i = 0; i < cmds.size(); i++) {
+    //    std::cout << cmds[i] << std::endl;
+    //}
     return cmds;
 }
 
