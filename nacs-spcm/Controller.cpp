@@ -92,6 +92,7 @@ NACS_EXPORT() void Controller::stopWorker()
         }
         //stopCard();
         m_worker.join();
+        m_output_cnt.store(0, std::memory_order_relaxed);
     }
     printf("StopWorker finished\n");
 }
