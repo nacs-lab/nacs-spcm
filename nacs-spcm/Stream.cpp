@@ -341,7 +341,7 @@ inline bool StreamBase::check_start(int64_t t, uint32_t id)
             goto not_yet;
         }
         else if (time_offset() + global_time > trigger_time) {
-            printf("Noticed trigger too late\n");
+            printf("Noticed trigger too late %lu, controller_cnt: %lu\n", time_offset() + global_time, m_stm_mngr.getControllerOutputCnt());
             // request card restart which will also notify the client of the bad sequence.
             reqRestart(id);
         }
@@ -799,9 +799,18 @@ NACS_EXPORT() void StreamBase::generate_page(State *states)
         if (sz_to_write >= output_block_sz) {
             // If we are not waiting for a sequence, i.e. we are processing a sequence, or we are waiting
             // and the reader is less than wait_buf_sz bytes behind, we break out and generate data
-            if (!wait_for_seq.load(std::memory_order_relaxed) || m_output.check_reader(wait_buf_sz/2)) {
+            if (!wait_for_seq.load(std::memory_order_relaxed)) {
                 break;
             }
+            else{
+                uint64_t diff = m_output_cnt - m_stm_mngr.getControllerOutputCnt();
+                if (diff < 0)
+                    std::cout << "diff less than 0" << std::endl;
+                if (diff < (wait_buf_sz / (2 * 32) - output_block_sz / 32) && diff >= 0){
+                    break;
+                }
+            }
+            //std::cout << "Throttling" << std::endl;
         }
         if (sz_to_write > 0) {
             m_output.sync_writer();

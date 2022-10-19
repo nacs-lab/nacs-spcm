@@ -28,6 +28,10 @@ bool StreamManagerBase::reqRestart(uint32_t trig_id) {
     m_ctrl.reqRestart(trig_id);
     return true;
 }
+uint64_t StreamManagerBase::getControllerOutputCnt()
+{
+    return m_ctrl.getOutputCnt();
+}
 
 inline const Cmd *StreamManagerBase::get_cmd()
 {
@@ -273,9 +277,9 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
         size_t sz_to_write;
         out_ptr = m_output.get_write_ptr(&sz_to_write);
         if (sz_to_write >= output_block_sz) {
-            if (!is_wait_for_seq() || m_output.check_reader(wait_buf_sz/2)) {
+            //if (!is_wait_for_seq() || m_output.check_reader(wait_buf_sz/2)) {
                 break;
-            }
+                //}
         }
         if (sz_to_write > 0) {
             m_output.sync_writer();

@@ -129,7 +129,7 @@ namespace Spcm{
               }
               stopCard();
               resetStmManagers();
-              m_output_cnt = 0;
+              m_output_cnt.store(0, std::memory_order_release);
               n_restarts++; // Incrementing this is the key for letting all players know of a card restart.
               printf("Attempting card restart %u...\n", n_restarts);
               std::this_thread::sleep_for(std::chrono::milliseconds(1000));
@@ -188,6 +188,9 @@ namespace Spcm{
           void distribute_cmds(uint32_t idx)
           {
               m_stm_mngrs[idx]->distribute_cmds();
+          }
+          inline uint64_t getOutputCnt(){
+              return m_output_cnt.load(std::memory_order_acquire);
           }
           inline uint32_t getMaxChn(uint32_t idx) {
               return max_chns[idx];
@@ -249,7 +252,7 @@ namespace Spcm{
                   return true;
               }
               TrigInfo &info = m_trig_map[v];
-              if (m_output_cnt >= info.trigger_t + info.len) {
+              if (m_output_cnt.load(std::memory_order_relaxed) >= info.trigger_t + info.len) {
                   if (v) {
                       m_trig_map.erase(v);
                       printf("Erasing trigger %u\n", v);
@@ -273,7 +276,7 @@ namespace Spcm{
           }
           inline void set_trig_to_now(uint32_t v, uint64_t delay) {
               TrigInfo &info = m_trig_map[v];
-              info.trigger_t = m_output_cnt + delay;
+              info.trigger_t = m_output_cnt.load(std::memory_order_relaxed) + delay;
           }
       private:
           enum class WorkerRequest : uint8_t {
@@ -324,7 +327,7 @@ namespace Spcm{
           uint32_t n_restarts = 0;
           Server &m_serv;
           std::atomic<bool> m_wait_req{true};
-          uint64_t m_output_cnt = 0;
+          std::atomic<uint64_t> m_output_cnt = 0;
           std::map<uint32_t, TrigInfo> m_trig_map;
           uint32_t restart_id = 0; // keeps track of start_trigger that requested a restart (for triggers that are noticed too late)
           uint32_t last_trig_id = 0; // last finished trig id

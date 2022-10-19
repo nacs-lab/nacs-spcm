@@ -516,7 +516,7 @@ void Controller::workerFunc()
             (*m_stm_mngrs[m_out_chns[i]]).consume_output(count / 2 / n_phys_chn);
         }
         //printf("m_output_cnt, controller: %lu\n", m_output_cnt);
-        m_output_cnt += count / 2 / n_phys_chn / 32; // stream times are in units of 32 samples
+        m_output_cnt.fetch_add(count / 2 / n_phys_chn / 32, std::memory_order_acq_rel); // stream times are in units of 32 samples
         //if (!DMA_started) {
         //    printf("card avail: %lu \n", check_avail());
         //}
