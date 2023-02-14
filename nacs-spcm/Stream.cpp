@@ -805,9 +805,9 @@ NACS_EXPORT() void StreamBase::generate_page(State *states)
             else{
                 uint64_t diff = m_output_cnt - m_stm_mngr.getControllerOutputCnt();
                 //if (diff < 0)
-                //std::cout << "diff less than 0" << std::endl;
+                    //std::cout << "diff less than 0" << std::endl;
                 if (diff < (wait_buf_sz / (2 * 32) - output_block_sz / 32) && diff >= 0){
-                break;
+                    break;
                 }
             }
             //std::cout << "Throttling" << std::endl;
