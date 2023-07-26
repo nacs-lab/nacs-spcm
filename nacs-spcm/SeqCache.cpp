@@ -7,7 +7,8 @@ using namespace NaCs;
 
 namespace Spcm {
 
-Sequence invalid_seq{nullptr, std::vector<Type>(), false};
+Config invalid_conf;
+Sequence invalid_seq{invalid_conf, nullptr, std::vector<Type>(), false};
 
 template <typename T>
 static inline size_t entrySize(const T &entry)
@@ -45,8 +46,9 @@ static inline void bypassData(const uint8_t* &msg_bytes, uint32_t &sz) {
     }
 }
 
-NACS_EXPORT() SeqCache::SeqCache(size_t szlim) :
-m_szlim(szlim)
+NACS_EXPORT() SeqCache::SeqCache(size_t szlim, Config &conf) :
+m_szlim(szlim),
+m_conf(conf)
 {
 }
 
@@ -466,7 +468,7 @@ NACS_EXPORT() void SeqCache::TotSequence::addPulse(uint32_t enabled, uint32_t id
     //bool res = false;
     while (phys_chn >= seqs.size()) {
         //printf("types size: %u", types.size());
-        seqs.emplace_back(values, types, true);
+        seqs.emplace_back(m_cache.m_conf, values, types, true);
 //res = true;
     }
     //printf("types size after: %u", seqs[phys_chn].m_types.size());

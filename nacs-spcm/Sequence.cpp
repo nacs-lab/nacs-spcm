@@ -10,16 +10,18 @@
     void(*fnptr)(void) = nullptr; // function pointer */
 
 #include "Sequence.h"
+//#include "Config.h"
 #include <cassert>
 
 using namespace NaCs;
 
 namespace Spcm {
 
-NACS_EXPORT() Sequence::Sequence(Value* values, std::vector<Type> types, bool is_valid) :
+NACS_EXPORT() Sequence::Sequence(Config &conf, Value* values, std::vector<Type> types, bool is_valid) :
                        m_values(values),
                        m_types(types),
-                       m_is_valid(is_valid)
+m_is_valid(is_valid),
+m_conf(conf)
 {
 }
 
@@ -58,7 +60,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
             continue;
         }
         t = get_time(pulses[i].t_start);
-        t_sample = t * 625 / 1e6; // t / 1e12 * 625e6
+        t_sample = t / 1e12 * m_conf.sample_rate; // t / 1e12 * 625e6
         if (pulses[i].len == uint32_t(-1))
         {
             // May be a AmpSet pulse
@@ -71,7 +73,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
         }
         else
         {
-            len = get_value(pulses[i].len) * 625/ (32e6); // convert to AWG time
+            len = get_value(pulses[i].len) / (32 * 1e12) * m_conf.sample_rate; // convert to AWG time
         }
         final_val = get_value(pulses[i].endvalue);
         //printf("v%i: %f\n", i, final_val);
@@ -109,7 +111,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
             return false;
         return p1.id < p2.id;
     });
-    seq_len = seq_len * 625 / (32e6);
+    seq_len = seq_len / (32 * 1e12) * m_conf.sample_rate;
     //printf("Now printing cmds\n");
     for (int i = 0; i < cmds.size(); i++) {
         std::cout << cmds[i] << std::endl;

@@ -6,6 +6,7 @@
 #include "Stream.h"
 #include "Sequence.h"
 #include "IDataCache.h"
+#include "Config.h"
 
 #include <nacs-utils/ir.h>
 
@@ -66,7 +67,7 @@ public:
         friend class SeqCache;
     };
 
-    SeqCache(size_t szlim);
+    SeqCache(size_t szlim, Config &conf);
     bool getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry, bool is_seq_sent);
     bool getAndFill(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry);
     bool get(uint64_t client_id, uint64_t seq_id, const uint8_t* &msg_bytes, uint32_t &sz, Entry* &entry);
@@ -74,7 +75,7 @@ public:
     bool hasSeq(uint64_t client_id, uint64_t seq_id);
 
     //const static Sequence invalid_seq{nullptr, std::vector<Type>(), false};
-
+    Config &m_conf;
 private:
     //Sequence invalid_seq{nullptr, std::vector<Type>(), false};
     bool ejectOldest();

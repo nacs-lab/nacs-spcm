@@ -4,6 +4,7 @@
 #define _NACS_SPCM_SEQ_H
 
 #include "Stream.h"
+#include "Config.h"
 #include <algorithm>
 //#include "TotSequence.h"
 
@@ -26,7 +27,7 @@ union Value {
 
 struct Sequence {
 public:
-    Sequence(Value* values, std::vector<Type> types, bool is_valid);
+    Sequence(Config &conf, Value* values, std::vector<Type> types, bool is_valid);
     Sequence(Sequence&&) = default;
     //uint64_t obj_id;
     //uint32_t nconsts;
@@ -46,6 +47,7 @@ public:
     double get_value(uint32_t idx) const;
     int64_t get_time(uint32_t idx) const;
     bool get_enabled(uint32_t idx) const;
+    Config &m_conf;
 private:
     struct Pulse {
         uint32_t enabled; // whether pulse is enabled or not. also an index into value array.

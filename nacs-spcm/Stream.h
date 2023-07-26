@@ -5,6 +5,7 @@
 
 #include <nacs-utils/thread.h>
 #include <nacs-utils/mem.h>
+#include "Config.h"
 
 #include <complex>
 #include <atomic>
@@ -56,7 +57,7 @@ enum class CmdMeta : uint32_t
 // phase_scale is 2 / (625e6 * 10). We take the integer phase and multiply itby
 // phase_scale to get the actual phase in units of pi. 625e6 * 10 is the max possible frequency.
 
-constexpr uint64_t t_serv_to_client = 32/(625e6) * 1e12; // converts to client time standard which is in ps.
+//constexpr uint64_t t_serv_to_client = 32/(625e6) * 1e12; // converts to client time standard which is in ps.
 
 struct Cmd
 {
@@ -177,7 +178,10 @@ struct activeCmd {
 // structure to keep track of commands that span longer times
     const Cmd* m_cmd;
     //std::vector<float> vals; // precalculated values
-    activeCmd(const Cmd* cmd) : m_cmd(cmd) {
+    activeCmd(const Cmd* cmd, double t) :
+        m_cmd(cmd),
+        t_serv_to_client(double(t))
+    {
         ramp_func = cmd->fnptr;
         if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn) {
             is_vec = true;
@@ -195,6 +199,7 @@ struct activeCmd {
             }*/
     }
     std::pair<double,double> eval(int64_t t); // called with server t convention
+    double t_serv_to_client = 1;
     int64_t time_base = 0; // in server times
     int64_t nsteps = 0;
     double buffer[8] __attribute__((aligned(64)));
@@ -339,15 +344,21 @@ protected:
     void generate_page(State *states); //workhorse, takes a vector of states for the channels
     void step(int16_t *out, State *states); // workhorse function to step to next time
     const Cmd *get_cmd();
-    StreamBase(StreamManagerBase &stm_mngr, double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num) :
+    StreamBase(StreamManagerBase &stm_mngr, Config &conf, double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow, std::atomic<uint64_t> &underflow, uint32_t stream_num) :
         m_stm_mngr(stm_mngr),
+        m_conf(conf),
         m_step_t(step_t),
         amp_scale(amp_scale),
         m_cmd_underflow(cmd_underflow),
         m_underflow(underflow),
         m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
         m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2),
-        m_stream_num(stream_num)
+        m_stream_num(stream_num),
+        max_phase(uint64_t(conf.sample_rate * 10)),
+        phase_scale(2/double(max_phase)),
+        phase_scale_client(conf.sample_rate * 10),
+        freq_scale(0.1/(conf.sample_rate/32)),
+        m_t_serv_to_client(32.0f/conf.sample_rate * 1e12)
     {
     }
 private:
@@ -382,12 +393,18 @@ private:
     uint32_t m_chns = 0;
     int64_t m_cur_t = 0;
     uint64_t m_output_cnt = 0; // in unit of 8 bytes, or 32 samples (each sample 2 bits)
+    uint64_t max_phase;
+    double phase_scale;
+    double phase_scale_client;
+    double freq_scale;
+    double m_t_serv_to_client;
     const double m_step_t;
     const Cmd *m_cmd_read_ptr = nullptr;
     size_t m_cmd_read = 0;
     size_t m_cmd_max_read = 0;
     std::atomic<uint64_t> &m_cmd_underflow;
     std::atomic<uint64_t> &m_underflow;
+    Config &m_conf;
     // Members accessed by the command generation thread
     Cmd *m_cmd_write_ptr __attribute__ ((aligned(64))) = nullptr; //location to write commands to
     size_t m_cmd_wrote = 0;
@@ -416,9 +433,9 @@ private:
 
 template<uint32_t max_chns = 128>
 struct Stream : StreamBase {
-    Stream(StreamManagerBase& stm_mngr, double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
+    Stream(StreamManagerBase& stm_mngr, Config &conf, double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
            std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true)
-        : StreamBase(stm_mngr, step_t, amp_scale, cmd_underflow, underflow, stream_num)
+        : StreamBase(stm_mngr, conf, step_t, amp_scale, cmd_underflow, underflow, stream_num)
     {
         if (start) {
             start_worker();

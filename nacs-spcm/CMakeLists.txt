@@ -6,10 +6,6 @@ set(nacs_spcm_HDRS
   StreamManager.h
   Config.h
   Controller.h
-  DummyController.h
-  DummyServer.h
-  DummyStream.h
-  DummyStreamManager.h
   SeqCache.h
   IDataCache.h
   Sequence.h
@@ -17,6 +13,10 @@ set(nacs_spcm_HDRS
   Server.h
   Trigger.h
   clock.h)
+#DummyController.h
+#DummyServer.h
+#DummyStream.h
+#DummyStreamManager.h
 set(nacs_spcm_SRCS
   spcm.cpp
   data_stream.cpp
@@ -24,18 +24,19 @@ set(nacs_spcm_SRCS
   StreamManager.cpp
   Config.cpp
   Controller.cpp
-  DummyController.cpp
-  DummyServer.cpp
-  DummyStream.cpp
-  DummyStreamManager.cpp
   SeqCache.cpp
   IDataCache.cpp
   Sequence.cpp
   SerialPort.cpp
   Server.cpp
   Trigger.cpp)
+#DummyController.cpp
+#DummyServer.cpp
+#DummyStream.cpp
+#DummyStreamManager.cpp
 set(nacs_spcm_LINKS ${SLEEF_LIBRARIES} ${SPCM_LIBRARIES} ${DEPS_LIBRARIES})
-set_source_files_properties(data_stream.cpp DummyStream.cpp DummyStreamManager.cpp Stream.cpp StreamManager.cpp Controller.cpp SeqCache.cpp IDataCache.cpp Sequence.cpp Server.cpp
+#DummyStream.cpp DummyStreamManager.cpp
+set_source_files_properties(data_stream.cpp Stream.cpp StreamManager.cpp Controller.cpp SeqCache.cpp IDataCache.cpp Sequence.cpp Server.cpp
   PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")
 add_definitions("-\"DNACS_EXPORT_LIB_spcm()=\"")
 message(" llvm: ${LLVM_DEFINITIONS}")

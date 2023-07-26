@@ -41,6 +41,8 @@ namespace Spcm{
                   bool startWorker = false) */
               // hard coded amp_scales
               double amp_scales[4] = {6.7465185e9f / 8, 6.7465185e9f / 8, 6.7465185e9f, 6.7465185e9f};
+              // hard coded stream numbers per phys channel
+              uint32_t n_streams[4] = {4,1,1,1};
               auto phys_chn = out_chns.size();
               if (phys_chn != 1 && phys_chn != 2)
               {
@@ -55,8 +57,8 @@ namespace Spcm{
                   }
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
-                      m_stm_mngrs.emplace_back(new StreamManager(*this, 1, 2, 1, amp_scales[i], cmd_underflow, cmd_underflow, false));
-                      max_chns.push_back(2);
+                      m_stm_mngrs.emplace_back(new StreamManager(*this, m_conf, n_streams[i], 4, 1, amp_scales[i], cmd_underflow, cmd_underflow, false));
+                      max_chns.push_back(32);
                   }
               }
           }
@@ -210,7 +212,7 @@ namespace Spcm{
                       return true;
                   }
                   else {
-                      // for non buffer overrun, for now, do not handle and just throw
+// for non buffer overrun, for now, do not handle and just throw
                       // TODO add code maybe to deal with all waiters on the server before exiting
                       throw;
                   }
@@ -299,8 +301,8 @@ namespace Spcm{
           std::thread m_worker; // worker for relaying data to card
           int16_t* buff_ptr; // buffer pointer for spcm
           size_t buff_pos; // position for the output buffer
-          uint64_t buff_sz_nele{8 * 1024ll * 1024ll / 2}; // 2/2 //4 factor of 4 1 channel output latency of 6.71 ms. Software buffer size
-          uint64_t hw_buff_sz_nele{2 * 1024ll * 1024ll}; // 1 //2 1 channel output latency of 1.67 ms. Hardware buffer size number of elements
+          uint64_t buff_sz_nele{32 * 1024ll * 1024ll / 2}; // 2/2 //4 factor of 4 1 channel output latency of 6.71 ms. Software buffer size
+          uint64_t hw_buff_sz_nele{8 * 1024ll * 1024ll}; // 1 //2 1 channel output latency of 1.67 ms. Hardware buffer size number of elements
           bool DMA_started{false};
 
           NaCs::Spcm::Spcm hdl{"/dev/spcm0"}; //Spcm handle

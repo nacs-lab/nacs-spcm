@@ -30,14 +30,14 @@ static NACS_INLINE void accum_nonzero(T &out, T in, float s)
     out += in * s;
 }
 
-constexpr long long int sample_rate = 625ll * 1000000ll;
+//constexpr long long int sample_rate = 625ll * 1000000ll;
 constexpr int cycle = 1024/32;
 
-constexpr uint64_t max_phase = uint64_t(sample_rate * 10);
-constexpr double phase_scale = 2 / double(max_phase); // convert from "phase_cnt" which is tracked by state.phase to phase in units of pi radians that compute_single_chn wants.
-constexpr double phase_scale_client = 625e7; // converts from 0 to 1 scale to phase_cnt
+//constexpr uint64_t max_phase = uint64_t(sample_rate * 10);
+//constexpr double phase_scale = 2 / double(max_phase); // convert from "phase_cnt" which is tracked by state.phase to phase in units of pi radians that compute_single_chn wants.
+//constexpr double phase_scale_client = 625e7; // converts from 0 to 1 scale to phase_cnt
 constexpr double freq_scale_client = 10; // converts from real frequency to freq_cnt.
-constexpr double freq_scale = 0.1 / (sample_rate / 32); // 1 cycle in 32 samples at 625 MHz sampling rate. Converts a frequency at 10 times the real frequency, hence the 0.1.
+//constexpr double freq_scale = 0.1 / (sample_rate / 32); // 1 cycle in 32 samples at 625 MHz sampling rate. Converts a frequency at 10 times the real frequency, hence the 0.1.
 //constexpr double amp_scale = 6.7465185e9f / 8;
 
 //__m512 is a vector type that can hold 16 32 bit floats
@@ -404,7 +404,7 @@ StreamBase::consume_old_cmds(State *states)
             // cmd pointer only increments. Should be safe to initialize an active command here
             if (cmd->t + cmd->len > m_cur_t) {
                 // command still active
-                active_cmds.push_back(new activeCmd(cmd));
+                active_cmds.push_back(new activeCmd(cmd, m_t_serv_to_client));
                 std::pair<double, double> these_vals;
                 these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                 states[cmd->chn].amp = (these_vals.first + these_vals.second) * amp_scale;
@@ -417,7 +417,7 @@ StreamBase::consume_old_cmds(State *states)
         case CmdType::FreqVecFn:
             if (cmd->t + cmd->len > m_cur_t) {
                 // command still active
-                active_cmds.push_back(new activeCmd(cmd));
+                active_cmds.push_back(new activeCmd(cmd, m_t_serv_to_client));
                 std::pair<double, double> these_vals;
                 these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                 states[cmd->chn].freq = uint64_t(these_vals.first + these_vals.second) * freq_scale_client;
@@ -639,7 +639,7 @@ cmd_out:
                     // first time seeing function command
                     if (cmd->t + cmd->len > m_cur_t) {
                         // command still active
-                        active_cmds.push_back(new activeCmd(cmd));
+                        active_cmds.push_back(new activeCmd(cmd, m_t_serv_to_client));
                         std::pair<float, float> these_vals;
                         these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                         freq = uint64_t(these_vals.first) * freq_scale_client;
@@ -724,7 +724,7 @@ cmd_out:
                     // first time seeing function command
                     if (cmd->t + cmd->len > m_cur_t) {
                         // command still active
-                        active_cmds.push_back(new activeCmd(cmd));
+                        active_cmds.push_back(new activeCmd(cmd, m_t_serv_to_client));
                         std::pair<double, double> these_vals;
                         these_vals = active_cmds.back()->eval(m_cur_t - cmd->t);
                         amp = these_vals.first * amp_scale;
