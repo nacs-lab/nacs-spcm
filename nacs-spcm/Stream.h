@@ -413,7 +413,7 @@ private:
     //uint32_t m_start_trigger_cnt{0};
 
     uint64_t output_buf_sz = 256 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
-    uint64_t wait_buf_sz = 4 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
+    uint64_t wait_buf_sz = 4 * 1024ll * 1024ll; // 4 buffer size during waiting periods, not during a sequence
     double amp_scale = 6.7465185e9f / 8; // Divide by 8 for safety by default
     std::atomic<bool> wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     DataPipe<Cmd> m_commands;

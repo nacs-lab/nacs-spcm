@@ -175,7 +175,7 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
     const Cmd *cmd;
     Cmd var_cmd; // non const command
     std::vector<Cmd> non_const_cmds; // non constant commands
-    non_const_cmds.reserve(100);
+    non_const_cmds.reserve(1024);
     Cmd *first_cmd = nullptr;// first_cmd is first cmd in a group to send
     int64_t t = 0;
     size_t sz_to_send = 0;
