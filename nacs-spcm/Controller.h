@@ -115,6 +115,7 @@ namespace Spcm{
           }
           inline void restartCard(bool from_worker) {
               reqWait(); // stop sequences from proceeding
+              from_worker = false; //hacky, want to make sure worker is always restarted
               if (!from_worker)
                   stopWorker();
               else {
