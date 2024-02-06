@@ -26,6 +26,10 @@ NACS_EXPORT() Config Config::loadYAML(const char *fname)
         conf.trig_delay = uint64_t(trig_node.as<double>() * conf.sample_rate / (32 * 1e3)); // units of stream times
     if (auto clock_node = file["clock_cycle_factor"])
         conf.ext_clock_cycle_factor = uint64_t(clock_node.as<double>());
+    if (auto b_ext_clock = file["b_ext_clock"])
+        conf.b_ext_clock = b_ext_clock.as<bool>();
+    if (auto ext_clock_node = file["ext_clock_mhz"])
+        conf.ext_clock = ext_clock_node.as<int64_t>() * 1e6;
     if (conf.sample_rate  > 71.68e6) {
         conf.clock_factor = 8 * conf.ext_clock_cycle_factor;
     }

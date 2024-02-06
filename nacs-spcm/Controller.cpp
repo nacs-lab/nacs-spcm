@@ -123,10 +123,18 @@ NACS_EXPORT() void Controller::runSeq(uint32_t idx, Cmd *p, size_t sz, bool wait
 
 void Controller::init()
 {
+    int64_t ext_clock = m_conf.ext_clock;
+    bool b_ext_clock = m_conf.b_ext_clock;
     //hdl.ch_enable(CHANNEL0); // only one channel activated
     //hdl.enable_out(0, true);
     //hdl.set_amp(0, 2500);
-    hdl.set_param(SPC_CLOCKMODE, SPC_CM_INTPLL);
+    if (b_ext_clock) {
+        hdl.set_param(SPC_CLOCKMODE, SPC_CM_EXTREFCLOCK);
+        hdl.set_param(SPC_REFERENCECLOCK, ext_clock);
+    }
+    else{
+        hdl.set_param(SPC_CLOCKMODE, SPC_CM_INTPLL);
+    }
     hdl.set_param(SPC_CARDMODE, SPC_REP_FIFO_SINGLE); // set the FIFO single replay mode
     hdl.write_setup();
     // starting with firmware version V9 we can program the hardware
@@ -147,8 +155,6 @@ void Controller::init()
 
     int64_t rate = m_conf.sample_rate;//int64_t(625e6);
     // hdl.set_param(SPC_CLOCKMODE, SPC_CM_INTPLL);
-    // hdl.set_param(SPC_CLOCKMODE, SPC_CM_EXTREFCLOCK);
-    // hdl.set_param(SPC_REFERENCECLOCK, 100 * 1000 * 1000);
 
     hdl.set_param(SPC_SAMPLERATE, rate);
     hdl.get_param(SPC_SAMPLERATE, &rate);
