@@ -36,6 +36,11 @@ target_link_libraries(test-output_kw2 nacs-utils nacs-spcm)
 set_source_files_properties(test_output_kw2.cpp
   PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")
 
+add_executable(test-6536 test_6536.cpp)
+target_link_libraries(test-6536 nacs-utils nacs-spcm)
+set_source_files_properties(test_6536.cpp
+  PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")
+
 add_executable(test-output_kw_add_int test_output_kw_add_int.cpp)
 target_link_libraries(test-output_kw_add_int nacs-utils nacs-spcm)
 set_source_files_properties(test_output_kw_add_int.cpp
