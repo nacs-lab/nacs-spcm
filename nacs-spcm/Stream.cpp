@@ -340,11 +340,11 @@ inline bool StreamBase::check_start(int64_t t, uint32_t id)
             //printf("not yet after receiving trigger\n");
             goto not_yet;
         }
-        else if (time_offset() + global_time > trigger_time) {
+        /*else if (time_offset() + global_time > trigger_time) {
             printf("Noticed trigger too late %lu, controller_cnt: %lu\n", time_offset() + global_time, m_stm_mngr.getControllerOutputCnt());
             // request card restart which will also notify the client of the bad sequence.
             reqRestart(id);
-        }
+            }*/ //TODO fix this
     }
     m_slow_mode.store(false, std::memory_order_relaxed);
     //printf("Processed trigger\n");

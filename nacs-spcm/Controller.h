@@ -40,7 +40,7 @@ namespace Spcm{
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false) */
               // hard coded amp_scales
-              double amp_scales[4] = {6.7465185e9f / 8, 6.7465185e9f / 8, 6.7465185e9f, 6.7465185e9f};
+              double amp_scales[4] = {6.7465185e9f, 6.7465185e9f, 6.7465185e9f, 6.7465185e9f};
               // hard coded stream numbers per phys channel
               uint32_t n_streams[4] = {4,1,1,1};
               auto phys_chn = out_chns.size();
