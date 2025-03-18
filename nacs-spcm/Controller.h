@@ -49,9 +49,9 @@ namespace Spcm{
                 hw_buff_sz_nele = 2 * 1024ll * 1024ll;
               }
 
-              double amp_scales[4] = {6.7465185e9f / 8, 6.7465185e9f / 8, 6.7465185e9f, 6.7465185e9f};
+              double amp_scales[2] = {6.7465185e9f / 8, 6.7465185e9f};
               // hard coded stream numbers per phys channel
-              uint32_t n_streams[4] = {4,1,1,1};
+              uint32_t n_streams[2] = {4,1};
               auto phys_chn = out_chns.size();
               if (phys_chn != 1 && phys_chn != 2)
               {
@@ -60,7 +60,7 @@ namespace Spcm{
               else {
                   n_phys_chn = phys_chn;
                   for (int i = 0; i < phys_chn; i++) {
-                      if (out_chns[i] > 3 || out_chns[i] < 0) {
+                      if (out_chns[i] > n_card_chn - 1 || out_chns[i] < 0) {
                           throw std::runtime_error("Invalid output channel");
                       }
                   }
@@ -327,7 +327,7 @@ namespace Spcm{
 
           uint8_t n_phys_chn{1}; // only supports 1 or 2.
           std::vector<uint8_t> m_out_chns; // output channel when n_phys_chn = 1, otherwise ignored
-          const uint8_t n_card_chn = 4; // number of channels on card. hard coded
+          const uint8_t n_card_chn = 2; // number of channels on card. hard coded
           uint32_t m_start_trigger_cnt{0};
           uint32_t m_end_trigger_cnt{0};
           uint64_t counter = 0;
