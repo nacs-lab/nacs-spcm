@@ -40,6 +40,15 @@ namespace Spcm{
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false) */
               // hard coded amp_scales
+              if (m_conf.trig_delay_ms > 25) {
+                buff_sz_nele = 32 * 1024ll * 1024ll / 2;
+                hw_buff_sz_nele = 8 * 1024ll * 1024ll;
+              }
+              else {
+                buff_sz_nele = 8 * 1024ll * 1024ll / 2;
+                hw_buff_sz_nele = 2 * 1024ll * 1024ll;
+              }
+
               double amp_scales[4] = {6.7465185e9f / 8, 6.7465185e9f / 8, 6.7465185e9f, 6.7465185e9f};
               // hard coded stream numbers per phys channel
               uint32_t n_streams[4] = {4,1,1,1};
@@ -301,6 +310,7 @@ namespace Spcm{
           std::thread m_worker; // worker for relaying data to card
           int16_t* buff_ptr; // buffer pointer for spcm
           size_t buff_pos; // position for the output buffer
+          // Note, these buffer sizes will be rewritten in the constructor
           uint64_t buff_sz_nele{32 * 1024ll * 1024ll / 2}; // 8 // 2/2 //4 factor of 4 1 channel output latency of 6.71 ms. Software buffer size
           uint64_t hw_buff_sz_nele{8 * 1024ll * 1024ll};  // 2// 1 //2 1 channel output latency of 1.67 ms. Hardware buffer size number of elements
           bool DMA_started{false};

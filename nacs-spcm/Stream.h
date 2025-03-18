@@ -360,6 +360,12 @@ protected:
         freq_scale(0.1/(conf.sample_rate/32)),
         m_t_serv_to_client(32.0f/conf.sample_rate * 1e12)
     {
+        if (m_conf.trig_delay_ms > 25) {
+            wait_buf_sz = 32 * 1024ll * 1024ll;
+        }
+        else {
+            wait_buf_sz = 4 * 1024ll * 1024ll;
+        }
     }
 private:
     inline bool probe_cmd_input()
@@ -413,6 +419,7 @@ private:
     //uint32_t m_start_trigger_cnt{0};
 
     uint64_t output_buf_sz = 256 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
+    // This wait_buf_sz will be overwritten in the constructor
     uint64_t wait_buf_sz = 32 * 1024ll * 1024ll; // 4 buffer size during waiting periods, not during a sequence
     double amp_scale = 6.7465185e9f / 8; // Divide by 8 for safety by default
     std::atomic<bool> wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
