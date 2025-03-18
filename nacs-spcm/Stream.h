@@ -360,7 +360,7 @@ protected:
         freq_scale(0.1/(conf.sample_rate/32)),
         m_t_serv_to_client(32.0f/conf.sample_rate * 1e12)
     {
-        if (m_conf.trig_delay_ms > 25) {
+        if (m_conf.trig_delay_ms > 30) {
             wait_buf_sz = 32 * 1024ll * 1024ll;
         }
         else {

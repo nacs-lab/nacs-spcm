@@ -187,31 +187,34 @@ void Controller::initChnsAndBuffer()
         stopCard();
     //first_start.store(false, std::memory_order_relaxed);
     uint8_t chn_bits = 0;
+    for (int i = 0; i < m_out_chns.size(); i++) {
+        printf("Vector: %u\n", m_out_chns[i]);
+    }
     for (int i = 0; i < n_phys_chn; i++) {
         if (m_out_chns[i] == 0) {
             chn_bits = chn_bits | CHANNEL0;
             hdl.enable_out(0, true);
-            hdl.set_amp(0, 2500);
+            hdl.set_amp(0, m_conf.amp);
             hdl.set_param(SPC_FILTER0, 0);
         }
         else if (m_out_chns[i] == 1) {
             chn_bits = chn_bits | CHANNEL1;
             hdl.enable_out(1, true);
-            hdl.set_amp(1, 2500);
+            hdl.set_amp(1, m_conf.amp);
             hdl.set_param(SPC_FILTER1, 0);
         }
         else if (m_out_chns[i] == 2) {
             chn_bits = chn_bits | CHANNEL2;
             hdl.enable_out(2, true);
-            hdl.set_amp(2, 2500);
+            hdl.set_amp(2, m_conf.amp);
             hdl.set_param(SPC_FILTER2, 0);
         }
         else if (m_out_chns[i] == 3) {
             chn_bits = chn_bits | CHANNEL3;
             hdl.enable_out(3, true);
-            hdl.set_amp(3, 2500);
+            hdl.set_amp(3, m_conf.amp);
             hdl.set_param(SPC_FILTER3, 0);
-        }
+            }
     }
     hdl.ch_enable(chn_bits);
     // set up hardware buffer

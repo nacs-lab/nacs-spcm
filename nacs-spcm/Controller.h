@@ -40,13 +40,13 @@ namespace Spcm{
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false) */
               // hard coded amp_scales
-              if (m_conf.trig_delay_ms > 25) {
+              if (m_conf.trig_delay_ms > 30) {
                 buff_sz_nele = 32 * 1024ll * 1024ll / 2;
                 hw_buff_sz_nele = 8 * 1024ll * 1024ll;
               }
               else {
-                buff_sz_nele = 8 * 1024ll * 1024ll / 2;
-                hw_buff_sz_nele = 2 * 1024ll * 1024ll;
+                  buff_sz_nele = 4 * 1024ll * 1024ll / 2; // These hardware buffers assume one output channel
+                hw_buff_sz_nele = 1 * 1024ll * 1024ll;
               }
 
               double amp_scales[2] = {6.7465185e9f / 8, 6.7465185e9f};
