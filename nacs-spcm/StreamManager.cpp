@@ -64,7 +64,7 @@ inline void StreamManagerBase::send_cmd_to_all(const Cmd &cmd)
 
 template<typename T> inline void StreamManagerBase::sort_cmd_chn(T begin, T end)
 {
-    // sort amp and freq commands by stream number and then by id within that channel
+    // sort amp and freq commands by stream number and then by id within that stream
     return std::sort(begin, end, [this] (auto &p1, auto &p2) {
             std::pair<uint32_t, uint32_t> chn_info1, chn_info2;
             chn_info1 = chn_map.ChnToStream(p1.chn);
@@ -96,13 +96,8 @@ inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
 {
     // input are commands at a given time. They will be sorted and then distributed to the right streams. Assumes inputs are only amp and freq commands
     if (sz) {
-        for (int i = 0; i < sz; ++i) {
-            //std::cout << "Considering inside send_cmds before sort " << cmd[i] << std::endl;
-        }
         sort_cmd_chn(cmd, cmd + sz);
-        for (int i = 0; i < sz; ++i) {
-            //std::cout << "Considering inside send_cmds " << cmd[i] << std::endl;
-        }/*
+        /*
         uint32_t stream_idx = 0;
         uint32_t tot = 0;
         uint32_t loc = 0; // location in commands
@@ -216,15 +211,11 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
         }
         else {
             // amplitude, phase or freq command
-            //std::cout << "This is a amp, phase or freq command" << std::endl;
             var_cmd = *cmd;
             non_const_cmds.push_back(var_cmd);
             //if (!first_cmd){
             //    first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
             //}
-            for (int i = 0; i < non_const_cmds.size(); ++i) {
-                //std::cout << "non const commands: " << i << " " << non_const_cmds[i] << " at address " << &non_const_cmds[i] << std::endl;
-            }
             if (cmd->t != t) {
                 // send out previous commands, reset first_cmd
                 //std::cout << "size of non const commands " << non_const_cmds.size() << std::endl;

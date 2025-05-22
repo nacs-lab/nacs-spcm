@@ -355,8 +355,9 @@ not_yet:
     return false;
 }
 
+template <uint32_t max_chns>
 NACS_INTERNAL NACS_NOINLINE const Cmd*
-StreamBase::consume_old_cmds(State *states)
+Stream<max_chns>::consume_old_cmds(State *states)
 {
     // consumes old commands (updates the states) and returns a pointer to a currently active command.
     // If only commmands in future or no commands, then return nullptr
@@ -454,8 +455,9 @@ NACS_EXPORT() void StreamBase::consume_all_cmds()
     }
 }
 
+template <uint32_t max_chns>
 __attribute__((target("avx512f,avx512bw"), flatten))
-NACS_EXPORT() void StreamBase::step(int16_t *out, State *states)
+NACS_EXPORT() void Stream<max_chns>::step(int16_t *out, State *states)
 {
     // Key function
     const Cmd *cmd;
@@ -468,7 +470,7 @@ retry:
                 goto cmd_out; //if no command available, go to cmd_out
             }
         }
-        if (cmd->t > m_cur_t) {
+        if (unlikely(cmd->t > m_cur_t)) {
             cmd = nullptr; // don't deal with future commands
         }
         // deal with different types of commands
@@ -536,16 +538,9 @@ cmd_out:
         set_end_trigger(out); // out
     }
     // calculate actual output.
-    // For testing purposes. At the moment keep the output simple.
     __m512 v1 = _mm512_set1_ps(0.0f);
     __m512 v2 = _mm512_set1_ps(0.0f);
     uint32_t _nchns = m_chns;
-    if(!cmd){
-        //std::cout << "This command is null" << std::endl;
-    }
-    else {
-        //std::cout << (*cmd) << std::endl;
-    }
     for (uint32_t i = 0; i < _nchns; i++){
         // iterate through the number of channels
         auto &state = states[i];
@@ -594,14 +589,6 @@ cmd_out:
         }
         // now deal with current command
         if (!cmd || cmd->chn != i) {
-            //std::cout << phase << std::endl;
-            //std::cout << "freq: " << freq << std::endl;
-            if (damp != 0)
-            {// && freq != 70e7)
-                //std::cout << "df: " << float(df * freq_scale) << std::endl;
-                //Log::log("Amp: %f\n", amp);
-                //std::cout << "damp: " << damp << std::endl;
-            }
             // Prevent amp from exceeding amp_scale at the lowest level possible
             if (amp > amp_scale) {
                 amp = amp_scale;
@@ -789,7 +776,8 @@ cmd_out:
     _mm512_store_si512(out, v);
 }
 
-NACS_EXPORT() void StreamBase::generate_page(State *states)
+template <uint32_t max_chns>
+NACS_EXPORT() void Stream<max_chns>::generate_page(State *states)
 {
     //printf("generate page\n");
     int16_t *out_ptr;

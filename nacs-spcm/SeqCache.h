@@ -20,36 +20,33 @@ namespace Spcm {
 
 class SeqCache {
 public:
-    //const static Sequence invalid_seq{nullptr, std::vector<Type>(), false};
     struct TotSequence {
-    public:
-        TotSequence(SeqCache& cache, uint64_t client_id, const uint8_t* &msg_bytes, uint32_t &sz);
-        TotSequence(TotSequence&&) = default;
-        uint64_t obj_id;
-        uint32_t nconsts;
-        uint32_t nvalues;
-        Value *values;
-        uint32_t code_len;
-        bool is_valid{false};
-        operator bool() const
-        {
-            return is_valid;
-        }
-        Sequence& getSeq(uint32_t idx);
-    //double getValue(uint32_t idx);
-    //int64_t getTime(uint32_t idx);
-    //std::vector<Pulse> pulses;
-        std::vector<Sequence> seqs;
-        std::vector<uint64_t> IData_ids;
-        std::vector<Type> types;
-        SeqCache& m_cache;
-    private:
-        //Sequence invalid_seq{nullptr, std::vector<Type>(), false};
-        void addPulse(uint32_t enabled, uint32_t id, uint32_t t_start,
-                  uint32_t len, uint32_t endvalue, uint8_t functype,
-                  uint8_t phys_chn, uint32_t chn, void (*fnptr)(void));
-        //Sequence invalid_seq{nullptr, nullptr, false};
-        friend class SeqCache;
+        public:
+            TotSequence(SeqCache& cache, uint64_t client_id, const uint8_t* &msg_bytes, uint32_t &sz);
+            TotSequence(TotSequence&&) = default;
+            uint64_t obj_id;
+            uint32_t nconsts;
+            uint32_t nvalues;
+            Value *values;
+            uint32_t code_len;
+            bool is_valid{false};
+            operator bool() const
+            {
+                return is_valid;
+            }
+            Sequence& getSeq(uint32_t idx);
+        //double getValue(uint32_t idx);
+        //int64_t getTime(uint32_t idx);
+        //std::vector<Pulse> pulses;
+            std::vector<Sequence> seqs;
+            std::vector<uint64_t> IData_ids;
+            std::vector<Type> types;
+            SeqCache& m_cache;
+        private:
+            void addPulse(uint32_t enabled, uint32_t id, uint32_t t_start,
+                    uint32_t len, uint32_t endvalue, uint8_t functype,
+                    uint8_t phys_chn, uint32_t chn, void (*fnptr)(void));
+            friend class SeqCache;
     };
     struct Entry {
         TotSequence m_seq;

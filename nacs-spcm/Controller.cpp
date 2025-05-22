@@ -325,7 +325,6 @@ void Controller::workerFunc()
     //std::vector<DebugInfo> full_infos;
     bool restart = false;
     while (checkRequest()) {
-        //std::cout << "working" << std::endl;
         // relay data from StreamManager to card
     retry:
         //min_sz = 8 * 1024ll * 1024ll * 1024ll;
@@ -383,7 +382,7 @@ void Controller::workerFunc()
             //std::cout << "first avail: " << count << std::endl;
         //    first_avail = false;
         //}
-        count = card_count & ~(uint64_t)(notif_size - 1);
+        count = card_count & ~(uint64_t)(notif_size - 1); // Rounding to nearest multiple of notif_size
         //if (card_count >= max && card_count != 4 * 1024ll * 1024ll * 1024ll) {
         //    prev_max = max;
         //    max = card_count;

@@ -145,8 +145,8 @@ NACS_INTERNAL void Server::seqRunner()
                 szPre -= nwrote;
             }
             while (szPre> 0 && (nwrote > 0 || controllerRunning()) && m_running);
-                auto p = &cmds[0];
-                auto sz = cmds.size();
+            auto p = &cmds[0];
+            auto sz = cmds.size();
                 // printf("cmd size: %u", sz);
             do {
                 nwrote = m_ctrl.copy_cmds(phys_chn_idx, p, sz);
