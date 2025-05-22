@@ -271,6 +271,41 @@ std::pair<double, double> activeCmd::eval(int64_t t) {
     return std::make_pair(val, dval);
 }
 
+__attribute__((target("avx512f,avx512dq")))
+void activeCmd::eval_chunk(int64_t t, double* out, uint32_t sz) {
+    // This activeCmd function will evaluate the next `sz` samples from time `t` inclusive
+    // according to its `t_serv_to_client`. It will store it in the pointer `out`.
+    // Typically called by AnalogStream. The outside is responsible for making sure that 
+    // t is the same unit as the calculation unit, which are integers from (0 to `sz`) * `t_serv_to_client`.
+    if (is_vec) {
+        uint32_t i = 0;
+        auto func = (void (*)(double*, const double*))ramp_func;
+        while (sz > 0) {
+            auto ts __attribute__((aligned(64))) = (double(t + i) + _mm512_load_pd(times) * 8) * t_serv_to_client;
+            if (sz > 7) {
+                func(out + i * 8, (const double*)&ts);
+                sz -= 8;
+                i++;
+            }
+            else {
+                // Calculate 8 elements but not all are needed
+                std::vector<double> temp_buffer(8);
+                func(temp_buffer.data(), (const double*)&ts);
+                memcpy(out + i * 8, temp_buffer.data(), sz * sizeof(double));
+                sz = 0;
+            }
+        }
+    }
+    else {
+        auto func = (double (*)(double))ramp_func;
+        for (uint32_t i = 0; i < sz; i++) {
+            out[i] = func(double(t + i) * t_serv_to_client);
+        }
+    }
+}
+
+
+
 inline void StreamBase::reqRestart(uint32_t id) {
     auto res = m_stm_mngr.reqRestart(id);
 }
@@ -434,6 +469,79 @@ Stream::consume_old_cmds(std::vector<State> &states)
             if (cmd->chn == Cmd::add_chn) {
                 //printf("Process add_chn\n");
                 states.emplace_back(0, 0, 0.0f); // initialize new channel
+                m_chns++;
+            }
+            else {
+                m_chns--;
+                states[cmd->chn] = states[m_chns]; // move last_chn to place of deleted channel
+                states.pop_back();
+            }
+            break;
+        }
+        cmd_next(); //after interpretting this command, increment pointer to next one.
+    } while((cmd = get_cmd())); // keep on going until there are no more commands or one reaches the present
+    return nullptr;
+}
+
+NACS_INTERNAL NACS_NOINLINE const Cmd*
+AnalogStream::consume_old_cmds(std::vector<double> &states)
+{
+    // consumes old commands (updates the states) and returns a pointer to a currently active command.
+    // If only commmands in future or no commands, then return nullptr
+    auto cmd = get_cmd();
+    //std::cout << "consume_old_cmds called" << std::endl;
+    if (cmd->t != 0)
+        m_cmd_underflow.fetch_add(1, std::memory_order_relaxed);
+    do {
+        if (cmd->t == m_cur_t)
+            return cmd;
+        if (cmd->t > m_cur_t)
+            return nullptr; // get_cmd returns something in the future
+        //std::cout << "consume old cmds: " << (*cmd) << std::endl;
+        switch (cmd->op()){
+        case CmdType::Meta:
+            if (cmd->chn == (uint32_t)CmdMeta::Reset) {
+                m_cur_t = 0; // set time to 0 if consuming a Reset
+            }
+            else if (cmd->chn == (uint32_t)CmdMeta::ResetAll){
+                clear_underflow();
+                m_cur_t = 0;
+                m_chns = 0;
+                m_slow_mode.store(false,std::memory_order_relaxed);
+            }
+            else if (cmd-> chn == (uint32_t)CmdMeta::TriggerEnd) {
+                //printf("Process trigger end in consume_old_cmds\n");
+                wait_for_seq.store(true,std::memory_order_relaxed);
+                m_end_trigger_pending = cmd->final_val;
+            }
+            else if (cmd-> chn == (uint32_t)CmdMeta::TriggerStart) {
+                if (!check_start(cmd->t, cmd->final_val)) {
+                    return nullptr;
+                }
+                wait_for_seq.store(false,std::memory_order_relaxed);
+            }
+            break;
+        case CmdType::AnalogSet:
+            states[cmd->chn] = cmd->final_val * amp_scale; // set amplitude of state
+            break;
+        case CmdType::AnalogFn:
+        case CmdType::AnalogVecFn:
+            // cmd pointer only increments. Should be safe to initialize an active command here
+            if (cmd->t + cmd->len > m_cur_t) {
+                // command still active
+                active_cmds.push_back(new activeCmd(cmd, m_t_serv_to_client));
+                std::pair<double, double> these_vals;
+                active_cmds.back()->eval_chunk((m_cur_t - cmd->t) * 32, &states[cmd->chn], 1); // Time conversion needed for Analog stream to calculate EVERY sample instead of the samples at size 32 chunks
+                states[cmd->chn] = states[cmd->chn] * amp_scale;
+            }
+            else {
+                states[cmd->chn] = cmd->final_val * amp_scale; // otherwise set to final value.
+            }
+            break;
+        case CmdType::ModChn:
+            if (cmd->chn == Cmd::add_chn) {
+                //printf("Process add_chn\n");
+                states.emplace_back(0.0f); // initialize new channel
                 m_chns++;
             }
             else {
@@ -777,6 +885,254 @@ cmd_out:
     _mm512_store_si512(out, v);
 }
 
+__attribute__((target("avx512f,avx512bw"), flatten))
+NACS_EXPORT() void AnalogStream::step(int16_t *out, std::vector<double> &states)
+{
+    // Key function
+    const Cmd *cmd;
+retry:
+    // returns command at current time or before
+    if ((cmd = get_cmd_curt())){
+        if (unlikely(cmd->t < m_cur_t)) {
+            cmd = consume_old_cmds(states); //consume past commands
+            if (!cmd) {
+                goto cmd_out; //if no command available, go to cmd_out
+            }
+        }
+        if (unlikely(cmd->t > m_cur_t)) {
+            cmd = nullptr; // don't deal with future commands
+        }
+        // deal with different types of commands
+        else if (unlikely(cmd->op() == CmdType::Meta)) {
+            if (cmd->chn == (uint32_t)CmdMeta::Reset) {
+                m_cur_t = 0;
+            }
+            else if (cmd->chn == (uint32_t)CmdMeta::ResetAll) {
+                clear_underflow();
+                m_cur_t = 0;
+                m_chns = 0;
+                m_slow_mode.store(false, std::memory_order_relaxed);
+            }
+            else if (cmd->chn == (uint32_t)CmdMeta::TriggerEnd) {
+                //printf("Process trigger end\n");
+                m_end_trigger_pending = cmd->final_val;
+                wait_for_seq.store(true, std::memory_order_relaxed);
+            }
+            else if (cmd->chn == (uint32_t)CmdMeta::TriggerStart) {
+                if (!check_start(cmd->t, cmd->final_val)){
+                    cmd = nullptr;
+                    goto cmd_out;
+                }
+                wait_for_seq.store(false, std::memory_order_relaxed);
+            }
+            cmd_next();
+            goto retry; // keep on going if it's a meta command
+        }
+        else {
+            while (unlikely(cmd->op() == CmdType::ModChn)) {
+                if (cmd->chn == Cmd::add_chn) {
+                    //printf("Process add chn\n");
+                    states.emplace_back(0.0f);
+                    m_chns++;
+                }
+                else {
+                    m_chns--;
+                    states[cmd->chn] = states[m_chns];
+                    states.pop_back();
+                }
+                cmd_next();
+                cmd = get_cmd_curt();
+                if (!cmd) {
+                    break;
+                } // keep on getting more commands until you're done adding channels.
+                // What if you get a meta command here....
+            }
+        }
+    }
+cmd_out:
+    // At this point we have a nullptr if out of commands or in the future, or it's an actual command
+    // related to amp, phase, freq
+    if (unlikely(m_end_trigger_waiting)) {
+        auto cur_end_trigger = end_trigger();
+        if (cur_end_trigger) {
+            m_end_triggered.store(m_end_trigger_waiting, std::memory_order_relaxed);
+            m_end_trigger_waiting = m_end_trigger_pending;
+            if (m_end_trigger_pending) {
+                set_end_trigger(out); // out
+            }
+        }
+    }
+    else if (unlikely(m_end_trigger_pending)) {
+        m_end_trigger_waiting = m_end_trigger_pending;
+        m_end_trigger_pending = 0;
+        set_end_trigger(out); // out
+    }
+    // calculate actual output.
+    __m512d v1 = _mm512_set1_pd(0.0d);
+    __m512d v2 = _mm512_set1_pd(0.0d);
+    __m512d v3 = _mm512_set1_pd(0.0d);
+    __m512d v4 = _mm512_set1_pd(0.0d);
+    uint32_t _nchns = m_chns;
+    for (uint32_t i = 0; i < _nchns; i++){
+        // iterate through the number of channels
+        auto &state = states[i];
+        double amp = state;
+        __m512d v1chn, v2chn, v3chn, v4chn;
+        // check active commands
+        auto it = active_cmds.begin();
+        while(it != active_cmds.end()) {
+            const Cmd* this_cmd = (*it)->m_cmd;
+            if (this_cmd->chn == i) {
+                if (this_cmd->op() == CmdType::AnalogFn || this_cmd->op() == CmdType::AnalogVecFn) {
+                    if (this_cmd->t + this_cmd->len > m_cur_t) {
+                        // Place results into 4 doubles
+                        (*it)->eval_chunk((m_cur_t - this_cmd->t) * 32, (double*) &v1chn, 8);
+                        (*it)->eval_chunk((m_cur_t - this_cmd->t) * 32 + 8, (double*) &v2chn, 8);
+                        (*it)->eval_chunk((m_cur_t - this_cmd->t) * 32 + 16, (double*) &v3chn, 8);
+                        (*it)->eval_chunk((m_cur_t - this_cmd->t) * 32 + 24, (double*) &v4chn, 8);
+                        state = ((double*)&v4chn)[7]; // next timepoint update
+                    }
+                    else {
+                        v1chn = _mm512_set1_pd(this_cmd->final_val);
+                        v2chn = _mm512_set1_pd(this_cmd->final_val);
+                        v3chn = _mm512_set1_pd(this_cmd->final_val);
+                        v4chn = _mm512_set1_pd(this_cmd->final_val);
+                        state = this_cmd->final_val; // update
+                        it = active_cmds.erase(it); // no longer active
+                        continue;
+                    }
+                }
+            }
+            ++it;
+        }
+        // now deal with current command
+        if (!cmd || cmd->chn != i) {
+            v1 += v1chn;
+            v2 += v2chn;
+            v3 += v3chn;
+            v4 += v4chn;
+        }
+        else {
+            bool ampSet = false; // Behavior for now... if ampSet command is at this time, ignore all other things such as active ramps
+            uint8_t amp_mask1, amp_mask2, amp_mask3, amp_mask4;
+            do {
+                //std::cout << (*cmd) << std::endl;
+                if (cmd->op() == CmdType::AnalogSet) {
+                    int shift = int(cmd->len);
+                    if (shift < 8) {
+                        amp_mask1 = UINT8_MAX << shift;
+                        amp_mask2 = UINT8_MAX;
+                        amp_mask3 = UINT8_MAX;
+                        amp_mask4 = UINT8_MAX;
+                    }
+                    else if (shift < 16) {
+                        shift = shift - 8;
+                        amp_mask1 = 0;
+                        amp_mask2 = UINT8_MAX << shift;
+                        amp_mask3 = UINT8_MAX;
+                        amp_mask4 = UINT8_MAX;
+                    }
+                    else if (shift < 24) {
+                        shift = shift - 16;
+                        amp_mask1 = 0;
+                        amp_mask2 = 0;
+                        amp_mask3 = UINT8_MAX << shift;
+                        amp_mask4 = UINT8_MAX;
+                    }
+                    else {
+                        shift = shift - 24;
+                        amp_mask1 = 0;
+                        amp_mask2 = 0;
+                        amp_mask3 = 0;
+                        amp_mask4 = UINT8_MAX << shift;
+                    }
+                    state = cmd->final_val; // This is just for updating the state
+                    const float constamp = cmd->final_val;
+                    //printf("amp: %f\n", constamp);
+                    v1chn = _mm512_mask_mov_pd(v1chn, amp_mask1, _mm512_set1_pd(constamp));
+                    v2chn = _mm512_mask_mov_pd(v2chn, amp_mask2, _mm512_set1_pd(constamp));
+                    v3chn = _mm512_mask_mov_pd(v3chn, amp_mask3, _mm512_set1_pd(constamp));
+                    v4chn = _mm512_mask_mov_pd(v4chn, amp_mask4, _mm512_set1_pd(constamp));
+
+                    __m128 ampfinal = _mm_load_ps1(&constamp);
+                    /*float ampv1p[16];
+                    float ampv2p[16];
+                    memcpy(ampv1p, &ampv1, sizeof(ampv1p));
+                    memcpy(ampv2p, &ampv2, sizeof(ampv2p));
+                    printf("Amp v1 before broadcast: %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f \n", ampv1p[0],
+                           ampv1p[1],ampv1p[2],ampv1p[3],ampv1p[4], ampv1p[5],ampv1p[6],ampv1p[7],
+                           ampv1p[8],ampv1p[9],ampv1p[10],ampv1p[11],ampv1p[12],ampv1p[13],ampv1p[14],ampv1p[15]
+                        );
+                    printf("Amp v2 before broadcast: %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f \n", ampv2p[0],
+                           ampv2p[1],ampv2p[2],ampv2p[3],ampv2p[4], ampv2p[5],ampv2p[6],ampv2p[7],
+                           ampv2p[8],ampv2p[9],ampv2p[10],ampv2p[11],ampv2p[12],ampv2p[13],ampv2p[14],ampv2p[15]
+                           );*/
+                    //ampv1 = ampv1t;
+                    //ampv2 = ampv2t;
+                    //memcpy(ampv1p, &ampv1, sizeof(ampv1p));
+                    //memcpy(ampv2p, &ampv2, sizeof(ampv2p));
+                    /*printf("Amp v1: %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f \n", ampv1p[0],
+                           ampv1p[1],ampv1p[2],ampv1p[3],ampv1p[4], ampv1p[5],ampv1p[6],ampv1p[7],
+                           ampv1p[8],ampv1p[9],ampv1p[10],ampv1p[11],ampv1p[12],ampv1p[13],ampv1p[14],ampv1p[15]
+                        );
+                    printf("Amp v2: %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f \n", ampv2p[0],
+                           ampv2p[1],ampv2p[2],ampv2p[3],ampv2p[4], ampv2p[5],ampv2p[6],ampv2p[7],
+                           ampv2p[8],ampv2p[9],ampv2p[10],ampv2p[11],ampv2p[12],ampv2p[13],ampv2p[14],ampv2p[15]
+                           );*/
+                }
+                else if (likely(cmd->op() == CmdType::AnalogFn || cmd->op() == CmdType::AnalogVecFn)) {
+                    // first time seeing function command
+                    if (cmd->t + cmd->len > m_cur_t) {
+                        // command still active
+                        active_cmds.push_back(new activeCmd(cmd, m_t_serv_to_client));
+                        (*it)->eval_chunk((m_cur_t - cmd->t) * 32, (double*) &v1chn, 8);
+                        (*it)->eval_chunk((m_cur_t - cmd->t) * 32 + 8, (double*) &v2chn, 8);
+                        (*it)->eval_chunk((m_cur_t - cmd->t) * 32 + 16, (double*) &v3chn, 8);
+                        (*it)->eval_chunk((m_cur_t - cmd->t) * 32 + 24, (double*) &v4chn, 8);
+                    }
+                    else {
+                        v1chn = _mm512_set1_pd(cmd->final_val);
+                        v2chn = _mm512_set1_pd(cmd->final_val);
+                        v3chn = _mm512_set1_pd(cmd->final_val);
+                        v4chn = _mm512_set1_pd(cmd->final_val);
+                    }
+                }
+                else {
+                    //encountered a non phase,amp,freq command
+                    break;
+                }
+                cmd_next(); // increment cmd counter
+                cmd = get_cmd_curt(); // get command only if it's current
+            } while (cmd && cmd->chn == i);
+            v1 += v1chn;
+            v2 += v2chn;
+            v3 += v3chn;
+            v4 += v4chn;
+
+            state = ((double*)&v4chn)[7];
+        }
+    } // channel iteration
+    // after done iterating channels
+    m_cur_t++; // increment time
+
+    v1 = v1 * amp_scale;
+    v2 = v2 * amp_scale;
+    v3 = v3 * amp_scale;
+    v4 = v4 * amp_scale;
+    if (m_output_cnt % 19531250 == 0) { // 19531250
+        printf("m_output_cnt: %lu\n", m_output_cnt);
+    }
+    __m256i v1i = _mm512_cvtpd_epi32(v1);
+    __m256i v2i = _mm512_cvtpd_epi32(v2);
+    __m256i v3i = _mm512_cvtpd_epi32(v3);
+    __m256i v4i = _mm512_cvtpd_epi32(v4);
+
+    __m512i v;
+    v = _mm512_permutex2var_epi16(_mm512_inserti64x4(_mm512_castsi256_si512(v1i), v2i, 1), (__m512i)mask0,
+                                _mm512_inserti64x4(_mm512_castsi256_si512(v3i), v4i, 1));
+    _mm512_store_si512(out, v);
+}
+
 NACS_EXPORT() void Stream::generate_page(std::vector<State> &states)
 {
     //printf("generate page\n");
@@ -820,5 +1176,50 @@ NACS_EXPORT() void Stream::generate_page(std::vector<State> &states)
     //std::cout << "Stream" << m_stream_num << " wrote " << *out_ptr << std::endl;
     m_output.wrote_size(output_block_sz); // alert reader that data is ready.
 }
+
+NACS_EXPORT() void AnalogStream::generate_page(std::vector<double> &states)
+{
+    //printf("generate page\n");
+    int16_t *out_ptr;
+    while (true) {
+        size_t sz_to_write;
+        out_ptr = m_output.get_write_ptr(&sz_to_write);
+        if (sz_to_write >= output_block_sz) {
+            // If we are not waiting for a sequence, i.e. we are processing a sequence, or we are waiting
+            // and the reader is less than wait_buf_sz bytes behind, we break out and generate data
+            if (!wait_for_seq.load(std::memory_order_relaxed)) {
+                break;
+            }
+            else{
+                uint64_t diff = m_output_cnt - m_stm_mngr.getControllerOutputCnt();
+                //if (diff < 0)
+                    //std::cout << "diff less than 0" << std::endl;
+                if (diff < (wait_buf_sz / (2 * 32) - output_block_sz / 32) && diff >= 0){
+                    break;
+                }
+            }
+            //std::cout << "Throttling" << std::endl;
+        }
+        if (sz_to_write > 0) {
+            m_output.sync_writer();
+        }
+        CPU::pause();
+        if (unlikely(m_stop.load(std::memory_order_relaxed))){
+            return;
+        }
+    }
+    //printf("Stream ready\n");
+    //std::cout << "ready to write" << std::endl;
+    // Now ready to write to output. Write in output_block_sz chunks
+    for (uint32_t i = 0; i < output_block_sz; i += 32) {
+        // for now advance one position at a time.
+        m_output_cnt += 1;
+        step(&out_ptr[i], states);
+        //std::cout << "stream stepped" << std::endl;
+    }
+    //std::cout << "Stream" << m_stream_num << " wrote " << *out_ptr << std::endl;
+    m_output.wrote_size(output_block_sz); // alert reader that data is ready.
+}
+
 
 }

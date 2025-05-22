@@ -42,7 +42,10 @@ enum class CmdType : uint8_t
     FreqVecFn,
     ModChn, // add or delete channels
     Phase,
-    _MAX = Phase // keeps track of how many CmdType options there are
+    AnalogSet,
+    AnalogFn,
+    AnalogVecFn,
+    _MAX = AnalogVecFn // keeps track of how many CmdType options there are
 };
 
 enum class CmdMeta : uint32_t
@@ -106,6 +109,10 @@ public:
     {
         return Cmd{t, t_client, id, (uint8_t)CmdType::FreqSet, chn, freq};
     }
+    static Cmd getAnalogSet(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double amp)
+    {
+        return Cmd{t, t_client, id, (uint8_t)CmdType::AnalogSet, chn, amp};
+    }
     static Cmd getPhase(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double phase)
     {
         return Cmd{t, t_client, id, (uint8_t)CmdType::Phase, chn, phase};
@@ -130,6 +137,10 @@ public:
     {
         return Cmd{t, t_client, id, (uint8_t)CmdType::FreqFn, chn, final_val, len, fnptr};
     }
+    static Cmd getAnalogFn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double final_val, double len, void(*fnptr)(void))
+    {
+        return Cmd{t, t_client, id, (uint8_t)CmdType::AnalogFn, chn, final_val, len, fnptr};
+    }
     static Cmd getAmpVecFn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double final_val, double len, void(*fnptr)(void))
     {
         return Cmd{t, t_client, id, (uint8_t)CmdType::AmpFn, chn, final_val, len, fnptr};
@@ -137,6 +148,10 @@ public:
     static Cmd getFreqVecFn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double final_val, double len, void(*fnptr)(void))
     {
         return Cmd{t, t_client, id, (uint8_t)CmdType::FreqFn, chn, final_val, len, fnptr};
+    }
+    static Cmd getAnalogVecFn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double final_val, double len, void(*fnptr)(void))
+    {
+        return Cmd{t, t_client, id, (uint8_t)CmdType::AnalogVecFn, chn, final_val, len, fnptr};
     }
     const char *name() const; // returns name of cmd
     void dump() const;
@@ -151,6 +166,7 @@ public:
         {
         case CmdType::AmpSet:
         case CmdType::FreqSet:
+        case CmdType::AnalogSet:
         case CmdType::Phase:
         case CmdType::ModChn:
             if (other.final_val != final_val)
@@ -161,8 +177,10 @@ public:
                 return other.chn == chn && final_val == other.final_val;
         case CmdType::AmpFn:
         case CmdType::FreqFn:
+        case CmdType::AnalogFn:
         case CmdType::AmpVecFn:
         case CmdType::FreqVecFn:
+        case CmdType::AnalogVecFn:
             if ((other.final_val == final_val) && (other.len == len))
                 return other.fnptr == fnptr;
         default:
@@ -185,7 +203,7 @@ struct activeCmd {
         t_serv_to_client(double(t))
     {
         ramp_func = cmd->fnptr;
-        if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn) {
+        if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn || cmd->op() == CmdType::AnalogVecFn) {
             is_vec = true;
         }
         /*if (cmd->op() == CmdType::AmpVecFn || cmd->op() == CmdType::FreqVecFn) {
@@ -201,6 +219,7 @@ struct activeCmd {
             }*/
     }
     std::pair<double,double> eval(int64_t t); // called with server t convention
+    void eval_chunk(int64_t t, double* out, uint32_t sz); // called by analog streams. 
     double t_serv_to_client = 1;
     int64_t time_base = 0; // in server times
     int64_t nsteps = 0;
@@ -498,6 +517,58 @@ private:
         //printf("m_stop 3: %s\n", m_stop.load(std::memory_order_relaxed) ? "true" : "false");
     }
     std::vector<State> m_states; // array of states
+    std::thread m_worker{};
+};
+
+struct AnalogStream : StreamBase {
+    AnalogStream(StreamManagerBase& stm_mngr, Config &conf, double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
+           std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true)
+        : StreamBase(stm_mngr, conf, step_t, amp_scale, cmd_underflow, underflow, stream_num),
+            m_t_serv_to_client(32.0f/conf.sample_rate * 1e12)
+    {
+        if (start) {
+            start_worker();
+        }
+    }
+
+    void start_worker()
+    {
+        m_stop.store(false, std::memory_order_relaxed);
+        m_worker = std::thread(&AnalogStream::thread_fun, this);
+    }
+    void stop_worker()
+    {
+        m_stop.store(true, std::memory_order_relaxed);
+        if (m_worker.joinable()){
+            m_worker.join();
+        }
+    }
+    void reset_out()
+    {
+        printf("reset out stream called\n");
+        if (m_worker.joinable()) {
+            stop_worker();
+        }
+        reset_output();
+    }
+    ~AnalogStream()
+    {
+        stop_worker();
+    }
+protected:
+    void generate_page(std::vector<double> &states); //workhorse, takes a vector of states for the channels
+
+private:
+    double m_t_serv_to_client;
+    const Cmd *consume_old_cmds(std::vector<double> &states);
+    void step(int16_t *out, std::vector<double> &states); // workhorse function to step to next time
+    void thread_fun()
+    {
+        while(likely(!m_stop.load(std::memory_order_relaxed))) {
+            generate_page(m_states);
+        }
+    }
+    std::vector<double> m_states; // array of states, which are just amplitudes
     std::thread m_worker{};
 };
 
