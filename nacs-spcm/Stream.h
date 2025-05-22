@@ -456,8 +456,14 @@ protected:
         int64_t phase; // phase_cnt = (0 to 1 phase) * 625e6 * 10
         uint64_t freq; // freq_cnt = real freq * 10
         double amp; // real amp * 6.7465185e9f
+
+        State(int64_t phase, uint64_t freq, double amp) :
+            phase(phase), freq(freq), amp(amp)
+            {
+
+            }
     };
-    void generate_page(State *states); //workhorse, takes a vector of states for the channels
+    void generate_page(std::vector<State> &states); //workhorse, takes a vector of states for the channels
 
 private:
     uint64_t max_phase;
@@ -465,8 +471,8 @@ private:
     double phase_scale_client;
     double freq_scale;
     double m_t_serv_to_client;
-    const Cmd *consume_old_cmds(State * states);
-    void step(int16_t *out, State *states); // workhorse function to step to next time
+    const Cmd *consume_old_cmds(std::vector<State> &states);
+    void step(int16_t *out, std::vector<State> &states); // workhorse function to step to next time
     void thread_fun()
     {
         /*while (likely(!m_stop.load(std::memory_order_relaxed))) {
@@ -491,7 +497,7 @@ private:
         }
         //printf("m_stop 3: %s\n", m_stop.load(std::memory_order_relaxed) ? "true" : "false");
     }
-    State m_states[128]{}; // array of states
+    std::vector<State> m_states; // array of states
     std::thread m_worker{};
 };
 

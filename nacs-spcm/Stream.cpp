@@ -357,7 +357,7 @@ not_yet:
 
 
 NACS_INTERNAL NACS_NOINLINE const Cmd*
-Stream::consume_old_cmds(State *states)
+Stream::consume_old_cmds(std::vector<State> &states)
 {
     // consumes old commands (updates the states) and returns a pointer to a currently active command.
     // If only commmands in future or no commands, then return nullptr
@@ -433,12 +433,13 @@ Stream::consume_old_cmds(State *states)
         case CmdType::ModChn:
             if (cmd->chn == Cmd::add_chn) {
                 //printf("Process add_chn\n");
-                states[m_chns] = {0, 0, 0.0f}; // initialize new channel
+                states.emplace_back(0, 0, 0.0f); // initialize new channel
                 m_chns++;
             }
             else {
                 m_chns--;
                 states[cmd->chn] = states[m_chns]; // move last_chn to place of deleted channel
+                states.pop_back();
             }
             break;
         }
@@ -456,7 +457,7 @@ NACS_EXPORT() void StreamBase::consume_all_cmds()
 }
 
 __attribute__((target("avx512f,avx512bw"), flatten))
-NACS_EXPORT() void Stream::step(int16_t *out, State *states)
+NACS_EXPORT() void Stream::step(int16_t *out, std::vector<State> &states)
 {
     // Key function
     const Cmd *cmd;
@@ -502,12 +503,13 @@ retry:
             while (unlikely(cmd->op() == CmdType::ModChn)) {
                 if (cmd->chn == Cmd::add_chn) {
                     //printf("Process add chn\n");
-                    states[m_chns] = {0, 0, 0.0f};
+                    states.emplace_back(0, 0, 0.0f);
                     m_chns++;
                 }
                 else {
                     m_chns--;
                     states[cmd->chn] = states[m_chns];
+                    states.pop_back();
                 }
                 cmd_next();
                 cmd = get_cmd_curt();
@@ -775,7 +777,7 @@ cmd_out:
     _mm512_store_si512(out, v);
 }
 
-NACS_EXPORT() void Stream::generate_page(State *states)
+NACS_EXPORT() void Stream::generate_page(std::vector<State> &states)
 {
     //printf("generate page\n");
     int16_t *out_ptr;
