@@ -411,7 +411,6 @@ protected:
     StreamManagerBase &m_stm_mngr;
 };
 
-template<uint32_t max_chns = 128>
 struct Stream : StreamBase {
     Stream(StreamManagerBase& stm_mngr, Config &conf, double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
            std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true)
@@ -492,7 +491,7 @@ private:
         }
         //printf("m_stop 3: %s\n", m_stop.load(std::memory_order_relaxed) ? "true" : "false");
     }
-    State m_states[max_chns]{}; // array of states
+    State m_states[128]{}; // array of states
     std::thread m_worker{};
 };
 

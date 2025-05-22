@@ -355,9 +355,9 @@ not_yet:
     return false;
 }
 
-template <uint32_t max_chns>
+
 NACS_INTERNAL NACS_NOINLINE const Cmd*
-Stream<max_chns>::consume_old_cmds(State *states)
+Stream::consume_old_cmds(State *states)
 {
     // consumes old commands (updates the states) and returns a pointer to a currently active command.
     // If only commmands in future or no commands, then return nullptr
@@ -455,9 +455,8 @@ NACS_EXPORT() void StreamBase::consume_all_cmds()
     }
 }
 
-template <uint32_t max_chns>
 __attribute__((target("avx512f,avx512bw"), flatten))
-NACS_EXPORT() void Stream<max_chns>::step(int16_t *out, State *states)
+NACS_EXPORT() void Stream::step(int16_t *out, State *states)
 {
     // Key function
     const Cmd *cmd;
@@ -776,8 +775,7 @@ cmd_out:
     _mm512_store_si512(out, v);
 }
 
-template <uint32_t max_chns>
-NACS_EXPORT() void Stream<max_chns>::generate_page(State *states)
+NACS_EXPORT() void Stream::generate_page(State *states)
 {
     //printf("generate page\n");
     int16_t *out_ptr;

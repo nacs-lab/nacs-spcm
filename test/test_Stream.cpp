@@ -16,7 +16,7 @@ void DoThis()
     double step_t = 1; // not relevant here
     std::atomic<uint64_t> cmd_underflow(0);
     std::atomic<uint64_t> underflow(0); // not relevant either
-    Stream<128> this_stream{step_t, cmd_underflow, underflow, false};
+    Stream this_stream{step_t, cmd_underflow, underflow, false};
     std::vector<Cmd> cmd_vector;
     cmd_vector.push_back(Cmd::getAddChn(0));
     cmd_vector.push_back(Cmd::getAddChn(0));
