@@ -70,7 +70,6 @@ NACS_EXPORT() bool Server::runSeq(uint64_t client_id, uint64_t seq_id, const uin
         return false;
     }
     {
-        //printf("Pushing back QueueItem");
         std::lock_guard<std::mutex> locker(m_seqlock);
         m_seque.push_back(QueueItem{entry, seqcnt, start_trigger_id, is_first_seq});
     }
@@ -109,7 +108,6 @@ NACS_INTERNAL void Server::seqRunner()
 {
     // this call to popSeq hangs until a sequence (QueueItem) can be popped off
     while (auto entry = popSeq()) {
-        //printf("Controller running sequence\n");
         // do reset now if this is a first sequence.
         if (entry.is_first_seq) {
             m_ctrl.resetStmManagers();
@@ -253,9 +251,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
         else if (ZMQ::match(msg, "req_client_id")) {
             uint64_t client_id;
             client_id = getTime();
-            //std::cout << "client id: " << client_id << std::endl;
             ZMQ::send_addr(m_zmqsock, addr, empty);
-            //ZMQ::send_more(m_zmqsock, ZMQ::bits_msg(m_serv_id));
             ZMQ::send(m_zmqsock, ZMQ::bits_msg(client_id));
         }
         else if (ZMQ::match(msg, "req_server_id")) {
@@ -268,7 +264,6 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             ZMQ::send(m_zmqsock, ZMQ::bits_msg(restarts));
         }
         else if (ZMQ::match(msg, "req_triple")) {
-            // TODO: reply correctly
             ZMQ::send_addr(m_zmqsock, addr, empty);
             auto triple = llvm::sys::getProcessTriple();
             ZMQ::send_more(m_zmqsock, ZMQ::str_msg(triple.data()));
@@ -281,7 +276,6 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             ZMQ::send(m_zmqsock, ZMQ::str_msg(feature_str.data()));
         }
         else if (ZMQ::match(msg, "run_seq")) {
-            // WORK OUT INITIALIZATION LOGIC
             if (!controllerRunning())
                 startController();
             //if (seqcnt && seqDone(seqcnt))
@@ -328,13 +322,8 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             msg_data += 4;
             msg_sz -= 4;
             uint32_t start_id = (start_trigger && trigger_fd != -1) ? m_ctrl.get_start_id() : 0;
-            //printf("start id: %u\n", start_id);
-            // check next bit to see if sequence was sent
+            // check next byte to see if sequence was sent
             uint8_t data_type;
-            //uint8_t *non_const_data = nullptr;
-            //uint32_t non_const_data_sz;
-            //uint8_t *all_data = nullptr;
-            //uint32_t all_data_sz;
             memcpy(&data_type, msg_data, 1);
             msg_data += 1;
             msg_sz -= 1;

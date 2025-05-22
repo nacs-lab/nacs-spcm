@@ -42,16 +42,16 @@ public:
         run(-1, [] (int) {return std::make_pair(0, 0);});
     }
     private:
-            struct QueueItem {
-                SeqCache::Entry *entry;
-                uint64_t id;
-                uint32_t start_trigger;
-                bool is_first_seq;
-                operator bool() const
-                {
-                    return entry != nullptr;
-                }
-            };
+        struct QueueItem {
+            SeqCache::Entry *entry;
+            uint64_t id;
+            uint32_t start_trigger;
+            bool is_first_seq;
+            operator bool() const
+            {
+                return entry != nullptr;
+            }
+        };
         QueueItem popSeq();
         void seqRunner();
         bool recvMore(zmq::message_t&);
@@ -60,16 +60,16 @@ public:
         zmq::context_t m_zmqctx;
         zmq::socket_t m_zmqsock;
         const int m_evfd;
-    Controller m_ctrl;
-    SeqCache m_cache;
+        Controller m_ctrl;
+        SeqCache m_cache;
         std::atomic<uint64_t> m_seqfin{0};
         mutable std::mutex m_seqlock;
         std::condition_variable m_seqcv;
         std::vector<QueueItem> m_seque;
         bool m_running{false};
-    uint64_t m_serv_id;
-    bool first_start{false};
-    uint32_t restart_ctr;
+        uint64_t m_serv_id;
+        bool first_start{false};
+        uint32_t restart_ctr;
         //std::vector<uint64_t> m_client_ids;
     //std::vector<uint8_t> init_out_chn = {1};
     };

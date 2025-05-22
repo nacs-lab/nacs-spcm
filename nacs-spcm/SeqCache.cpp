@@ -92,7 +92,6 @@ NACS_EXPORT() bool SeqCache::getAndFill(uint64_t client_id, uint64_t seq_id, con
     if (!seq) {
         return false; // sequence not valid cause it's missing IData
     }
-    //printf("types size after getting from cache: %u", seq.getSeq(0).m_types.size());
     auto it = m_cache.emplace(std::piecewise_construct, std::forward_as_tuple(std::move(this_id)), std::forward_as_tuple(std::move(seq))).first;
     m_totalsz += entrySize(it);
     ssize_t age = it->second.age.load(std::memory_order_relaxed);
@@ -139,16 +138,6 @@ NACS_EXPORT() bool SeqCache::get(uint64_t client_id, uint64_t seq_id, Entry* &en
         entry = &(it->second);
         return true;
     }
-    // INSERT COMMAND FoRMATION HERE
-    //auto cmds = SeqBuilder::fromBinary(m_tstep, m_fcenter, m_max_amp, (const uint8_t*)bytes.data(), bytes.size(), m_exectx.get()).schedule();
-    //it = m_cache.emplace(std::piecewise_construct, std::forward_as_tuple(std::move(bytes)),
-    //                     std::forward_as_tuple(std::move(cmds))).first;
-    //m_totalsz += entrySize(it);
-    //while (m_totalsz > m_szlim) {
-    //    if (!ejectOldest()) {
-    //        break;
-    //    }
-    //}
     return false;
 }
 
