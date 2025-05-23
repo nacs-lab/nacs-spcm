@@ -23,7 +23,7 @@ struct WaitSeq{
     uint64_t id;
 };
 
-NACS_EXPORT() Server::Server(Config conf)
+NACS_EXPORT() Server::Server(Config conf, bool start)
 : m_conf(std::move(conf)),
 m_zmqctx(),
 m_zmqsock(m_zmqctx, ZMQ_ROUTER),
@@ -34,7 +34,9 @@ m_cache(8 * 1024ll * 1024ll * 1024ll, conf) // pretty arbitrary
     //m_ctrl = Controller(init_out_chn);
     m_zmqsock.bind(m_conf.listen);
     m_serv_id = getTime(); //uint64_t in nanoseconds
-    startController();
+    if (start) {
+        startController();
+    }
 }
 
 NACS_EXPORT() bool Server::startController()

@@ -26,7 +26,7 @@ namespace Spcm {
 
 class Server {
 public:
-    Server(Config conf);
+    Server(Config conf, bool start);
 
     bool startController();
     bool controllerRunning() const;
@@ -41,6 +41,11 @@ public:
     {
         run(-1, [] (int) {return std::make_pair(0, 0);});
     }
+    Controller& getController()
+    {
+        return m_ctrl;
+    }
+
     private:
         struct QueueItem {
             SeqCache::Entry *entry;

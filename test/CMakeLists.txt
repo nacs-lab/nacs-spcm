@@ -56,6 +56,11 @@ target_link_libraries(test-output_kw2_func nacs-utils nacs-spcm)
 set_source_files_properties(test_output_kw2_func.cpp
   PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")
 
+add_executable(test-analog-stream test_analogStream.cpp)
+target_link_libraries(test-analog-stream nacs-utils nacs-spcm yaml-cpp zmq)
+set_source_files_properties(test_analogStream.cpp
+  PROPERTIES COMPILE_FLAGS "-ffp-contract=fast")
+
 #add_executable(test_Stream test_Stream.cpp)
 #target_link_libraries(test_Stream nacs-utils nacs-spcm)
 #set_source_files_properties(test_Stream.cpp

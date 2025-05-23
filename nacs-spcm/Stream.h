@@ -109,9 +109,9 @@ public:
     {
         return Cmd{t, t_client, id, (uint8_t)CmdType::FreqSet, chn, freq};
     }
-    static Cmd getAnalogSet(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double amp)
+    static Cmd getAnalogSet(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double amp, double len)
     {
-        return Cmd{t, t_client, id, (uint8_t)CmdType::AnalogSet, chn, amp};
+        return Cmd{t, t_client, id, (uint8_t)CmdType::AnalogSet, chn, amp, len};
     }
     static Cmd getPhase(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double phase)
     {
@@ -388,6 +388,7 @@ protected:
     bool check_start(int64_t t, uint32_t id);
     void clear_underflow();
     constexpr static uint32_t output_block_sz = 2048 * 16;//32768; //2048; // units of int16_t. 32 of these per _m512
+    uint64_t output_buf_sz = 256 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
     // Members accessed by worker threads
     std::atomic_bool m_stop{false};
     DataPipe<Cmd> m_commands;
@@ -413,7 +414,6 @@ protected:
     //uint32_t m_end_trigger_cnt{0};
     //uint32_t m_start_trigger_cnt{0};
 
-    uint64_t output_buf_sz = 256 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
     uint64_t wait_buf_sz = 32 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
     double amp_scale = 6.7465185e9f / 8; // Divide by 8 for safety by default
     std::atomic<bool> wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
@@ -524,7 +524,8 @@ struct AnalogStream : StreamBase {
     AnalogStream(StreamManagerBase& stm_mngr, Config &conf, double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
            std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true)
         : StreamBase(stm_mngr, conf, step_t, amp_scale, cmd_underflow, underflow, stream_num),
-            m_t_serv_to_client(32.0f/conf.sample_rate * 1e12)
+          m_t_serv_to_client(1/32.0f)
+          //m_t_serv_to_client(1.0f/conf.sample_rate * 1e12) // TODO
     {
         if (start) {
             start_worker();

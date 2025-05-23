@@ -50,6 +50,12 @@ static constexpr v32si mask0 = {1, 3, 5, 7, 9, 11, 13, 15,
                                 17, 19, 21, 23, 25, 27, 29, 31,
                                 33, 35, 37, 39, 41, 43, 45, 47,
                                 49, 51, 53, 55, 57, 59, 61, 63};
+static constexpr v32si mask1 = {0, 2, 4, 6, 8, 10, 12, 14,
+                                16, 18, 20, 22, 24, 26, 28, 30,
+                                32, 34, 36, 38, 40, 42, 44, 46,
+                                48, 50, 52, 54, 56, 58, 60, 62};
+
+
 // d is a vector of phases
 __attribute__((target("avx512f,avx512bw"), flatten))
 __m512 xsinpif_pi(__m512 d)
@@ -522,7 +528,8 @@ AnalogStream::consume_old_cmds(std::vector<double> &states)
             }
             break;
         case CmdType::AnalogSet:
-            states[cmd->chn] = cmd->final_val * amp_scale; // set amplitude of state
+            //printf("Processing analog set\n");
+            states[cmd->chn] = cmd->final_val; // set amplitude of state
             break;
         case CmdType::AnalogFn:
         case CmdType::AnalogVecFn:
@@ -532,15 +539,13 @@ AnalogStream::consume_old_cmds(std::vector<double> &states)
                 active_cmds.push_back(new activeCmd(cmd, m_t_serv_to_client));
                 std::pair<double, double> these_vals;
                 active_cmds.back()->eval_chunk((m_cur_t - cmd->t) * 32, &states[cmd->chn], 1); // Time conversion needed for Analog stream to calculate EVERY sample instead of the samples at size 32 chunks
-                states[cmd->chn] = states[cmd->chn] * amp_scale;
             }
             else {
-                states[cmd->chn] = cmd->final_val * amp_scale; // otherwise set to final value.
+                states[cmd->chn] = cmd->final_val; // otherwise set to final value.
             }
             break;
         case CmdType::ModChn:
             if (cmd->chn == Cmd::add_chn) {
-                //printf("Process add_chn\n");
                 states.emplace_back(0.0f); // initialize new channel
                 m_chns++;
             }
@@ -973,11 +978,16 @@ cmd_out:
     __m512d v3 = _mm512_set1_pd(0.0d);
     __m512d v4 = _mm512_set1_pd(0.0d);
     uint32_t _nchns = m_chns;
+    bool ampSet = false; // Behavior for now... if ampSet command is at this time, ignore all other things such as active ramps
     for (uint32_t i = 0; i < _nchns; i++){
         // iterate through the number of channels
         auto &state = states[i];
         double amp = state;
         __m512d v1chn, v2chn, v3chn, v4chn;
+        v1chn = _mm512_set1_pd(amp);
+        v2chn = _mm512_set1_pd(amp);
+        v3chn = _mm512_set1_pd(amp);
+        v4chn = _mm512_set1_pd(amp);
         // check active commands
         auto it = active_cmds.begin();
         while(it != active_cmds.end()) {
@@ -1013,11 +1023,11 @@ cmd_out:
             v4 += v4chn;
         }
         else {
-            bool ampSet = false; // Behavior for now... if ampSet command is at this time, ignore all other things such as active ramps
             uint8_t amp_mask1, amp_mask2, amp_mask3, amp_mask4;
             do {
                 //std::cout << (*cmd) << std::endl;
                 if (cmd->op() == CmdType::AnalogSet) {
+                    ampSet = true;
                     int shift = int(cmd->len);
                     if (shift < 8) {
                         amp_mask1 = UINT8_MAX << shift;
@@ -1055,6 +1065,8 @@ cmd_out:
                     v4chn = _mm512_mask_mov_pd(v4chn, amp_mask4, _mm512_set1_pd(constamp));
 
                     __m128 ampfinal = _mm_load_ps1(&constamp);
+                    
+                    
                     /*float ampv1p[16];
                     float ampv2p[16];
                     memcpy(ampv1p, &ampv1, sizeof(ampv1p));
@@ -1085,10 +1097,14 @@ cmd_out:
                     if (cmd->t + cmd->len > m_cur_t) {
                         // command still active
                         active_cmds.push_back(new activeCmd(cmd, m_t_serv_to_client));
-                        (*it)->eval_chunk((m_cur_t - cmd->t) * 32, (double*) &v1chn, 8);
-                        (*it)->eval_chunk((m_cur_t - cmd->t) * 32 + 8, (double*) &v2chn, 8);
-                        (*it)->eval_chunk((m_cur_t - cmd->t) * 32 + 16, (double*) &v3chn, 8);
-                        (*it)->eval_chunk((m_cur_t - cmd->t) * 32 + 24, (double*) &v4chn, 8);
+                        active_cmds.back()->eval_chunk((m_cur_t - cmd->t) * 32, (double*) &v1chn, 8);
+                        active_cmds.back()->eval_chunk((m_cur_t - cmd->t) * 32 + 8, (double*) &v2chn, 8);
+                        active_cmds.back()->eval_chunk((m_cur_t - cmd->t) * 32 + 16, (double*) &v3chn, 8);
+                        active_cmds.back()->eval_chunk((m_cur_t - cmd->t) * 32 + 24, (double*) &v4chn, 8);
+                        //double v1chn_print[8];
+                        //    memcpy(v1chn_print, &v1chn, sizeof(v1chn_print));
+                        //    printf("first samples: %f %f %f %f %f %f %f %f", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
+                        
                     }
                     else {
                         v1chn = _mm512_set1_pd(cmd->final_val);
@@ -1098,8 +1114,7 @@ cmd_out:
                     }
                 }
                 else {
-                    //encountered a non phase,amp,freq command
-                    break;
+                    
                 }
                 cmd_next(); // increment cmd counter
                 cmd = get_cmd_curt(); // get command only if it's current
@@ -1108,7 +1123,6 @@ cmd_out:
             v2 += v2chn;
             v3 += v3chn;
             v4 += v4chn;
-
             state = ((double*)&v4chn)[7];
         }
     } // channel iteration
@@ -1119,17 +1133,50 @@ cmd_out:
     v2 = v2 * amp_scale;
     v3 = v3 * amp_scale;
     v4 = v4 * amp_scale;
+
+    /*if (ampSet) {
+            double v1chn_print[8];
+            memcpy(v1chn_print, &v1, sizeof(v1chn_print));
+            printf("first samples: %f %f %f %f %f %f %f %f", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
+            } */
+
+    
     if (m_output_cnt % 19531250 == 0) { // 19531250
         printf("m_output_cnt: %lu\n", m_output_cnt);
     }
+    //printf("m_output_cnt: %lu\n", m_output_cnt);
     __m256i v1i = _mm512_cvtpd_epi32(v1);
     __m256i v2i = _mm512_cvtpd_epi32(v2);
     __m256i v3i = _mm512_cvtpd_epi32(v3);
     __m256i v4i = _mm512_cvtpd_epi32(v4);
 
+    /*if (ampSet) {
+            int32_t v1chn_print[8];
+            memcpy(v1chn_print, &v1i, sizeof(v1chn_print));
+            printf("first samples: %d %d %d %d %d %d %d %d", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
+            } */
+
+    __m512i v1ii = _mm512_inserti64x4(_mm512_castsi256_si512(v1i), v2i, 1);
+    __m512i v2ii = _mm512_inserti64x4(_mm512_castsi256_si512(v3i), v4i, 1);
+
+    /*if (ampSet) {
+            int32_t v1chn_print[8];
+            memcpy(v1chn_print, ((int32_t*) &v2ii), sizeof(v1chn_print));
+            printf("first samples: %d %d %d %d %d %d %d %d", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
+            } */
+
+    
     __m512i v;
-    v = _mm512_permutex2var_epi16(_mm512_inserti64x4(_mm512_castsi256_si512(v1i), v2i, 1), (__m512i)mask0,
-                                _mm512_inserti64x4(_mm512_castsi256_si512(v3i), v4i, 1));
+    v = _mm512_permutex2var_epi16(v1ii, (__m512i)mask1,
+                                v2ii);
+    
+    /*if (ampSet) {
+            int16_t v1chn_print[8];
+            memcpy(v1chn_print, &v, sizeof(v1chn_print));
+            printf("first samples: %d %d %d %d %d %d %d %d", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
+            } */
+
+
     _mm512_store_si512(out, v);
 }
 

@@ -280,6 +280,9 @@ namespace Spcm{
               TrigInfo &info = m_trig_map[v];
               info.trigger_t = m_output_cnt.load(std::memory_order_relaxed) + delay;
           }
+          std::vector<std::unique_ptr<StreamManager>> &get_stream_mgrs() {
+              return m_stm_mngrs;
+          }
       private:
           enum class WorkerRequest : uint8_t {
               None = 0,
