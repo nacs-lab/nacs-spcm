@@ -42,6 +42,7 @@ enum class CmdType : uint8_t
     FreqVecFn,
     ModChn, // add or delete channels
     Phase,
+    AnalogModChn,
     AnalogSet,
     AnalogFn,
     AnalogVecFn,

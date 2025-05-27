@@ -148,6 +148,16 @@ NACS_EXPORT() const char *Cmd::name() const
         if (chn == add_chn)
             return "add_chn";
         return "del_chn";
+    case CmdType::AnalogModChn:
+        if (chn == add_chn)
+            return "analog_add_chn";
+        return "analog_del_chn";
+    case CmdType::AnalogSet:
+        return "analogSet";
+    case CmdType::AnalogFn:
+        return "analogFn";
+    case CmdType::AnalogVecFn:
+        return "analogVecFn";
     case CmdType::Meta:
         if (chn == (uint32_t)CmdMeta::Reset)
             return "reset";
@@ -171,10 +181,13 @@ NACS_EXPORT() std::ostream &operator<<(std::ostream &stm, const Cmd &cmd)
         stm << ", id=" << cmd.final_val;
     if (cmd.op() == CmdType::ModChn && cmd.chn != Cmd::add_chn)
         stm << ", chn=" << cmd.chn;
-    if (cmd.op() == CmdType::FreqSet || cmd.op() == CmdType::AmpSet || cmd.op() == CmdType::Phase)
+    if (cmd.op() == CmdType::AnalogModChn && cmd.chn != Cmd::add_chn)
+        stm << ", chn=" << cmd.chn;
+    if (cmd.op() == CmdType::FreqSet || cmd.op() == CmdType::AmpSet || cmd.op() == CmdType::Phase || cmd.op() == CmdType::AnalogSet)
         stm << ", chn=" << cmd.chn << ", val=" << cmd.final_val << ", len=" << cmd.len;
     if (cmd.op() == CmdType::AmpFn || cmd.op() == CmdType::FreqFn ||
-        cmd.op() == CmdType::AmpVecFn || cmd.op() == CmdType::FreqVecFn)
+        cmd.op() == CmdType::AmpVecFn || cmd.op() == CmdType::FreqVecFn ||
+        cmd.op() == CmdType::AnalogFn || cmd.op() == CmdType::AnalogVecFn)
         stm << ", chn=" << cmd.chn << ", final_val=" << cmd.final_val << ", len=" << cmd.len;
     stm << ")";
     return stm;
@@ -544,7 +557,7 @@ AnalogStream::consume_old_cmds(std::vector<double> &states)
                 states[cmd->chn] = cmd->final_val; // otherwise set to final value.
             }
             break;
-        case CmdType::ModChn:
+        case CmdType::AnalogModChn:
             if (cmd->chn == Cmd::add_chn) {
                 states.emplace_back(0.0f); // initialize new channel
                 m_chns++;
@@ -840,7 +853,6 @@ cmd_out:
                 }
                 else {
                     //encountered a non phase,amp,freq command
-                    break;
                 }
                 cmd_next(); // increment cmd counter
                 cmd = get_cmd_curt(); // get command only if it's current
@@ -934,7 +946,7 @@ retry:
             goto retry; // keep on going if it's a meta command
         }
         else {
-            while (unlikely(cmd->op() == CmdType::ModChn)) {
+            while (unlikely(cmd->op() == CmdType::AnalogModChn)) {
                 if (cmd->chn == Cmd::add_chn) {
                     //printf("Process add chn\n");
                     states.emplace_back(0.0f);

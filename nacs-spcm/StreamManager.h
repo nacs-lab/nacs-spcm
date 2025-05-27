@@ -172,6 +172,9 @@ public:
         for (int i = 0; i < m_n_streams; i++) {
             (*m_streams[i]).add_cmd(Cmd::getResetAll());
         }
+        for (int i = 0; i < m_n_analog_streams; i++) {
+            (*m_analog_streams[i]).add_cmd(Cmd::getResetAll());
+        }
         chn_map.reset();
     }
     inline void sync_reader()
@@ -191,12 +194,18 @@ public:
         for (int i = 0; i < m_n_streams; i++) {
             (*m_streams[i]).set_start_trigger(v, t);
         }
+        for (int i = 0; i < m_n_analog_streams; i++) {
+            (*m_analog_streams[i]).set_start_trigger(v, t);
+        }
     }
     inline uint32_t get_end_triggered()
     {
         uint32_t min_end_triggered = UINT32_MAX;
         for (int i = 0; i < m_n_streams; i++) {
             min_end_triggered = std::min(min_end_triggered, (*m_streams[i]).end_triggered());
+        }
+        for (int i = 0; i < m_n_analog_streams; i++) {
+            min_end_triggered = std::min(min_end_triggered, (*m_analog_streams[i]).end_triggered());
         }
         return min_end_triggered;
     }
@@ -241,10 +250,16 @@ public:
     inline ChannelMap get_chn_map() {
         return chn_map;
     }
+    inline ChannelMap get_analog_chn_map() {
+        return analog_chn_map;
+    }
     inline void start_streams() {
         for (int i = 0; i < m_n_streams; i++) {
             (*m_streams[i]).start_worker();
             //std::cout << "Started Stream: " << i << std::endl;
+        }
+        for (int i = 0; i < m_n_analog_streams; i++) {
+            (*m_analog_streams[i]).start_worker();
         }
     }
     inline void stop_streams() {
@@ -253,10 +268,21 @@ public:
             (*m_streams[i]).consume_all_cmds(); // clear up any remaining commands in the stream, so next worker starts fresh.
             (*m_streams[i]).reset_output_cnt();
         }
+        for (int i = 0; i < m_n_analog_streams; i++) {
+            (*m_analog_streams[i]).stop_worker();
+            (*m_analog_streams[i]).consume_all_cmds(); // clear up any remaining commands in the stream, so next worker starts fresh.
+            (*m_analog_streams[i]).reset_output_cnt();
+        }
     }
     inline bool is_wait_for_seq() {
         for (int i = 0; i < m_n_streams; i++) {
             if (!(*m_streams[i]).is_wait_for_seq())
+            {
+                return false;
+            }
+        }
+        for (int i = 0; i < m_n_analog_streams; i++) {
+            if (!(*m_analog_streams[i]).is_wait_for_seq())
             {
                 return false;
             }
@@ -267,6 +293,9 @@ public:
     void reset_streams_out() {
         for (int i = 0; i < m_n_streams; i++) {
             (*m_streams[i]).reset_out();
+        }
+        for (int i = 0; i < m_n_analog_streams; i++) {
+            (*m_analog_streams[i]).reset_out();
         }
     }
     inline void reset_output() {
@@ -281,14 +310,18 @@ public:
         } while (sz != 0);
     }
 protected:
-    StreamManagerBase(Controller& ctrl, Config& conf, uint32_t n_streams, uint32_t max_per_stream,
+    StreamManagerBase(Controller& ctrl, Config& conf, uint32_t n_streams, uint32_t max_per_stream, 
+                uint32_t n_analog_streams, uint32_t max_per_analog_stream,
                   double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
                       std::atomic<uint64_t> &underflow, bool start = false)
         : m_ctrl(ctrl),
           m_conf(conf),
           m_n_streams(n_streams),
+          m_n_analog_streams(n_analog_streams),
           m_max_per_stream(max_per_stream),
+          m_max_per_analog_stream(max_per_analog_stream),
           chn_map(n_streams, max_per_stream),
+          analog_chn_map(n_analog_streams, max_per_analog_stream),
           m_amp_scale(amp_scale),
           m_commands((Cmd*)mapAnonPage(sizeof(Cmd) * 1024ll, Prot::RW), 1024, 512),
           m_output((int16_t*)mapAnonPage(output_buf_sz, Prot::RW), output_buf_sz / 2, output_buf_sz / 2)
@@ -298,6 +331,12 @@ protected:
             Stream *stream_ptr;
             stream_ptr = new Stream(*this, m_conf, step_t, amp_scale, cmd_underflow, underflow, i, start);
             m_streams.push_back(stream_ptr);
+            stream_ptrs.push_back(nullptr);
+        }
+        for (int i = 0; i < n_analog_streams; i++) {
+            AnalogStream *stream_ptr;
+            stream_ptr = new AnalogStream(*this, m_conf, step_t, amp_scale, cmd_underflow, underflow, i, start);
+            m_analog_streams.push_back(stream_ptr);
             stream_ptrs.push_back(nullptr);
         }
     }
@@ -319,18 +358,23 @@ private:
         return true;
     }
     
-    template<typename T> inline void sort_cmd_chn(T begin, T end);
+    // template<typename T> inline void sort_cmd_chn(T begin, T end);
     // Cmd *get_cmd_curt();
     void cmd_next();
     void send_cmd_to_all(const Cmd &cmd);
-    void actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz);
-    void send_cmds(Cmd *cmd, size_t sz);
+    // void actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz, bool isAnalog = false);
+    // void send_cmds(Cmd *cmd, size_t sz);
     
     std::vector<Stream*> m_streams; // vector of Streams to manage
+    std::vector<AnalogStream*> m_analog_streams; // vector of Streams to manage
     std::vector<const int16_t*> stream_ptrs; // vector of stream_ptrs
+    std::vector<const int16_t*> analog_stream_ptrs; // vector of analog stream_ptrs
     ChannelMap chn_map;
+    ChannelMap analog_chn_map; // channel map for analog streams
     uint32_t m_n_streams = 0;
+    uint32_t m_n_analog_streams = 0;
     uint32_t m_max_per_stream = 0;
+    uint32_t m_max_per_analog_stream = 0;
     Config &m_conf;
     int64_t m_cur_t = 0; // current time for output
     uint64_t m_output_cnt = 0; // output count, units of output_block_sz
@@ -356,10 +400,11 @@ private:
 
 struct StreamManager : StreamManagerBase {
     StreamManager(Controller &ctrl, Config &conf, uint32_t n_streams, uint32_t max_per_stream,
+                uint32_t n_analog_streams, uint32_t max_per_analog_stream,
                   double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false)
-        : StreamManagerBase(ctrl, conf, n_streams, max_per_stream, step_t, amp_scale, cmd_underflow, underflow, startStream)
+        : StreamManagerBase(ctrl, conf, n_streams, max_per_stream, n_analog_streams, max_per_analog_stream, step_t, amp_scale, cmd_underflow, underflow, startStream)
     {
         if (startWorker)
         {

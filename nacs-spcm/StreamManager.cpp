@@ -54,111 +54,126 @@ inline void StreamManagerBase::cmd_next()
         m_commands.read_size(m_cmd_max_read);
     }
 }
-// TODO: Command Flushing
+
 inline void StreamManagerBase::send_cmd_to_all(const Cmd &cmd)
 {
     for (int i = 0; i < m_n_streams; ++i) {
         m_streams[i]->add_cmd(cmd);
     }
-}
-
-template<typename T> inline void StreamManagerBase::sort_cmd_chn(T begin, T end)
-{
-    // sort amp and freq commands by stream number and then by id within that stream
-    return std::sort(begin, end, [this] (auto &p1, auto &p2) {
-            std::pair<uint32_t, uint32_t> chn_info1, chn_info2;
-            chn_info1 = chn_map.ChnToStream(p1.chn);
-            chn_info2 = chn_map.ChnToStream(p2.chn);
-            if (chn_info1.first != chn_info2.first)
-                return chn_info1.first < chn_info2.first;
-            return chn_info1.second < chn_info2.second;
-        });
-}
-
-inline void StreamManagerBase::actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz)
-{
-    //printf("calling actual_send_cmds\n");
-    // actual distribution to stream_idx
-    size_t copied_sz;
-    Cmd *this_cmd = cmd;
-    //std::cout << "Sz: " << sz << std::endl;
-    while (sz > 0) {
-        //printf("In while loop, sz: %u, this_cmd: %p\n", sz, this_cmd);
-        copied_sz = m_streams[stream_idx]->copy_cmds(this_cmd, sz);
-        sz -= copied_sz;
-        //std::cout << "Sz after: " << sz << std::endl;
-        //std::cout << "Sent " << *this_cmd << " to Stream" << stream_idx << std::endl;
-        this_cmd = this_cmd + copied_sz;
+    for (int i = 0; i < m_n_analog_streams; ++i) {
+        m_analog_streams[i]->add_cmd(cmd);
     }
 }
 
-inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
-{
-    // input are commands at a given time. They will be sorted and then distributed to the right streams. Assumes inputs are only amp and freq commands
-    if (sz) {
-        sort_cmd_chn(cmd, cmd + sz);
-        /*
-        uint32_t stream_idx = 0;
-        uint32_t tot = 0;
-        uint32_t loc = 0; // location in commands
-        std::vector<uint32_t> real_chn;
-        while ((tot < sz) && (stream_idx < m_n_streams)) {
-            uint32_t this_cmd_real_chn;
-            if (real_chn.size() < tot + 1) {
-                this_cmd_real_chn = (cmd + loc)->chn;
-                real_chn.push_back(this_cmd_real_chn);
-            }
-            else {
-                this_cmd_real_chn = real_chn[tot];
-            }
-            std::pair<uint32_t, uint32_t> this_stream_info = chn_map.ChnToStream(this_cmd_real_chn);
-            uint32_t stream_num = this_stream_info.first;
-            uint32_t stream_pos = this_stream_info.second;
-            std::cout << "stream num to send to: " << stream_num << std::endl;
-            (*(cmd + loc)).chn = stream_pos; // gets correct channel within stream
-            if (stream_num == stream_idx) {
-                // keep on accumulating commands for this stream_idx
-                loc++;
-                tot++;
-            }
-            else {
-                actual_send_cmds(stream_idx, cmd, loc);
-                stream_idx++;
-                cmd += loc;
-                loc = 0;
-            }
-        }
-    // after exiting loop, may still need to distribute some commands.
-        if (loc && (stream_idx < m_n_streams)) {
-            actual_send_cmds(stream_idx, cmd, loc);
-            }*/
-        std::vector<uint32_t> stream_num, stream_pos;
-        stream_num.reserve(sz);
-        //stream_pos.reserve(sz);
-        for (int i = 0; i < sz; ++i){
-            //printf("cmd chn: %u\n", cmd[i].chn);
-            std::pair<uint32_t, uint32_t> this_stream_info = chn_map.ChnToStream(cmd[i].chn);
-            stream_num.push_back(this_stream_info.first);
-            //stream_pos.push_back(this_stream_info.second);
-            (*(cmd + i)).chn = this_stream_info.second;
-        }
-        int counter = 0;
-        for (int this_stream_num = 0; this_stream_num < m_n_streams; ++this_stream_num) {
-            uint32_t sz_to_send = 0;
-            uint32_t first_idx = counter;
-            if (counter < sz) {
-                while (stream_num[counter] == this_stream_num) {
-                    sz_to_send++;
-                    counter++;
-                    if (counter >= sz) {
-                        break;
-                    }
-                }
-            }
-            actual_send_cmds(this_stream_num, cmd + first_idx, sz_to_send);
-        }
-    }
-}
+// template<typename T> inline void StreamManagerBase::sort_cmd_chn(T begin, T end)
+// {
+//     // sort amp and freq commands by stream number and then by id within that stream
+//     return std::sort(begin, end, [this] (auto &p1, auto &p2) {
+//             std::pair<uint32_t, uint32_t> chn_info1, chn_info2;
+//             chn_info1 = chn_map.ChnToStream(p1.chn);
+//             chn_info2 = chn_map.ChnToStream(p2.chn);
+//             if (chn_info1.first != chn_info2.first)
+//                 return chn_info1.first < chn_info2.first;
+//             return chn_info1.second < chn_info2.second;
+//         });
+// }
+
+// inline void StreamManagerBase::actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz, bool isAnalog=false)
+// {
+//     //printf("calling actual_send_cmds\n");
+//     // actual distribution to stream_idx
+//     size_t copied_sz;
+//     Cmd *this_cmd = cmd;
+//     //std::cout << "Sz: " << sz << std::endl;
+//     if (!isAnalog) {
+//         while (sz > 0) {
+//             //printf("In while loop, sz: %u, this_cmd: %p\n", sz, this_cmd);
+//             copied_sz = m_streams[stream_idx]->copy_cmds(this_cmd, sz);
+//             sz -= copied_sz;
+//             //std::cout << "Sz after: " << sz << std::endl;
+//             //std::cout << "Sent " << *this_cmd << " to Stream" << stream_idx << std::endl;
+//             this_cmd = this_cmd + copied_sz;
+//         }
+//     }
+//     else {
+//         while (sz > 0) {
+//             //printf("In while loop, sz: %u, this_cmd: %p\n", sz, this_cmd);
+//             copied_sz = m_analog_streams[stream_idx]->copy_cmds(this_cmd, sz);
+//             sz -= copied_sz;
+//             //std::cout << "Sz after: " << sz << std::endl;
+//             //std::cout << "Sent " << *this_cmd << " to Stream" << stream_idx << std::endl;
+//             this_cmd = this_cmd + copied_sz;
+//         }
+//     }
+// }
+
+// inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz)
+// {
+//     // input are commands at a given time. They will be sorted and then distributed to the right streams. Assumes inputs are only amp and freq commands
+//     if (sz) {
+//         sort_cmd_chn(cmd, cmd + sz);
+//         /*
+//         uint32_t stream_idx = 0;
+//         uint32_t tot = 0;
+//         uint32_t loc = 0; // location in commands
+//         std::vector<uint32_t> real_chn;
+//         while ((tot < sz) && (stream_idx < m_n_streams)) {
+//             uint32_t this_cmd_real_chn;
+//             if (real_chn.size() < tot + 1) {
+//                 this_cmd_real_chn = (cmd + loc)->chn;
+//                 real_chn.push_back(this_cmd_real_chn);
+//             }
+//             else {
+//                 this_cmd_real_chn = real_chn[tot];
+//             }
+//             std::pair<uint32_t, uint32_t> this_stream_info = chn_map.ChnToStream(this_cmd_real_chn);
+//             uint32_t stream_num = this_stream_info.first;
+//             uint32_t stream_pos = this_stream_info.second;
+//             std::cout << "stream num to send to: " << stream_num << std::endl;
+//             (*(cmd + loc)).chn = stream_pos; // gets correct channel within stream
+//             if (stream_num == stream_idx) {
+//                 // keep on accumulating commands for this stream_idx
+//                 loc++;
+//                 tot++;
+//             }
+//             else {
+//                 actual_send_cmds(stream_idx, cmd, loc);
+//                 stream_idx++;
+//                 cmd += loc;
+//                 loc = 0;
+//             }
+//         }
+//     // after exiting loop, may still need to distribute some commands.
+//         if (loc && (stream_idx < m_n_streams)) {
+//             actual_send_cmds(stream_idx, cmd, loc);
+//             }*/
+//         std::vector<uint32_t> stream_num, stream_pos;
+//         stream_num.reserve(sz);
+//         //stream_pos.reserve(sz);
+//         for (int i = 0; i < sz; ++i){
+//             //printf("cmd chn: %u\n", cmd[i].chn);
+//             std::pair<uint32_t, uint32_t> this_stream_info = chn_map.ChnToStream(cmd[i].chn);
+//             stream_num.push_back(this_stream_info.first);
+//             //stream_pos.push_back(this_stream_info.second);
+//             (*(cmd + i)).chn = this_stream_info.second;
+//         }
+//         int counter = 0;
+//         for (int this_stream_num = 0; this_stream_num < m_n_streams; ++this_stream_num) {
+//             uint32_t sz_to_send = 0;
+//             uint32_t first_idx = counter;
+//             if (counter < sz) {
+//                 while (stream_num[counter] == this_stream_num) {
+//                     sz_to_send++;
+//                     counter++;
+//                     if (counter >= sz) {
+//                         break;
+//                     }
+//                 }
+//             }
+//             actual_send_cmds(this_stream_num, cmd + first_idx, sz_to_send);
+//         }
+//     }
+// }
 
 NACS_EXPORT() void StreamManagerBase::distribute_cmds()
 {
@@ -171,92 +186,181 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
     Cmd var_cmd; // non const command
     std::vector<Cmd> non_const_cmds; // non constant commands
     non_const_cmds.reserve(1024);
-    Cmd *first_cmd = nullptr;// first_cmd is first cmd in a group to send
-    int64_t t = 0;
-    size_t sz_to_send = 0;
+    // Cmd *first_cmd = nullptr;// first_cmd is first cmd in a group to send
+    // int64_t t = 0;
+    // size_t sz_to_send = 0;
     while ((cmd = get_cmd())){
         //std::cout << "Considering " << *cmd << std::endl;
-        if (cmd->op() == CmdType::Meta) {
-            // send out previous commands and reset first_cmd
-            send_cmds(first_cmd, sz_to_send);
-            first_cmd = nullptr;
-            sz_to_send = 0;
-            // for now, assume meta commands are sent to all
-            if (cmd->chn == (uint32_t)CmdMeta::ResetAll) {
-                // need to reset chn map
-                chn_map.reset();
-            }
-            send_cmd_to_all(*cmd);
-        }
-        else if (cmd->op() == CmdType::ModChn) {
-            send_cmds(first_cmd, sz_to_send);
-            first_cmd = nullptr;
-            sz_to_send = 0;
-            if (cmd->chn == Cmd::add_chn) {
-                // if add channel command
-                //printf("Process add channel in stream manager\n");
-                uint32_t stream_num;
-                if(chn_map.addChn(cmd->final_val, stream_num)) // final_val encodes the real channel number
-                {
-                    m_streams[stream_num]->add_cmd(*cmd); // add an add channel command to the right stream
-                }
-            }
-            else {
-                var_cmd = *cmd; // needs modification
-                std::pair<uint32_t, uint32_t> stream_info = chn_map.delChn(cmd->chn);
-                uint32_t stream_num = stream_info.first;
-                (var_cmd).chn = stream_info.second; // change real chn ID to one in the stream
-                m_streams[stream_num]->add_cmd(var_cmd);
-            }
-        }
-        else {
+        // if (cmd->op() == CmdType::Meta) {
+        //     // send out previous commands and reset first_cmd
+        //     // send_cmds(first_cmd, sz_to_send);
+        //     // first_cmd = nullptr;
+        //     // sz_to_send = 0;
+        //     // for now, assume meta commands are sent to all
+        //     if (cmd->chn == (uint32_t)CmdMeta::ResetAll) {
+        //         // need to reset chn map
+        //         chn_map.reset();
+        //         analog_chn_map.reset();
+        //     }
+        //     send_cmd_to_all(*cmd);
+        // }
+        // else if (cmd->op() == CmdType::ModChn) {
+        //     // send_cmds(first_cmd, sz_to_send);
+        //     // first_cmd = nullptr;
+        //     // sz_to_send = 0;
+        //     if (cmd->chn == Cmd::add_chn) {
+        //         // if add channel command
+        //         //printf("Process add channel in stream manager\n");
+        //         uint32_t stream_num;
+        //         if(chn_map.addChn(cmd->final_val, stream_num)) // final_val encodes the real channel number
+        //         {
+        //             m_streams[stream_num]->add_cmd(*cmd); // add an add channel command to the right stream
+        //         }
+        //     }
+        //     else {
+        //         var_cmd = *cmd; // needs modification
+        //         std::pair<uint32_t, uint32_t> stream_info = chn_map.delChn(cmd->chn);
+        //         uint32_t stream_num = stream_info.first;
+        //         (var_cmd).chn = stream_info.second; // change real chn ID to one in the stream
+        //         m_streams[stream_num]->add_cmd(var_cmd);
+        //     }
+        // }
+        // else if (cmd->op() == CmdType::AnalogModChn) {
+        //     // send_cmds(first_cmd, sz_to_send);
+        //     // first_cmd = nullptr;
+        //     // sz_to_send = 0;
+        //     if (cmd->chn == Cmd::add_chn) {
+        //         // if add channel command
+        //         //printf("Process add channel in stream manager\n");
+        //         uint32_t stream_num;
+        //         if(analog_chn_map.addChn(cmd->final_val, stream_num)) // final_val encodes the real channel number
+        //         {
+        //             m_analog_streams[stream_num]->add_cmd(*cmd); // add an add channel command to the right stream
+        //         }
+        //     }
+        //     else {
+        //         var_cmd = *cmd; // needs modification
+        //         std::pair<uint32_t, uint32_t> stream_info = analog_chn_map.delChn(cmd->chn);
+        //         uint32_t stream_num = stream_info.first;
+        //         (var_cmd).chn = stream_info.second; // change real chn ID to one in the stream
+        //         m_analog_streams[stream_num]->add_cmd(var_cmd);
+        //     }
+        // }
+        // else {
             // amplitude, phase or freq command
             var_cmd = *cmd;
-            non_const_cmds.push_back(var_cmd);
-            //if (!first_cmd){
-            //    first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
-            //}
-            if (cmd->t != t) {
-                // send out previous commands, reset first_cmd
-                //std::cout << "size of non const commands " << non_const_cmds.size() << std::endl;
-                if (first_cmd) {
-                    // std::cout << "first command is actually " << *first_cmd << std::endl;
-                    //              std::cout << "first command address " << first_cmd << std::endl;
-                }
-                if (sz_to_send > 1) {
-                    // std::cout << "second command is " << *(first_cmd + 1) << std::endl;
-                    //std::cout << "second command address " << first_cmd + 1 << std::endl;
-                    //std::cout << "second command address vec " << &first_cmd[1] << std::endl;
-                }
-                //std::cout << "sending cmds in" << std::endl;
-                send_cmds(first_cmd, sz_to_send);
-                // std::cout << "Sending " << sz_to_send << " commands starting from " << first_cmd << std::endl;
-                sz_to_send = 1;
-                first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
-                // std::cout << "First cmd is now: " << *first_cmd << " at address " << first_cmd << std::endl;
-                t = cmd->t;
-                //std:: cout << "Now t is: " << t << std::endl;
+            uint32_t stream_num;
+            std::pair<uint32_t, uint32_t> stream_info;
+            switch (cmd-> op()) {
+                case CmdType::Meta:
+                    if (cmd->chn == (uint32_t)CmdMeta::ResetAll) {
+                        // need to reset chn map
+                        chn_map.reset();
+                        analog_chn_map.reset();
+                    }
+                    send_cmd_to_all(*cmd);
+                    break;
+                case CmdType::ModChn:
+                    if (cmd->chn == Cmd::add_chn) {
+                        // if add channel command
+                        //printf("Process add channel in stream manager\n");
+                        if(chn_map.addChn(cmd->final_val, stream_num)) // final_val encodes the real channel number
+                        {
+                            m_streams[stream_num]->add_cmd(*cmd); // add an add channel command to the right stream
+                        }
+                    }
+                    else {
+                        var_cmd = *cmd; // needs modification
+                        stream_info = chn_map.delChn(cmd->chn);
+                        stream_num = stream_info.first;
+                        (var_cmd).chn = stream_info.second; // change real chn ID to one in the stream
+                        m_streams[stream_num]->add_cmd(var_cmd);
+                    }
+                    break;
+                case CmdType::AnalogModChn:
+                    if (cmd->chn == Cmd::add_chn) {
+                        // if add channel command
+                        //printf("Process add channel in stream manager\n");
+                        if(analog_chn_map.addChn(cmd->final_val, stream_num)) // final_val encodes the real channel number
+                        {
+                            m_analog_streams[stream_num]->add_cmd(*cmd); // add an add channel command to the right stream
+                        }
+                    }
+                    else {
+                        var_cmd = *cmd; // needs modification
+                        stream_info = analog_chn_map.delChn(cmd->chn);
+                        stream_num = stream_info.first;
+                        (var_cmd).chn = stream_info.second; // change real chn ID to one in the stream
+                        m_analog_streams[stream_num]->add_cmd(var_cmd);
+                    }
+                    break;
+                case CmdType::AmpSet:
+                case CmdType::FreqSet:
+                case CmdType::Phase:
+                case CmdType::AmpVecFn:
+                case CmdType::FreqVecFn:
+                    stream_info = chn_map.ChnToStream(cmd->chn);
+                    stream_num = stream_info.first;
+                    var_cmd.chn = stream_info.second;
+                    m_streams[stream_num]->add_cmd(var_cmd);
+                    break;
+                case CmdType::AnalogSet:
+                case CmdType::AnalogFn:
+                case CmdType::AnalogVecFn:
+                    stream_info = analog_chn_map.ChnToStream(cmd->chn);
+                    stream_num = stream_info.first;
+                    var_cmd.chn = stream_info.second;
+                    m_analog_streams[stream_num]->add_cmd(var_cmd);
+                    break;
             }
-            else {
-                if (!first_cmd) {
-                    // should enter this branch only if previous command was meta command at same time
-                    first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
-                }
-                sz_to_send++; // keep on collecting commands
-            }
+            // var_cmd = *cmd;
+            // non_const_cmds.push_back(var_cmd);
+            // //if (!first_cmd){
+            // //    first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
+            // //}
+            // if (cmd->t != t) {
+            //     // send out previous commands, reset first_cmd
+            //     //std::cout << "size of non const commands " << non_const_cmds.size() << std::endl;
+            //     if (first_cmd) {
+            //         // std::cout << "first command is actually " << *first_cmd << std::endl;
+            //         //              std::cout << "first command address " << first_cmd << std::endl;
+            //     }
+            //     if (sz_to_send > 1) {
+            //         // std::cout << "second command is " << *(first_cmd + 1) << std::endl;
+            //         //std::cout << "second command address " << first_cmd + 1 << std::endl;
+            //         //std::cout << "second command address vec " << &first_cmd[1] << std::endl;
+            //     }
+            //     //std::cout << "sending cmds in" << std::endl;
+            //     send_cmds(first_cmd, sz_to_send);
+            //     // std::cout << "Sending " << sz_to_send << " commands starting from " << first_cmd << std::endl;
+            //     sz_to_send = 1;
+            //     first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
+            //     // std::cout << "First cmd is now: " << *first_cmd << " at address " << first_cmd << std::endl;
+            //     t = cmd->t;
+            //     //std:: cout << "Now t is: " << t << std::endl;
+            // }
+            // else {
+            //     if (!first_cmd) {
+            //         // should enter this branch only if previous command was meta command at same time
+            //         first_cmd = non_const_cmds.data() + non_const_cmds.size() - 1;
+            //     }
+            //     sz_to_send++; // keep on collecting commands
+            // }
             //sz_to_send++;
             // send_cmds(&var_cmd, 1);
-        }
         cmd_next(); // move to next command
     } // while brace
     // send out remaining commands
     //std::cout << "Size to send: " << sz_to_send << std::endl;
     //std::cout << "sending commands final" << std::endl;
-    send_cmds(first_cmd, sz_to_send);
+    // send_cmds(first_cmd, sz_to_send);
     //std::cout << "done with command distribution" << std::endl;
     // flush all commands to streams
     for (uint32_t i = 0; i < m_n_streams ; i++) {
         m_streams[i]->flush_cmd();
+    }
+    for (uint32_t i = 0; i < m_n_analog_streams ; i++) {
+        m_analog_streams[i]->flush_cmd();
     }
 }
 __attribute__((target("avx512f,avx512bw"), flatten))
@@ -306,10 +410,26 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
             return;
         }
     }
+    uint32_t analog_stream_idx = 0;
+    while (analog_stream_idx < m_n_analog_streams) {
+        read_ptr = (*m_analog_streams[analog_stream_idx]).get_output(&sz_to_read);
+        if (sz_to_read >= output_block_sz) {
+            //std::cout << stream_idx << std::endl;
+            analog_stream_ptrs[analog_stream_idx] = read_ptr;
+            analog_stream_idx++;
+        }
+        else {
+            CPU::pause();
+            //(*m_streams[stream_idx]).sync_reader();
+        }
+        if (unlikely(m_stop.load(std::memory_order_relaxed))) {
+            return;
+        }
+    }
     //std::cout << "stream ready" << std::endl;
     // now streams are ready.
     //std::cout << "reading from streams" << std::endl;
-    //__m512i data;
+    // __m512i data = _mm512_setzero_si512();
     for (uint32_t stream_idx = 0; stream_idx < m_n_streams; stream_idx++) {
         for (uint32_t i = 0; i < output_block_sz; i+= 32) {
             if (stream_idx == 0) {
@@ -325,6 +445,24 @@ NACS_EXPORT() void StreamManagerBase::generate_page()
             }
             if (i == output_block_sz - 32) {
                 (*m_streams[stream_idx]).consume_output(output_block_sz); // allow stream to continue
+            }
+        }
+    }
+    for (uint32_t analog_stream_idx = 0; analog_stream_idx < m_n_analog_streams; analog_stream_idx++) {
+        for (uint32_t i = 0; i < output_block_sz; i+= 32) {
+            if (m_n_streams == 0 && analog_stream_idx == 0) {
+                // first pass
+                _mm512_store_si512(&out_ptr[i], *(__m512i*)(analog_stream_ptrs[analog_stream_idx] + i));
+                //*(out_ptr + i) = *(stream_ptrs[stream_idx] + i);
+            }
+            else {
+                _mm512_store_si512(&out_ptr[i], _mm512_add_epi16(
+                                       *(__m512i*)(&out_ptr[i]),
+                                       *(__m512i*)(analog_stream_ptrs[analog_stream_idx] + i)));
+                //*(out_ptr + i) = *(out_ptr + i) + *(stream_ptrs[stream_idx] + i);
+            }
+            if (i == output_block_sz - 32) {
+                (*m_analog_streams[analog_stream_idx]).consume_output(output_block_sz); // allow stream to continue
             }
         }
     }
