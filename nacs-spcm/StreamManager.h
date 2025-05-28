@@ -358,12 +358,12 @@ private:
         return true;
     }
     
-    // template<typename T> inline void sort_cmd_chn(T begin, T end);
+    template<typename T> inline void sort_cmd_chn(T begin, T end);
     // Cmd *get_cmd_curt();
     void cmd_next();
     void send_cmd_to_all(const Cmd &cmd);
-    // void actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz, bool isAnalog = false);
-    // void send_cmds(Cmd *cmd, size_t sz);
+    void actual_send_cmds(uint32_t stream_idx, Cmd *cmd, size_t sz, bool isAnalog);
+    void send_cmds(Cmd *cmd, size_t sz, bool isAnalog);
     
     std::vector<Stream*> m_streams; // vector of Streams to manage
     std::vector<AnalogStream*> m_analog_streams; // vector of Streams to manage
