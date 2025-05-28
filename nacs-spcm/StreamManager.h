@@ -337,7 +337,7 @@ protected:
             AnalogStream *stream_ptr;
             stream_ptr = new AnalogStream(*this, m_conf, step_t, amp_scale, cmd_underflow, underflow, i, start);
             m_analog_streams.push_back(stream_ptr);
-            stream_ptrs.push_back(nullptr);
+            analog_stream_ptrs.push_back(nullptr);
         }
     }
     void generate_page();

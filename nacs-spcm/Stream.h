@@ -130,6 +130,18 @@ public:
     {
         return Cmd{t, t_client, id, (uint8_t)CmdType::ModChn, chn, 0};
     }
+    static Cmd getAnalogAddChn(int64_t t, int64_t t_client, uint32_t id = 0)
+    {
+        return Cmd{t, t_client, id, (uint8_t)CmdType::AnalogModChn, add_chn, 0}; // largest possible chn_number interpretted as adding a channel
+    }
+    static Cmd getAnalogAddChn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn)
+    {
+        return Cmd{t, t_client, id, (uint8_t)CmdType::AnalogModChn, add_chn, static_cast<int32_t> (chn)}; //overload NOT meant to be used in stream. Meant for usage with real chn ID not chn within a stream
+    }
+    static Cmd getAnalogDelChn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn)
+    {
+        return Cmd{t, t_client, id, (uint8_t)CmdType::AnalogModChn, chn, 0};
+    }
     static Cmd getAmpFn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double final_val, double len, void(*fnptr)(void))
     {
         return Cmd{t, t_client, id, (uint8_t)CmdType::AmpFn, chn, final_val, len, fnptr};
