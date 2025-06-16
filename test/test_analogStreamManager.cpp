@@ -21,14 +21,30 @@ int main(int argc, char **argv)
 
     std::atomic<uint64_t> cmd_underflow(0);
     std::atomic<uint64_t> underflow(0); // not relevant either
+    uint32_t n_streams = 1;
+    uint32_t max_per_stream = 4;
+    uint32_t n_analog_streams = 2;
+    uint32_t max_per_analog_stream = 1;
+    double step_t = 1;
+    double amp_scale = 1000;
+    bool startStreams = false;
+    bool startWorker = false;
     std::string fname = "/etc/server_config.yml";
     ::Spcm::Config conf;
     conf = conf.loadYAML(fname.data());
     ::Spcm::Server serv{conf, true};
     auto &ctrl = serv.getController();
     auto &stream_mgrs = ctrl.get_stream_mgrs();
-    auto &first_stream_mgr = *(stream_mgrs[0].get());
+    auto first_stream_mgr = ::Spcm::StreamManager(ctrl, conf, n_streams, max_per_stream,
+                  n_analog_streams, max_per_analog_stream,
+                  step_t, amp_scale, cmd_underflow,
+                                                  underflow, startStreams, startWorker);
 
+    // StreamManager(Controller &ctrl, Config &conf, uint32_t n_streams, uint32_t max_per_stream,
+    //            uint32_t n_analog_streams, uint32_t max_per_analog_stream,
+    //              double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
+    //              std::atomic<uint64_t> &underflow, bool startStream = false,
+    //              bool startWorker = false)
     // double step_t = 1;
     // double amp_scale = 1000;
     // uint32_t stream_num = 0;
@@ -41,7 +57,9 @@ int main(int argc, char **argv)
     //static Cmd getAddChn(int64_t t, int64_t t_client, uint32_t id = 0)
     // static Cmd getAnalogFn(int64_t t, int64_t t_client, uint32_t id, uint32_t chn, double final_val, double len, void(*fnptr)(void))
     std::vector<::Spcm::Cmd> cmd_vector;
-    cmd_vector.push_back(::Spcm::Cmd::getAnalogAddChn(0, 0, 0));
+    cmd_vector.push_back(::Spcm::Cmd::getAnalogAddChn(0, 0, 0, 0));
+    cmd_vector.push_back(::Spcm::Cmd::getAnalogAddChn(0, 0, 0, 1));
+    cmd_vector.push_back(::Spcm::Cmd::getAnalogSet(1, 1, 0, 1, 0.1, 0));
     cmd_vector.push_back(::Spcm::Cmd::getAnalogSet(2, 2, 0, 0, 0.5, 0));
     cmd_vector.push_back(::Spcm::Cmd::getAnalogSet(2, 2, 0, 0, 0.8, 1));
     cmd_vector.push_back(::Spcm::Cmd::getAnalogSet(2, 2, 0, 0, 0.6, 21));
@@ -50,14 +68,14 @@ int main(int argc, char **argv)
     auto p = cmd_vector.data();
     auto sz = cmd_vector.size();
     do {
-        nwrote = ctrl.copy_cmds(0, p, sz);
+        nwrote = first_stream_mgr.copy_cmds(p, sz);
         p += nwrote;
         sz -= nwrote;
     }
     while (sz > 0);
 
-    ctrl.flush_cmd(0);
-    ctrl.distribute_cmds(0);
+    first_stream_mgr.flush_cmd();
+    first_stream_mgr.distribute_cmds();
     first_stream_mgr.start_streams();
     first_stream_mgr.start_worker();
     // cmd_vector.push_back(Cmd::getDelChn(0,0));

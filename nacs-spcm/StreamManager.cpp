@@ -164,19 +164,37 @@ inline void StreamManagerBase::send_cmds(Cmd *cmd, size_t sz, bool isAnalog)
             (*(cmd + i)).chn = this_stream_info.second;
         }
         int counter = 0;
-        for (int this_stream_num = 0; this_stream_num < m_n_streams; ++this_stream_num) {
-            uint32_t sz_to_send = 0;
-            uint32_t first_idx = counter;
-            if (counter < sz) {
-                while (stream_num[counter] == this_stream_num) {
-                    sz_to_send++;
-                    counter++;
-                    if (counter >= sz) {
-                        break;
+        if (!isAnalog) {
+            for (int this_stream_num = 0; this_stream_num < m_n_streams; ++this_stream_num) {
+                uint32_t sz_to_send = 0;
+                uint32_t first_idx = counter;
+                if (counter < sz) {
+                    while (stream_num[counter] == this_stream_num) {
+                        sz_to_send++;
+                        counter++;
+                        if (counter >= sz) {
+                            break;
+                        }
                     }
                 }
+                actual_send_cmds(this_stream_num, cmd + first_idx, sz_to_send, false);
             }
-            actual_send_cmds(this_stream_num, cmd + first_idx, sz_to_send, isAnalog);
+        }
+        else {
+            for (int this_stream_num = 0; this_stream_num < m_n_analog_streams; ++this_stream_num) {
+                uint32_t sz_to_send = 0;
+                uint32_t first_idx = counter;
+                if (counter < sz) {
+                    while (stream_num[counter] == this_stream_num) {
+                        sz_to_send++;
+                        counter++;
+                        if (counter >= sz) {
+                            break;
+                        }
+                    }
+                }
+                actual_send_cmds(this_stream_num, cmd + first_idx, sz_to_send, true);
+            }
         }
     }
 }
@@ -223,7 +241,6 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
             sz_to_send = 0;
             if (cmd->chn == Cmd::add_chn) {
                 // if add channel command
-                //printf("Process add channel in stream manager\n");
                 uint32_t stream_num;
                 if(chn_map.addChn(cmd->final_val, stream_num)) // final_val encodes the real channel number
                 {

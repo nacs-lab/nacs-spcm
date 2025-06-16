@@ -398,6 +398,13 @@ private:
     uint32_t restart_id;
 };
 
+/*
+  StreamManagerBase(Controller& ctrl, Config& conf, uint32_t n_streams, uint32_t max_per_stream, 
+                uint32_t n_analog_streams, uint32_t max_per_analog_stream,
+                  double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
+                      std::atomic<uint64_t> &underflow, bool start = false)
+*/
+
 struct StreamManager : StreamManagerBase {
     StreamManager(Controller &ctrl, Config &conf, uint32_t n_streams, uint32_t max_per_stream,
                 uint32_t n_analog_streams, uint32_t max_per_analog_stream,
