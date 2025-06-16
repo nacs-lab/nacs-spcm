@@ -42,6 +42,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
     //printf("types at address: %p\n", m_types);
 // go through pulses, add them to cmd_vector and then sort.
     std::vector<uint32_t> active_chns;
+    std::vector<uint32_t> active_analog_chns;
     std::vector<Cmd> cmds;
     if (pulses.size() == 0) {
         return cmds;
@@ -64,7 +65,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
         if (pulses[i].len == uint32_t(-1))
         {
             // May be a AmpSet pulse
-            if (pulses[i].functype == uint8_t(CmdType::AmpSet)) {
+            if (pulses[i].functype == uint8_t(CmdType::AmpSet) || pulses[i].functype == uint8_t(CmdType::AnalogSet)) {
                 len = t_sample % 32;
             }
             else {
@@ -78,14 +79,30 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
         final_val = get_value(pulses[i].endvalue);
         //printf("v%i: %f\n", i, final_val);
         chn = pulses[i].chn;
-        auto it = active_chns.begin();
-        for (; it != active_chns.end(); ++it) {
-            if (*it == chn) {
-                break;
+        if (pulses[i].functype == uint8_t(CmdType::AnalogSet) ||
+            pulses[i].functype == uint8_t(CmdType::AnalogFn) ||
+            pulses[i].functype == uint8_t(CmdType::AnalogVecFn)) {
+            //printf("Adding analog chn %u\n", chn);
+            auto it = active_analog_chns.begin();
+            for (; it != active_analog_chns.end(); ++it) {
+                if (*it == chn) {
+                    break;
+                }
+            }
+            if (it == active_analog_chns.end()) {
+                active_analog_chns.push_back(chn);
             }
         }
-        if (it == active_chns.end()) {
-            active_chns.push_back(chn);
+        else {
+            auto it = active_chns.begin();
+            for (; it != active_chns.end(); ++it) {
+                if (*it == chn) {
+                    break;
+                }
+            }
+            if (it == active_chns.end()) {
+                active_chns.push_back(chn);
+            }
         }
         if (t > seq_len) {
             seq_len = t;
@@ -103,6 +120,9 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
     }
     for (int i = 0; i < active_chns.size(); ++i) {
         preSend.push_back(Cmd::getAddChn(0,0,0, active_chns[i]));
+    }
+    for (int i = 0; i < active_analog_chns.size(); ++i) {
+        preSend.push_back(Cmd::getAnalogAddChn(0,0,0, active_analog_chns[i]));
     }
     std::sort(cmds.begin(), cmds.end(), [&] (auto &p1, auto &p2) {
         if (p1.t_client < p2.t_client)
