@@ -427,7 +427,7 @@ protected:
     //uint32_t m_end_trigger_cnt{0};
     //uint32_t m_start_trigger_cnt{0};
 
-    uint64_t wait_buf_sz = 32 * 1024ll * 1024ll; // buffer size during waiting periods, not during a sequence
+    uint64_t wait_buf_sz = 128 * 1024ll; // buffer size during waiting periods, not during a sequence
     double amp_scale = 6.7465185e9f / 8; // Divide by 8 for safety by default
     std::atomic<bool> wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     std::vector<activeCmd*> active_cmds;
@@ -537,8 +537,7 @@ struct AnalogStream : StreamBase {
     AnalogStream(StreamManagerBase& stm_mngr, Config &conf, double step_t, double amp_scale, std::atomic<uint64_t> &cmd_underflow,
            std::atomic<uint64_t> &underflow, uint32_t stream_num, bool start=true)
         : StreamBase(stm_mngr, conf, step_t, amp_scale, cmd_underflow, underflow, stream_num),
-          m_t_serv_to_client(1/32.0f)
-          //m_t_serv_to_client(1.0f/conf.sample_rate * 1e12) // TODO
+          m_t_serv_to_client(1e12/conf.sample_rate)
     {
         if (start) {
             start_worker();

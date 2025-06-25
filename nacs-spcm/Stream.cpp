@@ -339,7 +339,10 @@ inline const Cmd *StreamBase::get_cmd_curt()
 {
     // check get_cmd returns something valid and if so is t less than the current time
     if (auto cmd = get_cmd()){
-        //std::cout << *cmd << std::endl;
+        if (cmd->op() != CmdType::Meta && m_cur_t > 624995 && m_cur_t < 625005) {
+        std::cout << *cmd << std::endl;
+        printf("cmd_t: %lu, m_cur_t %lu\n", cmd->t, m_cur_t);
+        }
         if (cmd->t <= m_cur_t) {
             return cmd;
         }
@@ -390,12 +393,15 @@ inline bool StreamBase::check_start(int64_t t, uint32_t id)
         auto global_time = m_output_cnt;
         auto trigger_time =
             m_start_trigger_time.load(std::memory_order_relaxed);
+        /*if (time_offset() + global_time > trigger_time - 5 && time_offset() + global_time < trigger_time + 5) {
+            printf("assessing trigger at time: %lu, trigger_time: %lu, controller_cnt: %lu\n", time_offset() + global_time, trigger_time, m_stm_mngr.getControllerOutputCnt());
+            }*/
         if (time_offset() + global_time < trigger_time) {
-            //printf("not yet after receiving trigger\n");
+            //printf("not yet after receiving trigger\n")
             goto not_yet;
         }
         else if (time_offset() + global_time > trigger_time) {
-            printf("Noticed trigger too late %lu, controller_cnt: %lu\n", time_offset() + global_time, m_stm_mngr.getControllerOutputCnt());
+            printf("My time: %lu, Noticed trigger too late %lu, controller_cnt: %lu\n", time_offset() + global_time, trigger_time, m_stm_mngr.getControllerOutputCnt());
             // request card restart which will also notify the client of the bad sequence.
             reqRestart(id);
         }
@@ -529,7 +535,7 @@ AnalogStream::consume_old_cmds(std::vector<double> &states)
                 m_slow_mode.store(false,std::memory_order_relaxed);
             }
             else if (cmd-> chn == (uint32_t)CmdMeta::TriggerEnd) {
-                //printf("Process trigger end in consume_old_cmds\n");
+                printf("Process trigger end in consume_old_cmds\n");
                 wait_for_seq.store(true,std::memory_order_relaxed);
                 m_end_trigger_pending = cmd->final_val;
             }
@@ -541,7 +547,7 @@ AnalogStream::consume_old_cmds(std::vector<double> &states)
             }
             break;
         case CmdType::AnalogSet:
-            //printf("Processing analog set\n");
+            printf("Processing analog set in consume old cmds\n");
             states[cmd->chn] = cmd->final_val; // set amplitude of state
             break;
         case CmdType::AnalogFn:
@@ -910,7 +916,13 @@ NACS_EXPORT() void AnalogStream::step(int16_t *out, std::vector<double> &states)
 retry:
     // returns command at current time or before
     if ((cmd = get_cmd_curt())){
+        /*if (cmd->op() != CmdType::Meta) {
+            std::cout << *cmd << std::endl;
+            }*/
         if (unlikely(cmd->t < m_cur_t)) {
+            if (cmd->op() != CmdType::Meta)
+                printf("cmd_t: %lu, m_cur_t: %lu, m_chns: %u\n", cmd->t, m_cur_t, m_chns);
+            
             cmd = consume_old_cmds(states); //consume past commands
             if (!cmd) {
                 goto cmd_out; //if no command available, go to cmd_out
@@ -931,7 +943,7 @@ retry:
                 m_slow_mode.store(false, std::memory_order_relaxed);
             }
             else if (cmd->chn == (uint32_t)CmdMeta::TriggerEnd) {
-                //printf("Process trigger end\n");
+                printf("Process trigger end\n");
                 m_end_trigger_pending = cmd->final_val;
                 wait_for_seq.store(true, std::memory_order_relaxed);
             }
@@ -948,7 +960,7 @@ retry:
         else {
             while (unlikely(cmd->op() == CmdType::AnalogModChn)) {
                 if (cmd->chn == Cmd::add_chn) {
-                    //printf("Process add chn\n");
+                    printf("Process add chn\n");
                     states.emplace_back(0.0f);
                     m_chns++;
                 }
@@ -1040,6 +1052,7 @@ cmd_out:
                 //std::cout << (*cmd) << std::endl;
                 if (cmd->op() == CmdType::AnalogSet) {
                     ampSet = true;
+                    //printf("Amp set to %f\n", cmd->final_val);
                     int shift = int(cmd->len);
                     if (shift < 8) {
                         amp_mask1 = UINT8_MAX << shift;
@@ -1153,39 +1166,46 @@ cmd_out:
             } */
 
     
-    if (m_output_cnt % 19531250 == 0) { // 19531250
+    /*if (m_output_cnt % 19531250 == 0) { // 19531250
         printf("m_output_cnt: %lu\n", m_output_cnt);
-    }
+        double v1chn_print[8];
+        memcpy(v1chn_print, &v1, sizeof(v1chn_print));
+        printf("first samples 64bit: %f %f %f %f %f %f %f %f \n", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
+        }*/
     //printf("m_output_cnt: %lu\n", m_output_cnt);
     __m256i v1i = _mm512_cvtpd_epi32(v1);
     __m256i v2i = _mm512_cvtpd_epi32(v2);
     __m256i v3i = _mm512_cvtpd_epi32(v3);
     __m256i v4i = _mm512_cvtpd_epi32(v4);
 
-    /*if (ampSet) {
+    /*
+    if (m_output_cnt % 19531250 == 0) {
             int32_t v1chn_print[8];
             memcpy(v1chn_print, &v1i, sizeof(v1chn_print));
-            printf("first samples: %d %d %d %d %d %d %d %d", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
+            printf("first samples 32bit: %d %d %d %d %d %d %d %d \n", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
             } */
 
     __m512i v1ii = _mm512_inserti64x4(_mm512_castsi256_si512(v1i), v2i, 1);
     __m512i v2ii = _mm512_inserti64x4(_mm512_castsi256_si512(v3i), v4i, 1);
 
-    /*if (ampSet) {
+    /*
+    if (m_output_cnt % 19531250 == 0) {
             int32_t v1chn_print[8];
             memcpy(v1chn_print, ((int32_t*) &v2ii), sizeof(v1chn_print));
-            printf("first samples: %d %d %d %d %d %d %d %d", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
+            printf("first samples 32bit: %d %d %d %d %d %d %d %d \n", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
             } */
 
-    
-    __m512i v;
-    v = _mm512_permutex2var_epi16(v1ii, (__m512i)mask1,
-                                v2ii);
-    
-    /*if (ampSet) {
+    __m512i s1 = _mm512_srai_epi32(v1ii, 16);
+    __m512i s2 = _mm512_srai_epi32(v2ii, 16);
+    __m512i v = _mm512_packs_epi32(s1, s2);
+    //v = _mm512_packs_epi32(v1ii, v2ii);
+    //v = _mm512_permutex2var_epi16(v1ii, (__m512i)mask1,v2ii);
+
+    /*
+    if (m_output_cnt % 19531250 == 0) {
             int16_t v1chn_print[8];
             memcpy(v1chn_print, &v, sizeof(v1chn_print));
-            printf("first samples: %d %d %d %d %d %d %d %d", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
+            printf("first samples final 16bit: %d %d %d %d %d %d %d %d", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
             } */
 
 

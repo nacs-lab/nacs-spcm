@@ -183,7 +183,9 @@ NACS_INTERNAL void Server::seqRunner()
             }
             std::this_thread::sleep_for(100ms);
         }
-        printf("Sequence finished!");
+        
+        //printf("1: %d, 2: %d, 3: %d\n", !m_ctrl.get_end_triggered(entry.start_trigger), controllerRunning(), m_running);
+        printf("Sequence finished!\n");
         m_seqfin.store(entry.id, std::memory_order_release);
         writeEvent(m_evfd);
         continue;
@@ -408,9 +410,10 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             //printf("ntriggers: %u, time: %lu, time_for_trigger: %lu", ntrigger, t, t + m_conf.trig_delay);
             if (ntrigger > start_triggers.size())
                 ntrigger = start_triggers.size();
+            //printf("trig_delay: %lu\n", m_conf.trig_delay);
             if (ntrigger > 0)
                 m_ctrl.set_start_trigger(start_triggers[ntrigger - 1],
-                                         t + m_conf.trig_delay + 25); // trig delay is in units of stream times already, 24 is hard coded roughly 1.25 us to account for start trigger length
+                                         t + m_conf.trig_delay); // trig delay is in units of stream times already, 24 is hard coded roughly 1.25 us to account for start trigger length
             start_triggers.erase(start_triggers.begin(),
                                  start_triggers.begin() + ntrigger);
             //if (!first_start) {
@@ -418,7 +421,7 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
                 //}
         }
         if (polls[1].revents & ZMQ_POLLIN) {
-            //printf("SEQUENCE FINISHED!");
+            //printf("SEQUENCE FINISHED!, waits: %u\n", waits.size());
             // sequence finish event
             uint64_t ev = readEvent(m_evfd);
             for (size_t i = 0; i < waits.size(); i++) {

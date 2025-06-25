@@ -265,6 +265,7 @@ NACS_EXPORT() void StreamManagerBase::distribute_cmds()
                 uint32_t stream_num;
                 if(analog_chn_map.addChn(cmd->final_val, stream_num)) // final_val encodes the real channel number
                 {
+                    //printf("Actually adding channel command to stream %d\n", stream_num);
                     m_analog_streams[stream_num]->add_cmd(*cmd); // add an add channel command to the right stream
                 }
             }

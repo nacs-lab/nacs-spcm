@@ -12,6 +12,9 @@
 #include <vector>
 
 #include <stdint.h>
+#include <math.h>
+#include <cmath>
+#define _USE_MATH_DEFINES
 
 using namespace NaCs;
 
@@ -38,6 +41,7 @@ struct ChannelMap {
     ChannelMap(uint32_t n_streams, uint32_t max_per_chn)
         : m_max_per_chn(max_per_chn),
           stream_cnt(n_streams) {
+        printf("Creating channel map with %d streams and %d max_per_chn\n", n_streams, max_per_chn);
         chn_counts.reserve(n_streams);
         chn_map.reserve(n_streams * max_per_chn);
         for (int i = 0; i < n_streams; i++) {
@@ -176,6 +180,7 @@ public:
             (*m_analog_streams[i]).add_cmd(Cmd::getResetAll());
         }
         chn_map.reset();
+        analog_chn_map.reset();
     }
     inline void sync_reader()
     {
@@ -260,6 +265,7 @@ public:
         }
         for (int i = 0; i < m_n_analog_streams; i++) {
             (*m_analog_streams[i]).start_worker();
+            std::cout << "Started Analog Stream: " << i << std::endl;
         }
     }
     inline void stop_streams() {
@@ -335,7 +341,7 @@ protected:
         }
         for (int i = 0; i < n_analog_streams; i++) {
             AnalogStream *stream_ptr;
-            stream_ptr = new AnalogStream(*this, m_conf, step_t, amp_scale, cmd_underflow, underflow, i, start);
+            stream_ptr = new AnalogStream(*this, m_conf, step_t, amp_scale / M_PI * 8, cmd_underflow, underflow, i, start);
             m_analog_streams.push_back(stream_ptr);
             analog_stream_ptrs.push_back(nullptr);
         }
