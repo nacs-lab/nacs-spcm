@@ -733,8 +733,8 @@ int main()
     hdl.set_param(SPC_AMP0, 2500); // Amp
     hdl.set_param(SPC_FILTER0, 0);
     
-    std::vector<float> amps = {0.3f, 0.03f, 0.1f, 0.02f, 0.2f, 0.1f, 0.1f, 0.2f, 0.15f};
-    std::vector<double> freqs = {500e3, 500.001e3, 499.995e3, 500.002e3, 495e3, 497e3, 499e3, 505e3, 502e3};
+    std::vector<float> amps = {0.01f};
+    std::vector<double> freqs = {50e6};
     std::vector<MultiFloatStream*> Streams;
     int nchn = 4;
     int n_per_thread = 4;
