@@ -439,8 +439,9 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             uint32_t ntrigger = trig_pair.first;
             int64_t raw_arduino = trig_pair.second;
 
-            // CLAUDE PRINT
-            printf("ARDUINO RAW: value=%ld (0x%lX)\n", raw_arduino, raw_arduino);
+            // CLAUDE PRINT (skipped when only part of a message has arrived)
+            if (ntrigger)
+                printf("ARDUINO RAW: value=%ld (0x%lX)\n", raw_arduino, raw_arduino);
             
             uint64_t t = trig_pair.second * m_conf.clock_factor / 32; // in units of arduino reads. Convert to time units used by Stream
             //printf("ntriggers: %u, time: %lu, time_for_trigger: %lu", ntrigger, t, t + m_conf.trig_delay);
@@ -451,8 +452,9 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             //uint64_t delay_units = (m_conf.trig_delay + 16) >> 5; // /32 with rounding
             //uint64_t final_time = t_units + delay_units;
             // CLAUDE PRINT
-            printf("ARDUINO CONVERTED: raw=%ld, clock_factor=%f, t=%lu, trig_delay=%lu, final=%lu\n",
-            raw_arduino, m_conf.clock_factor, t, m_conf.trig_delay, t + m_conf.trig_delay);
+            if (ntrigger)
+                printf("ARDUINO CONVERTED: raw=%ld, clock_factor=%f, t=%lu, trig_delay=%lu, final=%lu\n",
+                       raw_arduino, m_conf.clock_factor, t, m_conf.trig_delay, t + m_conf.trig_delay);
 
             //CHAT PRINT
             //printf("ARDUINO CONVERTED CHAT: raw=%ld, clock_factor=%f, t=%lu, trig_delay=%lu, final=%lu\n",
@@ -468,8 +470,9 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             //uint64_t delay_units = (m_conf.trig_delay + 16) >> 5; // /32 with rounding
             //uint64_t final_time = t_units + delay_units;
             // CLAUDE PRINT
-            printf("ARDUINO CONVERTED: raw=%ld, clock_factor=%f, t=%lu, trig_delay=%lu, final=%lu\n",
-            raw_arduino, m_conf.clock_factor, t, m_conf.trig_delay, t + m_conf.trig_delay);
+            if (ntrigger)
+                printf("ARDUINO CONVERTED: raw=%ld, clock_factor=%f, t=%lu, trig_delay=%lu, final=%lu\n",
+                       raw_arduino, m_conf.clock_factor, t, m_conf.trig_delay, t + m_conf.trig_delay);
 
             //CHAT PRINT
             //printf("ARDUINO CONVERTED CHAT: raw=%ld, clock_factor=%f, t=%lu, trig_delay=%lu, final=%lu\n",

@@ -7,6 +7,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdio.h>
+
+#include <array>
+#include <memory>
 
 #include <system_error>
 #include <stdexcept>
@@ -59,19 +63,26 @@ NACS_EXPORT() Trigger::Trigger(const char *name)
         fd = Serial::open(name, options);
         if (fd < 0)
             throw std::system_error(-fd, std::generic_category(), "Error opening trigger stream");
-        cb = [] (int fd) {
-            unsigned char buff[8];
+        // The Arduino sends each timestamp as 8 raw bytes, and a read can return only
+        // part of one, so keep incomplete bytes until the rest of the message arrives.
+        auto partial = std::make_shared<std::pair<std::array<unsigned char, 8>, int>>();
+        partial->second = 0;
+        cb = [partial] (int fd) {
+            auto &buff = partial->first;
+            int &have = partial->second;
             uint32_t nchunks = 0;
-            int res = read(fd, buff, 8);
-            if (res <= 0)
-                return std::make_pair(nchunks,(int64_t) 0);
-            int64_t val;
-            memcpy(&val, buff, 8);
-            nchunks++;
-            while (read(fd,buff, 8) > 0)
-            {
+            int64_t val = 0;
+            int res;
+            while ((res = read(fd, buff.data() + have, 8 - have)) > 0) {
+                have += res;
+                if (have < 8)
+                    continue;
+                memcpy(&val, buff.data(), 8);
                 nchunks++;
+                have = 0;
             }
+            if (have)
+                printf("TRIGGER READ: holding %d bytes of a partial message\n", have);
             //for (int i = 0; i < 8; i++) {
             //    printf("%X ", buff[i]);
             //}
