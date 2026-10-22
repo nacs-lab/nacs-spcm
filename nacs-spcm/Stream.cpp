@@ -396,6 +396,18 @@ inline bool StreamBase::check_start(int64_t t, uint32_t id)
         /*if (time_offset() + global_time > trigger_time - 5 && time_offset() + global_time < trigger_time + 5) {
             printf("assessing trigger at time: %lu, trigger_time: %lu, controller_cnt: %lu\n", time_offset() + global_time, trigger_time, m_stm_mngr.getControllerOutputCnt());
             }*/
+
+        // CLAUDE PRINT
+        static uint64_t last_trigger_time = 0;
+        if (trigger_time != last_trigger_time) {
+            printf("CHECK_START: stream=%u, global=%lu, trigger=%lu, offset=%ld, diff=%ld\n",
+                   m_stream_num, global_time, trigger_time,
+                   time_offset(), (long)(global_time - trigger_time));
+            last_trigger_time = trigger_time;
+        }
+
+
+        
         if (time_offset() + global_time < trigger_time) {
             //printf("not yet after receiving trigger\n")
             goto not_yet;
@@ -403,6 +415,9 @@ inline bool StreamBase::check_start(int64_t t, uint32_t id)
         else if (time_offset() + global_time > trigger_time) {
             printf("My time: %lu, Noticed trigger too late %lu, controller_cnt: %lu\n", time_offset() + global_time, trigger_time, m_stm_mngr.getControllerOutputCnt());
             // request card restart which will also notify the client of the bad sequence.
+            printf("\n");
+            printf("TRIGGER DEBUG: global_time=%lu, trigger_time=%lu, time_offset=%lu, ratio=%.2f\n",
+            global_time, trigger_time, time_offset(),(double)global_time / trigger_time);
             reqRestart(id);
         }
     }
@@ -960,7 +975,7 @@ retry:
         else {
             while (unlikely(cmd->op() == CmdType::AnalogModChn)) {
                 if (cmd->chn == Cmd::add_chn) {
-                    printf("Process add chn\n");
+                    /*printf("Process add chn\n");*/
                     states.emplace_back(0.0f);
                     m_chns++;
                 }
@@ -1184,32 +1199,74 @@ cmd_out:
             memcpy(v1chn_print, &v1i, sizeof(v1chn_print));
             printf("first samples 32bit: %d %d %d %d %d %d %d %d \n", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
             } */
-
-    __m512i v1ii = _mm512_inserti64x4(_mm512_castsi256_si512(v1i), v2i, 1);
-    __m512i v2ii = _mm512_inserti64x4(_mm512_castsi256_si512(v3i), v4i, 1);
+    __m512i w1_lo = _mm512_castsi256_si512(v1i);
+    __m512i v1ii = _mm512_inserti32x8(w1_lo,v2i,1);
+    __m512i w2_lo = _mm512_castsi256_si512(v3i);
+    __m512i v2ii = _mm512_inserti32x8(w2_lo,v4i,1);
+    // __m512i v1ii = _mm512_inserti64x4(_mm512_castsi256_si512(v1i), v2i, 1);
+    // __m512i v2ii = _mm512_inserti64x4(_mm512_castsi256_si512(v3i), v4i, 1);
 
     /*
     if (m_output_cnt % 19531250 == 0) {
             int32_t v1chn_print[8];
             memcpy(v1chn_print, ((int32_t*) &v2ii), sizeof(v1chn_print));
-            printf("first samples 32bit: %d %d %d %d %d %d %d %d \n", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
-            } */
+            if (v1chn_print[0]!=0){printf("first samples 32bit: %d %d %d %d %d %d %d %d \n", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7])};
+            }  */
 
-    __m512i s1 = _mm512_srai_epi32(v1ii, 16);
-    __m512i s2 = _mm512_srai_epi32(v2ii, 16);
-    __m512i v = _mm512_packs_epi32(s1, s2);
-    //v = _mm512_packs_epi32(v1ii, v2ii);
-    //v = _mm512_permutex2var_epi16(v1ii, (__m512i)mask1,v2ii);
+    __m512i bias = _mm512_set1_epi32(1<<15);
 
-    /*
-    if (m_output_cnt % 19531250 == 0) {
-            int16_t v1chn_print[8];
-            memcpy(v1chn_print, &v, sizeof(v1chn_print));
-            printf("first samples final 16bit: %d %d %d %d %d %d %d %d", v1chn_print[0], v1chn_print[1], v1chn_print[2], v1chn_print[3], v1chn_print[4], v1chn_print[5], v1chn_print[6], v1chn_print[7]);
-            } */
+    __m512i negbias = _mm512_set1_epi32(-(1<<15));
 
+    __m512i signmask1 = _mm512_srai_epi32(v1ii, 31);
+    __m512i selbias1 = _mm512_or_si512(_mm512_and_si512(signmask1, negbias),_mm512_andnot_si512(signmask1,bias));
+    //__m512i selbias = _mm512_sign_epi32(bias,v1ii);
+    __m512i rounded1 = _mm512_add_epi32(v1ii, selbias1);
+    __m512i s1 = _mm512_srai_epi32(rounded1, 16);
 
-    _mm512_store_si512(out, v);
+    __m512i signmask2 = _mm512_srai_epi32(v2ii, 31);
+    __m512i selbias2 = _mm512_or_si512(_mm512_and_si512(signmask2,negbias),_mm512_andnot_si512(signmask2,bias));
+    __m512i rounded2 = _mm512_add_epi32(v2ii, selbias2);
+    __m512i s2 = _mm512_srai_epi32(rounded2, 16);
+    //   __m512i v = _mm512_packs_epi32(s1, s2);
+
+    // after you have s1 and s2 as __m512i of post-shift 32-bit samples:
+    int32_t tmp1[16], tmp2[16];
+    _mm512_storeu_si512((__m512i*)tmp1, s1);
+    _mm512_storeu_si512((__m512i*)tmp2, s2);
+
+    for (int i = 0; i < 16; ++i) {
+        int32_t v32 = tmp1[i];
+        if      (v32 >  32767) v32 =  32767;
+        else if (v32 < -32768) v32 = -32768;
+        out[i]     = (int16_t)v32;
+    }
+    for (int i = 0; i < 16; ++i) {
+        int32_t v32 = tmp2[i];
+        if      (v32 >  32767) v32 =  32767;
+        else if (v32 < -32768) v32 = -32768;
+        out[16 + i] = (int16_t)v32;
+    }
+    
+    /*if (m_output_cnt % 195312 == 0) {
+        int32_t debug_s1[16];
+        _mm512_storeu_si512((__m512i*)debug_s1, s1);
+
+        if (debug_s1[0]!=0){
+            printf(" i | raw>>16 | packed16\n");
+            printf("-----------------------\n");
+            for(int i = 0; i < 1; ++i) {
+                printf("%2d | %7d | %7d\n",
+                       i,
+                       debug_s1[i],     // what you expect
+                       out[i]);    // what packs gave you
+            }
+
+        }
+    }*/    
+//    _mm512_store_si512(out, v);
+//    _mm512_storeu_si512((__m512i*)out, v);
+//    _mm256_storeu_si256((__m256i*)out, p1);
+//    _mm256_storeu_si256((__m256i*)(out + 16), p2);
 }
 
 NACS_EXPORT() void Stream::generate_page(std::vector<State> &states)
@@ -1249,6 +1306,18 @@ NACS_EXPORT() void Stream::generate_page(std::vector<State> &states)
     for (uint32_t i = 0; i < output_block_sz; i += 32) {
         // for now advance one position at a time.
         m_output_cnt += 1;
+
+
+        // CLAUDE PRINT
+        static uint64_t last_print = 0;
+        if (m_output_cnt > last_print + 1000000) {
+            printf("ANALOG_STREAM %u: m_output_cnt=%lu, m_cur_t=%lu\n",
+                   m_stream_num, m_output_cnt, m_cur_t);
+            last_print = m_output_cnt;
+        }
+
+
+        
         step(&out_ptr[i], states);
         //std::cout << "stream stepped" << std::endl;
     }
@@ -1299,6 +1368,64 @@ NACS_EXPORT() void AnalogStream::generate_page(std::vector<double> &states)
     //std::cout << "Stream" << m_stream_num << " wrote " << *out_ptr << std::endl;
     m_output.wrote_size(output_block_sz); // alert reader that data is ready.
 }
+/*#include <time.h>
 
+// Helper to convert timespec → milliseconds
+static double to_ms(const struct timespec &ts) {
+    return ts.tv_sec * 1e3 + ts.tv_nsec * 1e-6;
+}
+
+NACS_EXPORT() void AnalogStream::generate_page(std::vector<double> &states)
+{
+    // 1) Measure wait‐for‐space latency
+    static struct timespec prev_wait = {0,0};
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+
+    int16_t *out_ptr;
+    size_t sz_to_write;
+
+    // Spin until there’s room for one block
+    while (true) {
+        out_ptr = m_output.get_write_ptr(&sz_to_write);
+        if (sz_to_write >= output_block_sz) {
+            // ... your existing throttle logic ...
+            break;
+        }
+        if (sz_to_write>0) m_output.sync_writer();
+        CPU::pause();
+        if (unlikely(m_stop.load(std::memory_order_relaxed))) return;
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double wait_ms = to_ms(t1) - to_ms(t0);
+    if (wait_ms > 1.0) {
+        printf("[Stream %u] waited %.3f ms for space on core %d\n",
+               m_stream_num, wait_ms, sched_getcpu());
+    }
+
+    // 2) Measure actual block‐generate time
+    struct timespec blk_start = t1, blk_end;
+    for (uint32_t i = 0; i < output_block_sz; i += 32) {
+        m_output_cnt += 1;
+        step(&out_ptr[i], states);
+    }
+    clock_gettime(CLOCK_MONOTONIC, &blk_end);
+    double gen_ms = to_ms(blk_end) - to_ms(blk_start);
+    if (gen_ms > 1.0) {
+        printf("[Stream %u] generation took %.3f ms on core %d\n",
+               m_stream_num, gen_ms, sched_getcpu());
+    }
+
+    // 3) Measure write‐notify latency
+    struct timespec notify_start = blk_end, notify_end;
+    m_output.wrote_size(output_block_sz);
+    clock_gettime(CLOCK_MONOTONIC, &notify_end);
+    double not_ms = to_ms(notify_end) - to_ms(notify_start);
+    if (not_ms > 1.0) {
+        printf("[Stream %u] notify took %.3f ms on core %d\n",
+               m_stream_num, not_ms, sched_getcpu());
+    }
+}*/
 
 }

@@ -62,6 +62,26 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
         }
         t = get_time(pulses[i].t_start);
         t_sample = t / 1e12 * m_conf.sample_rate; // t / 1e12 * 625e6
+
+        //printf("CMD CREATE: pulse_%d, t_ps=%ld, t_sample=%ld, t_stream=%ld, sample_rate=%f\n", 
+        // i, t, t_sample, t_sample/32, m_conf.sample_rate);
+
+
+
+
+
+
+        // CLAUD PRINT
+        if (i < 3) {
+            printf("PULSE[%d]: t=%ld, t_sample=%ld, functype=%u, chn=%u\n",
+                   i, t, t_sample, pulses[i].functype, pulses[i].chn);
+        }
+
+
+
+
+
+        
         if (pulses[i].len == uint32_t(-1))
         {
             // May be a AmpSet pulse
@@ -104,6 +124,7 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
                 active_chns.push_back(chn);
             }
         }
+        
         if (t > seq_len) {
             seq_len = t;
         }
@@ -117,6 +138,25 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
                     .len = len,
                 .fnptr = pulses[i].fnptr
             });
+
+
+
+
+
+
+
+        // CLAUDE SOLUTION ATTEMPET 1!!!
+        //if (pulses[i].functype == uint8_t(CmdType::AnalogVecFn)) {
+        //  int64_t end_time = t + (pulses[i].len * 32 / m_conf.sample_rate * 1e12);
+        //  if (end_time > seq_len) {
+        //      seq_len = end_time;
+        //  }
+        //}
+
+
+
+
+        
     }
     for (int i = 0; i < active_chns.size(); ++i) {
         preSend.push_back(Cmd::getAddChn(0,0,0, active_chns[i]));
@@ -136,6 +176,60 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
     for (int i = 0; i < cmds.size(); i++) {
         std::cout << cmds[i] << std::endl;
     }
+
+
+
+
+
+    // CLAUD PRINT STATEMENTS
+    printf("SEQUENCE DEBUG: pulses=%lu, cmds=%lu, seq_len=%ld\n",
+           pulses.size(), cmds.size(), seq_len);
+    
+    if (cmds.empty()) {
+        printf("WARNING: Empty command sequence!\n");
+    }
+    
+    if (seq_len < 1000) {
+        printf("WARNING: Very short sequence length=%ld\n", seq_len);
+        // Optionally extend it:
+        // seq_len = 1000;
+    }
+    
+    // Print first few commands for debugging
+    for (size_t i = 0; i < std::min(size_t(3), cmds.size()); i++) {
+        printf("  CMD[%lu]: t=%ld, type=%s, chn=%u, len=%f\n", 
+               i, cmds[i].t, cmds[i].name(), cmds[i].chn, cmds[i].len);
+    }
+
+
+
+
+
+
+    // CLAUDE FIX!!!
+    for (auto &cmd : cmds) {
+        if (cmd.op() == CmdType::AnalogVecFn || cmd.op() == CmdType::AnalogFn) {
+            // Don't multiply by 32 - len is already in stream units!
+            int64_t cmd_end = cmd.t + cmd.len;
+            if (cmd_end > seq_len) {
+                seq_len = cmd_end;
+            }
+        }
+    }
+
+    // Also ensure minimum length to cover trigger period
+    if (seq_len < 125000) {  // 100ms at 40MHz in stream units
+        seq_len = 125000;
+        printf("Extended seq_len to %ld for trigger period\n", seq_len);
+    }
+
+
+    seq_len = 150000;  // 150k stream units = 120ms, covers trigger period
+
+
+    
+
+    
     return cmds;
 }
 

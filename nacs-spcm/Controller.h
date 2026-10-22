@@ -27,6 +27,31 @@ namespace Spcm{
 
       class Controller {
       public:
+
+
+
+
+
+
+
+          // CLAUDE FUNCTION
+          void checkCardStatus() {
+              uint32_t status;
+              hdl.get_param(SPC_M2STATUS, &status);
+              printf("CARD STATUS: 0x%x - ", status);\
+              if (status & M2STAT_CARD_READY) printf("READY ");
+              if (status & M2STAT_CARD_TRIGGER) printf("TRIGGER ");
+              if (status & M2STAT_DATA_ERROR) printf("DATA_ERROR ");
+              if (status & M2STAT_DATA_OVERRUN) printf("OVERRUN ");
+              if (status & M2STAT_DATA_END) printf("DATA_END ");
+              printf("\n");
+          }
+
+
+
+
+
+          
           struct TrigInfo {
               uint64_t trigger_t = uint64_t(-1);
               uint64_t len = 0;
@@ -42,7 +67,7 @@ namespace Spcm{
               // hard coded amp_scales
               double amp_scales[4] = {6.7465185e9f / 8, 6.7465185e9f / 8, 6.7465185e9f, 6.7465185e9f};
               // hard coded stream numbers per phys channel
-              uint32_t n_streams[4] = {4,1,1,1};
+              uint32_t n_streams[4] = {8,1,1,1};
               auto phys_chn = out_chns.size();
               if (phys_chn != 1 && phys_chn != 2)
               {
@@ -117,6 +142,16 @@ namespace Spcm{
               }
           }
           inline void restartCard(bool from_worker) {
+
+
+
+              //CLAUDE PRINT
+              printf("CARD_STOPPING: output_cnt=%lu, log_error=%d\n",
+                     m_output_cnt.load(), from_worker);
+              
+
+
+              
               reqWait(); // stop sequences from proceeding
               if (!from_worker)
                   stopWorker();
@@ -147,6 +182,14 @@ namespace Spcm{
                   }
               }
               printf("Done with card restart\n");
+
+
+
+
+              //CLAUDE PRINT
+              printf("CARD_RESTARTED: output_cnt=%lu\n", m_output_cnt.load());
+
+              
           }
           inline void startDataTransfer() {
               first_start.store(true, std::memory_order_relaxed);
@@ -164,8 +207,15 @@ namespace Spcm{
           }
           inline void set_start_trigger(uint32_t v, uint64_t t) {
               //printf("setting start trigger %u for time %lu\n", v, t);
+
+              // CLAUDE PRINT
+              printf("CONTROLLER SET_TRIGGER: id=%u, time=%lu, current_output=%lu\n",
+                     v, t, m_output_cnt.load());
+              
+              
               TrigInfo &info = m_trig_map[v];
               info.trigger_t = t;
+              // CLAUDE PRINT
               printf("Setting trigger %u time to %lu\n", v, t);
               for (int i = 0; i < n_phys_chn; i++) {
                   m_stm_mngrs[m_out_chns[i]]->set_start_trigger(v,t); // may not be useful, but can keep here.
@@ -303,7 +353,10 @@ namespace Spcm{
           std::thread m_worker; // worker for relaying data to card
           int16_t* buff_ptr; // buffer pointer for spcm
           size_t buff_pos; // position for the output buffer
-          uint64_t buff_sz_nele{256 * 1024ll}; // 8 // 2/2 //4 factor of 4 1 channel output latency of 6.71 ms. Software buffer size
+          // software buffer: exactly one chunk of 32 768 samples
+          //uint64_t buff_sz_nele{2048*16 * sizeof(int64_t)};
+          //uint64_t hw_buff_sz_nele{2048*16 * sizeof(int64_t)};
+          uint64_t buff_sz_nele{256*1024ll}; // 8 // 2/2 //4 factor of 4 1 channel output latency of 6.71 ms. Software buffer size
           uint64_t hw_buff_sz_nele{256 * 1024ll};  // 2// 1 //2 1 channel output latency of 1.67 ms. Hardware buffer size number of elements
           bool DMA_started{false};
 

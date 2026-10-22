@@ -110,6 +110,13 @@ NACS_INTERNAL void Server::seqRunner()
 {
     // this call to popSeq hangs until a sequence (QueueItem) can be popped off
     while (auto entry = popSeq()) {
+
+        // CLAUDE PRINT
+        printf("SEQ_RUNNER: Processing seq %lu, start_trigger=%u\n", 
+               entry.id, entry.start_trigger);
+
+
+        
         // do reset now if this is a first sequence.
         if (entry.is_first_seq) {
             m_ctrl.resetStmManagers();
@@ -123,7 +130,8 @@ NACS_INTERNAL void Server::seqRunner()
                 preSend.push_back(Cmd::getTriggerStart(0, 0, 0, entry.start_trigger));
             }
             else {
-                m_ctrl.set_trig_to_now(0, 195312); // baked in 10 ms delay. Otherwise the trigger_t will be set when the trigger arrives.
+                m_ctrl.set_trig_to_now(0, 12500); // 10 ms delay for 40 MHz card 
+                //m_ctrl.set_trig_to_now(0, 195312); // baked in 10 ms delay for 625 MHz sample card. Otherwise the trigger_t will be set when the trigger arrives.
             }
             auto &tot_seq = entry.entry->m_seq;
             //if (tot_seq.is_valid) {
@@ -186,8 +194,31 @@ NACS_INTERNAL void Server::seqRunner()
         
         //printf("1: %d, 2: %d, 3: %d\n", !m_ctrl.get_end_triggered(entry.start_trigger), controllerRunning(), m_running);
         printf("Sequence finished!\n");
+
+        // CLAUD PRINT
+
+
+
+        printf("SEQ_END: seq=%lu, time=%lu, controller_cnt=%lu\n",
+               entry.id, NaCs::getTime(), m_ctrl.getOutputCnt());
+        printf("SEQ_RUNNER: Finished seq %lu, remaining queue=%lu\n",
+               entry.id, m_seque.size());
+
+
+        
         m_seqfin.store(entry.id, std::memory_order_release);
         writeEvent(m_evfd);
+
+
+        //CLAUD PRINT
+        if (!m_seque.empty()) {
+            printf("BETWEEN_SEQ: gap before next, controller_cnt=%lu\n",
+                   m_ctrl.getOutputCnt());
+        }
+
+
+
+        
         continue;
     restart:
         printf("Restart interrupted sequence");
@@ -406,14 +437,54 @@ NACS_EXPORT() void Server::run(int trigger_fd, const std::function<std::pair<uin
             //std::cout << "trigger received" << std::endl;
             auto trig_pair = trigger_cb(trigger_fd);
             uint32_t ntrigger = trig_pair.first;
+            int64_t raw_arduino = trig_pair.second;
+
+            // CLAUDE PRINT
+            printf("ARDUINO RAW: value=%ld (0x%lX)\n", raw_arduino, raw_arduino);
+            
             uint64_t t = trig_pair.second * m_conf.clock_factor / 32; // in units of arduino reads. Convert to time units used by Stream
             //printf("ntriggers: %u, time: %lu, time_for_trigger: %lu", ntrigger, t, t + m_conf.trig_delay);
+ uint64_t t_units =
+                (((uint64_t)trig_pair.second * (uint64_t)m_conf.clock_factor) + 16) >> 5; // /2 with rounding
+
+// If trig_delay is specified in SAMPLES, convert to controller units too:
+            //uint64_t delay_units = (m_conf.trig_delay + 16) >> 5; // /32 with rounding
+            //uint64_t final_time = t_units + delay_units;
+            // CLAUDE PRINT
+            printf("ARDUINO CONVERTED: raw=%ld, clock_factor=%f, t=%lu, trig_delay=%lu, final=%lu\n",
+            raw_arduino, m_conf.clock_factor, t, m_conf.trig_delay, t + m_conf.trig_delay);
+
+            //CHAT PRINT
+            //printf("ARDUINO CONVERTED CHAT: raw=%ld, clock_factor=%f, t=%lu, trig_delay=%lu, final=%lu\n",
+            //     raw_arduino, m_conf.clock_factor, t_units, m_conf.trig_delay, t + m_conf.trig_delay);
+
+// CHAT FIX
+            // edges -> controller units (groups of 32 samples)
+// m_conf.clock_factor must be SAMPLES_PER_EDGE (e.g. 16.0 for 40 MS/s & 2.5 MHz)
+            //uint64_t t_units =
+            //  (((uint64_t)trig_pair.second * (uint64_t)m_conf.clock_factor) + 16) >> 5; // /2 with rounding
+
+// If trig_delay is specified in SAMPLES, convert to controller units too:
+            //uint64_t delay_units = (m_conf.trig_delay + 16) >> 5; // /32 with rounding
+            //uint64_t final_time = t_units + delay_units;
+            // CLAUDE PRINT
+            printf("ARDUINO CONVERTED: raw=%ld, clock_factor=%f, t=%lu, trig_delay=%lu, final=%lu\n",
+            raw_arduino, m_conf.clock_factor, t, m_conf.trig_delay, t + m_conf.trig_delay);
+
+            //CHAT PRINT
+            //printf("ARDUINO CONVERTED CHAT: raw=%ld, clock_factor=%f, t=%lu, trig_delay=%lu, final=%lu\n",
+            //          raw_arduino, m_conf.clock_factor, t_units, m_conf.trig_delay, t + m_conf.trig_delay);
+
+            
             if (ntrigger > start_triggers.size())
                 ntrigger = start_triggers.size();
             //printf("trig_delay: %lu\n", m_conf.trig_delay);
             if (ntrigger > 0)
-                m_ctrl.set_start_trigger(start_triggers[ntrigger - 1],
-                                         t + m_conf.trig_delay); // trig delay is in units of stream times already, 24 is hard coded roughly 1.25 us to account for start trigger length
+                 m_ctrl.set_start_trigger(start_triggers[ntrigger - 1],
+                                                 t + m_conf.trig_delay); // trig delay is in units of stream times already, 24 is hard coded roughly 1.25 us to account for start trigger length
+                //CHAT FIX
+                //m_ctrl.set_start_trigger(start_triggers[ntrigger - 1], final_time);
+
             start_triggers.erase(start_triggers.begin(),
                                  start_triggers.begin() + ntrigger);
             //if (!first_start) {

@@ -235,10 +235,15 @@ void Controller::initChnsAndBuffer()
 void Controller::stopCard()
 {
     printf("Stopping card\n");
+    //CLAUDE PRINT
+    printf("STOPCARD_CALLED: output_cnt=%lu\n", m_output_cnt.load());
+    
     // stop DMA transfer and card.
     hdl.cmd(M2CMD_DATA_STOPDMA);
     check_error();
     hdl.cmd(M2CMD_CARD_STOP);
+    //CLAUDE PRINT
+    printf("ISSUING_CARD_STOP: output_cnt=%lu\n", m_output_cnt.load());
     check_error();
     DMA_started = false;
     //hdl.reset();
@@ -251,6 +256,8 @@ NACS_EXPORT() void Controller::force_trigger()
 {
     std::cout << "calling force trigger" << std::endl;
     hdl.cmd(M2CMD_CARD_START | M2CMD_CARD_ENABLETRIGGER);
+    //CLAUDE PRINT
+    printf("ISSUED_CARD_START: output_cnt=%lu\n", m_output_cnt.load());
     hdl.force_trigger();
     check_error();
     uint32_t status;
@@ -330,7 +337,25 @@ void Controller::workerFunc()
         //min_sz = 8 * 1024ll * 1024ll * 1024ll;
         std::vector<const int16_t*> ptrs(n_phys_chn, nullptr);
         size_t sz;
-        size_t min_sz = 8 * 1024ll * 1024ll * 1024ll; // cannot be this large.
+         size_t min_sz = 8 * 1024ll * 1024ll * 1024ll; // cannot be this large.
+        //size_t min_sz = 8 * 1024;  // 8KB, not 8GB
+
+
+        // CLAUDE PRINT
+        static uint64_t debug_count = 0;
+        if (++debug_count % 10000 == 0) {
+          uint64_t avail = check_avail();
+          printf("BUFFER STATUS: avail=%lu, DMA_started=%d, min_sz=%lu\n", 
+                 avail, DMA_started, min_sz);
+        }
+        //static uint64_t print_counter = 0;
+        //if (++print_counter % 10000000 == 0) {  // Only print every 100,000 iterations
+        //  printf("BUFFER STATUS: avail=%lu, DMA_started=%d, min_sz=%lu\n",
+        //         check_avail(), DMA_started, min_sz);
+        //}
+
+
+        
         for (int i = 0; i < n_phys_chn; ++i)
         {
             ptrs[i] = (*m_stm_mngrs[m_out_chns[i]]).get_output(sz);
@@ -361,6 +386,8 @@ void Controller::workerFunc()
                 goto need_restart;
             }
             if (check_error()) {
+                //CLAUDE PRINT
+                printf("CARD_ERROR_DETECTED: output_cnt=%lu\n", m_output_cnt.load());
                 restart = true;
                 goto need_restart;
             }
@@ -509,6 +536,11 @@ void Controller::workerFunc()
         // NO SUPPORT FOR MORE THAN 2 PHYS OUTPUTS AT THE MOMENT
         hdl.set_param(SPC_DATA_AVAIL_CARD_LEN, count);
         if (check_error()) {
+
+
+
+            //CLAUDE FUCNTION CALL
+            checkCardStatus();
             restart = true;
             goto need_restart;
         }
@@ -520,6 +552,41 @@ void Controller::workerFunc()
         //if (!DMA_started) {
         //    printf("card avail: %lu \n", check_avail());
         //}
+
+
+        // CLAUDE PRINT
+        static uint64_t last_ctrl_print = 0;
+        uint64_t current = m_output_cnt.load();
+        if (current > last_ctrl_print + 1000000) {
+            printf("CONTROLLER_OUTPUT: count=%lu, increment=%lu, total=%lu\n",
+                   count, count / 2 / n_phys_chn / 32, current);
+            last_ctrl_print = current;
+        }
+
+
+
+
+        // CLAUD FIX!!!
+        //if (card_count == 0 && DMA_started && m_seque.size() > 0) {
+        // Keep outputting zeros or last values
+        //  continue;
+        //}
+        if (card_count == 0 && DMA_started) {
+// Check if streams are still processing
+            //    bool streams_active = false;
+            //for (int i = 0; i < n_phys_chn; ++i) {
+            //  if (!(*m_stm_mngrs[m_out_chns[i]]).is_wait_for_seq()) {
+            //      streams_active = true;
+            //      break;
+            //  }
+            //}
+            // if (streams_active) {
+            //  continue;  // Keep running, don't stop
+            //}
+            continue;
+        }
+        
+        
         if (!DMA_started && check_avail() < 1000)
         {
             //startDMA(0);

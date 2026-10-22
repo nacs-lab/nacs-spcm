@@ -328,6 +328,11 @@ public:
     }
     void set_start_trigger(uint32_t v, uint64_t t)
     {
+
+        // CLAUDE PRINT
+        printf("STREAM SET_TRIGGER: stream=%u, id=%u, time=%lu, cur_output=%lu\n",
+               m_stream_num, v, t, m_output_cnt);
+
         m_start_trigger_time.store(t, std::memory_order_relaxed);
         m_start_trigger.store(v, std::memory_order_release);
     }
@@ -400,8 +405,9 @@ protected:
     void cmd_next();
     bool check_start(int64_t t, uint32_t id);
     void clear_underflow();
-    constexpr static uint32_t output_block_sz = 2048 * 16;//32768; //2048; // units of int16_t. 32 of these per _m512
-    uint64_t output_buf_sz = 256 * 1024ll * 1024ll; // extra space to use for filling up a known sequence
+    constexpr static uint32_t output_block_sz =2048*16;//2048 * 16;//32768; //2048; // units of int16_t. 32 of these per _m512
+    //uint64_t output_buf_sz = output_block_sz * sizeof(int16_t) * 2;
+    uint64_t output_buf_sz = 256*1024ll*1024ll; // extra space to use for filling up a known sequence
     // Members accessed by worker threads
     std::atomic_bool m_stop{false};
     DataPipe<Cmd> m_commands;
@@ -426,8 +432,10 @@ protected:
     size_t m_cmd_max_write = 0;
     //uint32_t m_end_trigger_cnt{0};
     //uint32_t m_start_trigger_cnt{0};
-
-    uint64_t wait_buf_sz = 128 * 1024ll; // buffer size during waiting periods, not during a sequence
+    static constexpr uint64_t block_bytes = output_block_sz * sizeof(int16_t); // = 32 768 × 2 = 65 536
+    // Reserve 4 full blocks of pre-trigger data:
+    //uint64_t wait_buf_sz = block_bytes * 4;   // = 65 536 × 4 = 262 144 bytes (256 KiB)
+    uint64_t wait_buf_sz = 256 * 1024ll; // buffer size during waiting periods, not during a sequence
     double amp_scale = 6.7465185e9f / 8; // Divide by 8 for safety by default
     std::atomic<bool> wait_for_seq = true; // boolean to indicate whether we are waiting for a sequence
     std::vector<activeCmd*> active_cmds;
