@@ -337,9 +337,10 @@ namespace Spcm{
               return n_restarts;
           }
           inline void set_len(uint32_t v, uint64_t n) {
-              printf("Setting trigger %u length to %lu\n", v, n);
+              // Called once per output; the trigger lasts as long as the longest output.
               TrigInfo &info = m_trig_map[v];
-              info.len = n;
+              info.len = std::max<uint64_t>(info.len, n);
+              printf("Setting trigger %u length to %lu\n", v, info.len);
           }
           inline void set_trig_to_now(uint32_t v, uint64_t delay) {
               TrigInfo &info = m_trig_map[v];

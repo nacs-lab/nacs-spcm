@@ -195,7 +195,10 @@ NACS_INTERNAL void Server::seqRunner()
             if (!m_running)
                 return;
             m_cache.unref(*entry.entry);
-            m_ctrl.add_cmd(phys_chn_idx, Cmd::getTriggerEnd(0, 0, 0, fin_id));
+            // At the end of this output's sequence (seq_len covers its pulses), not at t = 0: at
+            // t = 0 the stream handles it as soon as the sequence starts and goes back to its
+            // between-sequences mode while long pulses are still playing.
+            m_ctrl.add_cmd(phys_chn_idx, Cmd::getTriggerEnd(seq_len, 0, 0, fin_id));
             m_ctrl.flush_cmd(phys_chn_idx);
             m_ctrl.distribute_cmds(phys_chn_idx);
             /*if (!first_start) {

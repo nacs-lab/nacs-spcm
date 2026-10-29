@@ -57,6 +57,12 @@ set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} ${LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${LINKER_FLAGS}")
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${LINKER_FLAGS}")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -ggdb3 -O0")
+# With no build type CMake adds no -O flag, and the unoptimized server could not keep up with
+# continuous pulse shapes (~170 ns per 32-sample chunk idle, >800 ns while evaluating; budget
+# 800 ns at 40 MS/s). Default to -O2 (asserts kept).
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+endif()
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
 include_directories("${LLVM_INCLUDE_DIRS}")
