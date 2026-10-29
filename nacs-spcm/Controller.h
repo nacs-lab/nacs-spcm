@@ -3,6 +3,7 @@
 #ifndef _NACS_SPCM_CONTROLLER_H
 #define _NACS_SPCM_CONTROLLER_H
 
+#include <algorithm>
 #include <nacs-utils/thread.h>
 #include <nacs-utils/mem.h>
 #include <nacs-utils/log.h>
@@ -64,14 +65,14 @@ namespace Spcm{
                   double step_t, std::atomic<uint64_t> &cmd_underflow,
                   std::atomic<uint64_t> &underflow, bool startStream = false,
                   bool startWorker = false) */
-              // hard coded amp_scales
-              double amp_scales[4] = {6.7465185e9f / 8, 6.7465185e9f / 8, 6.7465185e9f, 6.7465185e9f};
-              // hard coded stream numbers per phys channel
-              uint32_t n_streams[4] = {8,1,1,1};
+              // hard coded amp_scales; the same on every output so analog pulses have the same
+              // full scale on all of them
+              double amp_scales[4] = {6.7465185e9f / 8, 6.7465185e9f / 8, 6.7465185e9f / 8, 6.7465185e9f / 8};
+              out_chns = padOutChns(out_chns);
               auto phys_chn = out_chns.size();
-              if (phys_chn != 1 && phys_chn != 2)
+              if (phys_chn != 1 && phys_chn != 2 && phys_chn != 4)
               {
-                  throw std::runtime_error("Only supports 1 or 2 physical channels");
+                  throw std::runtime_error("Only supports 1, 2, 3 or 4 physical channels");
               }
               else {
                   n_phys_chn = phys_chn;
@@ -82,7 +83,7 @@ namespace Spcm{
                   }
                   m_out_chns = out_chns;
                   for (int i = 0; i < n_card_chn; i++) {
-                      m_stm_mngrs.emplace_back(new StreamManager(*this, m_conf, n_streams[i], 4, 1, 1, 1, amp_scales[i], cmd_underflow, cmd_underflow, false));
+                      m_stm_mngrs.emplace_back(new StreamManager(*this, m_conf, m_conf.streams_per_output[i], 4, 1, 1, 1, amp_scales[i], cmd_underflow, cmd_underflow, false));
                       max_chns.push_back(32);
                   }
               }
@@ -109,17 +110,32 @@ namespace Spcm{
               return m_worker.joinable();
           }
           // StreamManager commands
-          inline void setPhysChn(std::vector<uint8_t> &out_chns) {
+          // The card runs 1, 2 or 4 channels. For 3 requested outputs, also turn on the lowest
+          // unused one; it gets no commands and outputs 0.
+          static std::vector<uint8_t> padOutChns(std::vector<uint8_t> out_chns) {
+              if (out_chns.size() == 3) {
+                  for (uint8_t c = 0; c < 4; c++) {
+                      if (std::find(out_chns.begin(), out_chns.end(), c) == out_chns.end()) {
+                          out_chns.push_back(c);
+                          break;
+                      }
+                  }
+                  std::sort(out_chns.begin(), out_chns.end());
+              }
+              return out_chns;
+          }
+          inline void setPhysChn(std::vector<uint8_t> &requested) {
           // end state is a working stream
           // check if vectors match
+              auto out_chns = padOutChns(requested);
               if (out_chns == m_out_chns) {
                   startWorker();
                   return;
               }
               auto phys_chn = out_chns.size();
-              if (phys_chn != 1 && phys_chn != 2)
+              if (phys_chn != 1 && phys_chn != 2 && phys_chn != 4)
               {
-                  throw std::runtime_error("Only supports 1 or 2 physical channels");
+                  throw std::runtime_error("Only supports 1, 2, 3 or 4 physical channels");
               }
               else {
                   reqWait();
@@ -370,7 +386,7 @@ namespace Spcm{
           std::atomic<uint64_t> card_avail{4 * 1024ll * 1024ll * 1024ll};
           std::atomic<bool> first_start = false;
 
-          uint8_t n_phys_chn{1}; // only supports 1 or 2.
+          uint8_t n_phys_chn{1}; // 1, 2 or 4 (3 requested outputs are padded to 4)
           std::vector<uint8_t> m_out_chns; // output channel when n_phys_chn = 1, otherwise ignored
           const uint8_t n_card_chn = 4; // number of channels on card. hard coded
           uint32_t m_start_trigger_cnt{0};
@@ -379,7 +395,7 @@ namespace Spcm{
           uint64_t not_ready_counter = 0;
           uint64_t not_counter = 0;
           uint64_t loop_counter = 0;
-          uint64_t notif_size = 4096 * 16; // in bytes
+          uint64_t notif_size = 4096 * 16; // in bytes; 4x this with 4 outputs (set in initChnsAndBuffer)
 
           uint32_t n_restarts = 0;
           Server &m_serv;

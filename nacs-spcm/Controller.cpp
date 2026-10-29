@@ -227,6 +227,9 @@ void Controller::initChnsAndBuffer()
     buff_ptr = (int16_t*)mapAnonPage(2 * buff_sz_nele * n_phys_chn, Prot::RW);
     buff_pos = 0;
     // TODO: Buffer size?
+    // Keep the same number of samples per output in each DMA chunk with 4 outputs as with 2,
+    // so the worker does not have to run its per-chunk card calls twice as often.
+    notif_size = n_phys_chn == 4 ? 4096 * 64 : 4096 * 16;
     hdl.def_transfer(SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, notif_size,
                      (void*)buff_ptr, 0, 2 * buff_sz_nele * n_phys_chn);
     check_error();
@@ -531,6 +534,24 @@ void Controller::workerFunc()
                 if (buff_pos >= buff_sz_nele * 2) {
                     buff_pos = 0;
                 }
+            }
+        }
+        else {
+            // 4 outputs: the card takes one sample of each output in turn (0, 1, 2, 3, 0, ...).
+            // count is a whole number of notify chunks, which divide the buffer, so the buffer
+            // can only wrap at the end of this copy.
+            size_t nsamp = count / 2 / 4;
+            int16_t *dst = buff_ptr + buff_pos;
+            const int16_t *p0 = ptrs[0], *p1 = ptrs[1], *p2 = ptrs[2], *p3 = ptrs[3];
+            for (size_t i = 0; i < nsamp; i++) {
+                dst[4 * i] = p0[i];
+                dst[4 * i + 1] = p1[i];
+                dst[4 * i + 2] = p2[i];
+                dst[4 * i + 3] = p3[i];
+            }
+            buff_pos += 4 * nsamp;
+            if (buff_pos >= buff_sz_nele * 4) {
+                buff_pos = 0;
             }
         }
         // NO SUPPORT FOR MORE THAN 2 PHYS OUTPUTS AT THE MOMENT

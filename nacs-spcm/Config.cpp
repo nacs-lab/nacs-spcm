@@ -24,6 +24,17 @@ NACS_EXPORT() Config Config::loadYAML(const char *fname)
         conf.sample_rate = sample_rate_node.as<int64_t>() * 1e6;
     if (auto trig_node = file["trig_delay_ms"])
         conf.trig_delay = uint64_t(trig_node.as<double>() * conf.sample_rate / (32 * 1e3)); // units of stream times
+    // One number for every output, or a list in output order.
+    if (auto streams_node = file["streams_per_output"]) {
+        if (streams_node.IsSequence()) {
+            for (size_t i = 0; i < streams_node.size() && i < conf.streams_per_output.size(); i++) {
+                conf.streams_per_output[i] = streams_node[i].as<uint32_t>();
+            }
+        }
+        else {
+            conf.streams_per_output.assign(conf.streams_per_output.size(), streams_node.as<uint32_t>());
+        }
+    }
     if (auto clock_node = file["clock_cycle_factor"])
         conf.ext_clock_cycle_factor = uint64_t(clock_node.as<double>());
     if (conf.sample_rate  > 71.68e6) {

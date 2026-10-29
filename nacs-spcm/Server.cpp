@@ -143,9 +143,12 @@ NACS_INTERNAL void Server::seqRunner()
             int64_t seq_len = 0;
             auto &this_seq = tot_seq.getSeq(phys_chn_idx);
             auto cmds = this_seq.toCmds(preSend, seq_len);
-            m_ctrl.set_len(entry.start_trigger, (uint64_t) seq_len);
+            // An output with no pulses (e.g. the idle 4th channel when 3 are used) has no
+            // length; don't let it overwrite the trigger's length.
+            if (seq_len > 0)
+                m_ctrl.set_len(entry.start_trigger, (uint64_t) seq_len);
             // MAKE COMMANDS HERE AT RUNTIME, SORT AND SEND.
-            auto pPre = &preSend[0];
+            auto pPre = preSend.data();
             auto szPre = preSend.size();
             //printf("preSend size: %u", szPre);
             uint32_t nwrote;
@@ -155,7 +158,7 @@ NACS_INTERNAL void Server::seqRunner()
                 szPre -= nwrote;
             }
             while (szPre> 0 && (nwrote > 0 || controllerRunning()) && m_running);
-            auto p = &cmds[0];
+            auto p = cmds.data(); // may be empty for an output with no pulses
             auto sz = cmds.size();
                 // printf("cmd size: %u", sz);
             do {
