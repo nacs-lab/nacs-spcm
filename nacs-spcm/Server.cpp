@@ -1,5 +1,6 @@
 //
 
+#include <algorithm>
 #include "Server.h"
 
 #include <nacs-utils/zmq_utils.h>
@@ -143,6 +144,23 @@ NACS_INTERNAL void Server::seqRunner()
             int64_t seq_len = 0;
             auto &this_seq = tot_seq.getSeq(phys_chn_idx);
             auto cmds = this_seq.toCmds(preSend, seq_len);
+            // With streams_per_output 0 an output has no RF tone stream, so tone commands
+            // (MATLAB OUTn/CHNk/FREQ|AMP|PHASE) have nowhere to go. Drop them and say so;
+            // pulse shapes must use the analog channels (OUTn/A1/...).
+            if (m_conf.streams_per_output[phys_chn_idx] == 0) {
+                auto is_tone = [] (const Cmd &cmd) {
+                    auto op = cmd.op();
+                    return op != CmdType::Meta && op < CmdType::AnalogModChn;
+                };
+                size_t ntone = std::count_if(cmds.begin(), cmds.end(), is_tone);
+                if (ntone > 0) {
+                    printf("ERROR: output %d has no RF tone streams (streams_per_output: 0); "
+                           "dropped %zu tone commands. Use AWG analog channels OUT%d/A1/... "
+                           "for pulse shapes.\n", int(phys_chn_idx), ntone, int(phys_chn_idx));
+                }
+                cmds.erase(std::remove_if(cmds.begin(), cmds.end(), is_tone), cmds.end());
+                preSend.erase(std::remove_if(preSend.begin(), preSend.end(), is_tone), preSend.end());
+            }
             // An output with no pulses (e.g. the idle 4th channel when 3 are used) has no
             // length; don't let it overwrite the trigger's length.
             if (seq_len > 0)
