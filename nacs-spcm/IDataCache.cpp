@@ -2,6 +2,8 @@
 
 #include "IDataCache.h"
 
+#include <cstring>
+
 //using namespace NaCs;
 
 namespace Spcm {
@@ -16,7 +18,9 @@ NACS_EXPORT() bool IDataCache::get(uint64_t client_id, uint64_t data_id, const u
         return true;
     }
     std::pair<uint64_t, uint64_t> this_id(client_id, data_id);
-    std::vector<uint64_t> data(in_ptr, in_ptr + in_sz);
+    // in_sz is in bytes; keep the raw 8-byte values (doubles) as sent.
+    std::vector<uint64_t> data(in_sz / 8);
+    memcpy(data.data(), in_ptr, data.size() * 8);
     auto it = m_cache.emplace(std::piecewise_construct, std::forward_as_tuple(std::move(this_id)), std::forward_as_tuple(std::move(data))).first;
     m_totalsz += IDataEntrySize(it);
     ssize_t age = it->second.age.load(std::memory_order_relaxed);

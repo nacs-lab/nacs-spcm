@@ -224,7 +224,9 @@ NACS_EXPORT() std::vector<Cmd> Sequence::toCmds(std::vector<Cmd> &preSend, int64
     }
 
 
-    seq_len = 150000;  // 150k stream units = 120ms, covers trigger period
+    // At least 150k stream units (120 ms) to cover the trigger period, longer when the pulses
+    // run past that (long pulse shapes).
+    seq_len = std::max<int64_t>(seq_len, 150000);
 
 
     

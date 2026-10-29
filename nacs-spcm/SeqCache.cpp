@@ -18,7 +18,7 @@ static inline size_t entrySize(const T &entry)
 
 static inline void bypassData(const uint8_t* &msg_bytes, uint32_t &sz) {
     // use this function to go through the IData
-    // [n_interp_data: 4B][[ID: 8B][name: NUL-term-string][0:1B] / ([1:1B] [len: 4B][[data: 8B] x len]) x ninter_data]
+    // [n_interp_data: 4B][[ID: 8B][name: NUL-term-string][0:1B] / ([1:1B] [len: 4B][data: len bytes]) x ninter_data]
     uint32_t n_interp_data;
     memcpy(&n_interp_data, msg_bytes, 4);
     msg_bytes += 4;
@@ -39,8 +39,8 @@ static inline void bypassData(const uint8_t* &msg_bytes, uint32_t &sz) {
             memcpy(&data_sz, msg_bytes, 4);
             msg_bytes += 4;
             sz -= 4;
-            msg_bytes += data_sz * 8;
-            sz -= data_sz * 8;
+            msg_bytes += data_sz;
+            sz -= data_sz;
         }
         n_interp_data--;
     }
@@ -205,7 +205,9 @@ m_cache(cache)
     memcpy(&n_interp_data, msg_bytes, 4);
     msg_bytes += 4;
     sz -= 4;
-    std::map<std::string, std::vector<uint64_t>> i_data_map;
+    // Name -> address of the cached data. The cache entries stay put (and are referenced by
+    // IData_ids) for as long as this sequence exists, so the compiled code can point at them.
+    std::map<std::string, uintptr_t> i_data_map;
     IData_ids.reserve(n_interp_data);
     uint32_t str_size;
     while (n_interp_data > 0) {
@@ -227,28 +229,23 @@ m_cache(cache)
             memcpy(&data_sz, msg_bytes, 4);
             msg_bytes += 4;
             sz -= 4;
+            // data_sz is in bytes (libnacs Manager::get_data size)
             if (m_cache.m_data_cache.get(client_id, this_IData_id, msg_bytes, data_sz, this_entry))
             {
-                //std::pair<std::string, std::vector<uint64_t>> test(IData_name,this_entry->m_data);
-                i_data_map.emplace(std::piecewise_construct,
-                                   std::forward_as_tuple(std::move(IData_name)),
-                                   std::forward_as_tuple(std::move(this_entry->m_data)));
+                i_data_map.emplace(std::move(IData_name), (uintptr_t)this_entry->m_data.data());
                 IData_ids.push_back(this_IData_id);
             }
             else {
                 is_valid = false;
                 return;
             }
-            msg_bytes += data_sz * 8;
-            sz -= data_sz * 8;
+            msg_bytes += data_sz;
+            sz -= data_sz;
         }
         else {
             if (m_cache.m_data_cache.get(client_id, this_IData_id, this_entry))
             {
-                //i_data_map.insert(std::pair<std::string, IDataCache::Entry>(IData_name, *this_entry));
-                i_data_map.emplace(std::piecewise_construct,
-                                   std::forward_as_tuple(std::move(IData_name)),
-                                   std::forward_as_tuple(std::move(this_entry->m_data)));
+                i_data_map.emplace(std::move(IData_name), (uintptr_t)this_entry->m_data.data());
                 IData_ids.push_back(this_IData_id);
             }
             else {
@@ -269,7 +266,7 @@ m_cache(cache)
         auto it = i_data_map.find(name);
         if (it != i_data_map.end()) {
             // found
-            return (uintptr_t) (it->second).data();
+            return it->second;
         }
         return 0;
     };
