@@ -1,5 +1,6 @@
 //
 
+#include <chrono>
 #include "Trigger.h"
 #include "SerialPort.h"
 
@@ -65,15 +66,26 @@ NACS_EXPORT() Trigger::Trigger(const char *name)
             throw std::system_error(-fd, std::generic_category(), "Error opening trigger stream");
         // The Arduino sends each timestamp as 8 raw bytes, and a read can return only
         // part of one, so keep incomplete bytes until the rest of the message arrives.
+        // The 8 bytes of one message can arrive split, the rest up to one USB adapter latency
+        // period (16 ms) later. Bytes still held after a much longer gap (100 ms) are a stale
+        // fragment (e.g. left in the USB serial adapter by triggers sent while no server had the
+        // port open); keeping them would misalign every later message.
         auto partial = std::make_shared<std::pair<std::array<unsigned char, 8>, int>>();
         partial->second = 0;
-        cb = [partial] (int fd) {
+        auto last_byte = std::make_shared<std::chrono::steady_clock::time_point>();
+        cb = [partial, last_byte] (int fd) {
             auto &buff = partial->first;
             int &have = partial->second;
             uint32_t nchunks = 0;
             int64_t val = 0;
             int res;
+            auto now = std::chrono::steady_clock::now();
+            if (have && now - *last_byte > std::chrono::milliseconds(100)) {
+                printf("TRIGGER READ: dropped %d stale bytes of a partial message\n", have);
+                have = 0;
+            }
             while ((res = read(fd, buff.data() + have, 8 - have)) > 0) {
+                *last_byte = now;
                 have += res;
                 if (have < 8)
                     continue;
